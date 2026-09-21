@@ -8,12 +8,10 @@ import '../report_repository.dart';
 
 class MockReportRepository implements ReportRepository {
   MockReportRepository({
-    required FarmRepository farmRepository,
+    required this._farmRepository,
     required MemoRepository memoRepository,
-    required OceanService oceanService,
-  })  : _farmRepository = farmRepository,
-        _memoRepository = memoRepository,
-        _oceanService = oceanService;
+    required this._oceanService,
+  })  : _memoRepository = memoRepository;
 
   final FarmRepository _farmRepository;
   final MemoRepository _memoRepository;

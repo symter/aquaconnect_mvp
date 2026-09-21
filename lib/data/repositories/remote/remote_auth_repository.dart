@@ -6,9 +6,8 @@ import '../../services/auth_token_store.dart';
 import '../auth_repository.dart';
 
 class RemoteAuthRepository implements AuthRepository {
-  RemoteAuthRepository({required ApiClient apiClient, required AuthTokenStore tokenStore})
-      : _api = apiClient,
-        _tokenStore = tokenStore {
+  RemoteAuthRepository({required ApiClient apiClient, required this._tokenStore})
+      : _api = apiClient {
     _restoreSession();
   }
 

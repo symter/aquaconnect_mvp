@@ -28,7 +28,9 @@ async function main() {
       name: '신일수산 1양식장',
       region: '완도',
       address: '완도군 노화읍',
-      stationCode: '001',
+      // Real NIFS risaList station code for 완도 노화도 (nearest real
+      // observation point to 노화읍) — see D:\202609\index.mjs / server/src/lib/nifs.js.
+      stationCode: 'wn087',
       stationName: '완도',
       riskLevel: 'danger',
       headline: '오늘 폐사 12마리',
@@ -40,7 +42,9 @@ async function main() {
       name: '미래수산',
       region: '완도',
       address: '완도군 금일읍',
-      stationCode: '001',
+      // Real NIFS risaList station code for 완도 금일 (nearest real
+      // observation point to 금일읍).
+      stationCode: 'wk094',
       stationName: '완도',
       riskLevel: 'danger',
       headline: '폐사 신고 있음',
@@ -52,7 +56,9 @@ async function main() {
       name: '청해양식장',
       region: '해남',
       address: '해남군 화산면',
-      stationCode: '002',
+      // Real NIFS risaList station code for 해남 임하 (only 해남 station
+      // in the feed).
+      stationCode: 'fjh5a',
       stationName: '해남',
       riskLevel: 'warning',
       headline: '섭이 감소 보고',

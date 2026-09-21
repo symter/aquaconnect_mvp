@@ -36,6 +36,33 @@ class OceanObservation {
   }
 }
 
+/// A selectable NIFS observation point (바다 위치) for the MyPage / Info
+/// station picker. [layers] holds whichever of '중층'/'저층' this station
+/// publishes — surface-only ('표층') stations are filtered out upstream so
+/// every selectable station always has a mid- or bottom-layer reading.
+class OceanStation {
+  const OceanStation({required this.code, required this.name, required this.layers});
+
+  final String code;
+  final String name;
+  final List<String> layers;
+}
+
+/// Maps a raw NIFS layer code ('표층'/'중층'/'저층') to the label shown in
+/// the UI next to a water-temp value, e.g. "중층수" / "저층수".
+String? oceanLayerDisplayLabel(String? layer) {
+  switch (layer) {
+    case '중층':
+      return '중층수';
+    case '저층':
+      return '저층수';
+    case '표층':
+      return '표층수';
+    default:
+      return null;
+  }
+}
+
 /// Aggregated environment snapshot used to render the 4-stat grid + 7-day
 /// sparkline shown on Info / AllReport / ReportDetail.
 ///
@@ -57,6 +84,7 @@ class OceanSnapshot {
     this.salinity,
     this.redTideStatus,
     this.dissolvedOxygen,
+    this.layer,
   });
 
   final String region;
@@ -69,4 +97,9 @@ class OceanSnapshot {
   final List<String> sevenDayLabels;
   final String source;
   final bool hasTrendHistory;
+
+  /// Which depth [waterTemp] was measured at ('표층'/'중층'/'저층'), when
+  /// known. Null only for aggregate/synthetic snapshots (e.g. the
+  /// multi-farm average on AllReport) that don't correspond to one reading.
+  final String? layer;
 }

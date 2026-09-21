@@ -38,11 +38,12 @@ class OceanStatGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final layerLabel = oceanLayerDisplayLabel(snapshot.layer);
     return Row(
       children: [
         Expanded(
           child: StatGridTile(
-            label: '수온',
+            label: layerLabel == null ? '수온' : '수온 · $layerLabel',
             value: '${snapshot.waterTemp.toStringAsFixed(1)}℃',
             valueColor: AppColors.danger,
           ),

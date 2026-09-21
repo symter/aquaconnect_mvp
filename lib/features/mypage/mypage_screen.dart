@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers/data_providers.dart';
 import '../../core/providers/repository_providers.dart';
 import '../../core/theme/app_colors.dart';
+import 'ocean_station_picker_sheet.dart';
 
 class MyPageScreen extends ConsumerWidget {
   const MyPageScreen({super.key});
@@ -12,6 +13,7 @@ class MyPageScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(authStateProvider).valueOrNull;
     final farmsAsync = ref.watch(farmsProvider);
+    final selectedStation = ref.watch(selectedOceanStationProvider).valueOrNull;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -83,10 +85,16 @@ class MyPageScreen extends ConsumerWidget {
                   const SizedBox(height: 16),
                   _SectionLabel('개인 설정'),
                   const SizedBox(height: 8),
-                  _MenuGroup(items: const [
-                    _MenuItem(icon: Icons.summarize_outlined, label: '하루 요약 설정', trailing: '오후 4:00'),
-                    _MenuItem(icon: Icons.notifications_none, label: '알림 설정'),
-                    _MenuItem(icon: Icons.file_download_outlined, label: '데이터 내보내기'),
+                  _MenuGroup(items: [
+                    _MenuItem(
+                      icon: Icons.water_outlined,
+                      label: '바다 위치 (수온 관측소)',
+                      trailing: selectedStation?.name ?? '미설정',
+                      onTap: () => showOceanStationPickerSheet(context),
+                    ),
+                    const _MenuItem(icon: Icons.summarize_outlined, label: '하루 요약 설정', trailing: '오후 4:00'),
+                    const _MenuItem(icon: Icons.notifications_none, label: '알림 설정'),
+                    const _MenuItem(icon: Icons.file_download_outlined, label: '데이터 내보내기'),
                   ]),
                   const SizedBox(height: 12),
                   Center(
@@ -119,10 +127,11 @@ class _SectionLabel extends StatelessWidget {
 }
 
 class _MenuItem {
-  const _MenuItem({required this.icon, required this.label, this.trailing});
+  const _MenuItem({required this.icon, required this.label, this.trailing, this.onTap});
   final IconData icon;
   final String label;
   final String? trailing;
+  final VoidCallback? onTap;
 }
 
 class _MenuGroup extends StatelessWidget {
@@ -136,24 +145,27 @@ class _MenuGroup extends StatelessWidget {
       child: Column(
         children: [
           for (var i = 0; i < items.length; i++)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-              decoration: BoxDecoration(
-                border: i == items.length - 1 ? null : const Border(bottom: BorderSide(color: AppColors.divider)),
-              ),
-              child: Row(
-                children: [
-                  Icon(items[i].icon, size: 18, color: AppColors.textSecondary),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(items[i].label, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-                  ),
-                  if (items[i].trailing != null) ...[
-                    Text(items[i].trailing!, style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
-                    const SizedBox(width: 6),
+            InkWell(
+              onTap: items[i].onTap,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+                decoration: BoxDecoration(
+                  border: i == items.length - 1 ? null : const Border(bottom: BorderSide(color: AppColors.divider)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(items[i].icon, size: 18, color: AppColors.textSecondary),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(items[i].label, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                    ),
+                    if (items[i].trailing != null) ...[
+                      Text(items[i].trailing!, style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                      const SizedBox(width: 6),
+                    ],
+                    const Icon(Icons.chevron_right, size: 13, color: AppColors.neutralArrow),
                   ],
-                  const Icon(Icons.chevron_right, size: 13, color: AppColors.neutralArrow),
-                ],
+                ),
               ),
             ),
         ],

@@ -22,6 +22,7 @@ import '../../data/services/api_client.dart';
 import '../../data/services/auth_token_store.dart';
 import '../../data/services/mock_ocean_service.dart';
 import '../../data/services/ocean_service.dart';
+import '../../data/services/ocean_station_preference_store.dart';
 import '../../data/services/railway_ocean_service.dart';
 import '../config/env.dart';
 
@@ -61,6 +62,27 @@ final oceanServiceProvider = Provider<OceanService>((ref) {
   if (Env.useMock) return MockOceanService();
   return RailwayOceanService(baseUrl: Env.apiBaseUrl);
 });
+
+final oceanStationPreferenceStoreProvider = Provider<OceanStationPreferenceStore>((ref) {
+  return OceanStationPreferenceStore();
+});
+
+/// The MyPage-selected "바다 위치" (sea location), loaded from local storage
+/// on first watch. Null means the user hasn't picked one yet.
+final selectedOceanStationProvider =
+    AsyncNotifierProvider<SelectedOceanStationNotifier, OceanStationSelection?>(SelectedOceanStationNotifier.new);
+
+class SelectedOceanStationNotifier extends AsyncNotifier<OceanStationSelection?> {
+  @override
+  Future<OceanStationSelection?> build() {
+    return ref.watch(oceanStationPreferenceStoreProvider).read();
+  }
+
+  Future<void> select(OceanStationSelection selection) async {
+    await ref.read(oceanStationPreferenceStoreProvider).write(selection);
+    state = AsyncValue.data(selection);
+  }
+}
 
 final reportRepositoryProvider = Provider<ReportRepository>((ref) {
   if (Env.useMock) {

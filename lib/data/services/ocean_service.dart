@@ -11,4 +11,9 @@ abstract class OceanService {
   });
 
   Future<List<OceanObservation>> fetchRealtime({String? station});
+
+  /// Lists the stations selectable as a "바다 위치" in MyPage — only those
+  /// publishing a 중층 or 저층 reading (surface-only stations are excluded
+  /// since farmed fish live below the surface, not at it).
+  Future<List<OceanStation>> fetchStations();
 }

@@ -4,7 +4,7 @@ import { requireAuth } from '../auth.js';
 import { query } from '../db.js';
 import { orgIdForMember } from '../lib/orgScope.js';
 import { generateReport } from '../lib/reportGenerator.js';
-import { fetchRealtimeObservations } from '../lib/nifs.js';
+import { fetchRealtimeObservations, pickPreferredObservation } from '../lib/nifs.js';
 
 export const reportsRouter = Router();
 reportsRouter.use(requireAuth);
@@ -37,9 +37,9 @@ async function loadFarm(orgId, farmId) {
 async function oceanSnapshotForFarm(farm) {
   try {
     const observations = await fetchRealtimeObservations({ station: farm.nearest_station_code });
-    const withTemp = observations.find((o) => o.waterTempC != null);
-    if (!withTemp) return null;
-    return { waterTemp: withTemp.waterTempC, sevenDayTemps: [withTemp.waterTempC], sevenDayLabels: ['오늘'] };
+    const picked = pickPreferredObservation(observations);
+    if (!picked) return null;
+    return { waterTemp: picked.waterTempC, layer: picked.layer, sevenDayTemps: [picked.waterTempC], sevenDayLabels: ['오늘'] };
   } catch {
     return null; // NIFS being unavailable shouldn't block report generation
   }

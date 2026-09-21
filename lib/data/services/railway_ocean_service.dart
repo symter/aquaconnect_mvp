@@ -21,6 +21,22 @@ class RailwayOceanService implements OceanService {
   final String _baseUrl;
   final http.Client _client;
 
+  /// Preference order when a station reports more than one depth: farmed
+  /// fish live at mid/bottom depth, not the surface, so 저층 (bottom) wins
+  /// over 중층 (mid) wins over 표층 (surface) whenever more than one is
+  /// available for the same station.
+  static const _layerPriority = ['저층', '중층', '표층'];
+
+  OceanObservation? _pickPreferred(List<OceanObservation> observations) {
+    final withTemp = observations.where((o) => o.waterTempC != null).toList();
+    for (final layer in _layerPriority) {
+      for (final o in withTemp) {
+        if (o.layer == layer) return o;
+      }
+    }
+    return withTemp.isEmpty ? null : withTemp.first;
+  }
+
   @override
   Future<List<OceanObservation>> fetchRealtime({String? station}) async {
     final uri = Uri.parse('$_baseUrl/api/ocean/realtime').replace(
@@ -41,21 +57,41 @@ class RailwayOceanService implements OceanService {
     required String region,
   }) async {
     final observations = await fetchRealtime(station: stationCode);
-    final withTemp = observations.where((o) => o.waterTempC != null).toList();
-    final latestTemp = withTemp.isEmpty ? null : withTemp.first.waterTempC!;
+    final picked = _pickPreferred(observations);
 
-    if (latestTemp == null) {
+    if (picked == null) {
       throw Exception('$stationName 관측소의 수온 데이터를 찾을 수 없습니다.');
     }
 
     return OceanSnapshot(
       region: region,
-      stationName: withTemp.first.stationName,
-      waterTemp: latestTemp,
-      sevenDayTemps: [latestTemp],
+      stationName: picked.stationName,
+      waterTemp: picked.waterTempC!,
+      layer: picked.layer,
+      sevenDayTemps: [picked.waterTempC!],
       sevenDayLabels: const ['오늘'],
       source: 'NIFS RISA (실시간, 이력 데이터 미제공)',
       hasTrendHistory: false,
     );
+  }
+
+  @override
+  Future<List<OceanStation>> fetchStations() async {
+    final observations = await fetchRealtime();
+    final byCode = <String, (String name, Set<String> layers)>{};
+    for (final o in observations) {
+      if (o.stationCode == '-' || (o.layer != '중층' && o.layer != '저층')) continue;
+      final existing = byCode[o.stationCode];
+      if (existing == null) {
+        byCode[o.stationCode] = (o.stationName, {o.layer});
+      } else {
+        existing.$2.add(o.layer);
+      }
+    }
+    final stations = byCode.entries
+        .map((e) => OceanStation(code: e.key, name: e.value.$1, layers: e.value.$2.toList()))
+        .toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
+    return stations;
   }
 }

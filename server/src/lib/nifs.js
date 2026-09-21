@@ -71,3 +71,17 @@ function findObject(value, keys) {
   }
   return null;
 }
+
+// Farmed fish live at mid/bottom depth, not the surface, so when a station
+// reports more than one layer, prefer 저층 (bottom) > 중층 (mid) > 표층
+// (surface) rather than whichever happened to come first in the feed.
+const LAYER_PRIORITY = ['저층', '중층', '표층'];
+
+export function pickPreferredObservation(observations) {
+  const withTemp = observations.filter((o) => o.waterTempC != null);
+  for (const layer of LAYER_PRIORITY) {
+    const match = withTemp.find((o) => o.layer === layer);
+    if (match) return match;
+  }
+  return withTemp[0] ?? null;
+}

@@ -9,6 +9,8 @@ import '../../core/widgets/charts.dart';
 import '../../core/widgets/stat_grid.dart';
 import '../../data/models/disease_info.dart';
 import '../../data/models/ocean_reading.dart';
+import '../../data/services/ocean_service.dart';
+import '../../data/services/ocean_station_preference_store.dart';
 
 class InfoScreen extends ConsumerStatefulWidget {
   const InfoScreen({super.key});
@@ -18,18 +20,44 @@ class InfoScreen extends ConsumerStatefulWidget {
 }
 
 class _InfoScreenState extends ConsumerState<InfoScreen> {
-  static const _stations = [('001', '완도'), ('002', '해남')];
-  String _stationCode = '001';
+  String? _stationCode;
+  String? _stationName;
+  bool _initializedFromPreference = false;
   final Set<DiseaseInfoScope> _scopeFilter = {DiseaseInfoScope.domestic};
   String? _speciesFilter = '넙치';
 
-  (String, String) get _selectedStation => _stations.firstWhere((s) => s.$1 == _stationCode);
+  void _selectStation(OceanStation station) {
+    setState(() {
+      _stationCode = station.code;
+      _stationName = station.name;
+    });
+    ref.read(selectedOceanStationProvider.notifier).select(
+          OceanStationSelection(code: station.code, name: station.name),
+        );
+  }
 
   @override
   Widget build(BuildContext context) {
     final oceanService = ref.watch(oceanServiceProvider);
     final diseaseAsync = ref.watch(diseaseInfoProvider);
-    final station = _selectedStation;
+    final stationsAsync = ref.watch(oceanStationsProvider);
+
+    final stations = stationsAsync.valueOrNull;
+    if (stations != null && stations.isNotEmpty && !_initializedFromPreference) {
+      final preferred = ref.read(selectedOceanStationProvider).valueOrNull;
+      var initial = stations.first;
+      if (preferred != null) {
+        for (final s in stations) {
+          if (s.code == preferred.code) {
+            initial = s;
+            break;
+          }
+        }
+      }
+      _stationCode = initial.code;
+      _stationName = initial.name;
+      _initializedFromPreference = true;
+    }
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -53,77 +81,12 @@ class _InfoScreenState extends ConsumerState<InfoScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('해양환경 데이터',
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
-                      PopupMenuButton<String>(
-                        initialValue: _stationCode,
-                        onSelected: (v) => setState(() => _stationCode = v),
-                        itemBuilder: (context) => _stations
-                            .map((s) => PopupMenuItem(value: s.$1, child: Text(s.$2)))
-                            .toList(),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                          decoration: BoxDecoration(color: AppColors.brandTint, borderRadius: BorderRadius.circular(20)),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(station.$2, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.brand)),
-                              const Icon(Icons.expand_more, size: 14, color: AppColors.brand),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  const Text('완도 · 해남 해역 데이터를 각각 볼 수 있어요 — 위 칩을 눌러 전환',
-                      style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
-                  const SizedBox(height: 10),
-                  FutureBuilder<OceanSnapshot>(
-                    key: ValueKey(_stationCode),
-                    future: oceanService.fetchSnapshot(stationCode: station.$1, stationName: station.$2, region: station.$2),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState != ConnectionState.done) {
-                        return const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 32),
-                          child: Center(child: CircularProgressIndicator()),
-                        );
-                      }
-                      if (snapshot.hasError || !snapshot.hasData) {
-                        return Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(color: AppColors.surface, border: Border.all(color: AppColors.border), borderRadius: BorderRadius.circular(14)),
-                          child: Text('해양환경 데이터를 불러오지 못했습니다.\n${snapshot.error ?? ''}',
-                              style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
-                        );
-                      }
-                      final ocean = snapshot.data!;
-                      return Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                        decoration: BoxDecoration(color: AppColors.surface, border: Border.all(color: AppColors.border), borderRadius: BorderRadius.circular(14)),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            OceanStatGrid(snapshot: ocean),
-                            const SizedBox(height: 12),
-                            Text('일별 수온 (℃) · 최근 ${ocean.sevenDayTemps.length}일',
-                                style: const TextStyle(fontSize: 11, color: AppColors.textTertiary)),
-                            const SizedBox(height: 4),
-                            TempSparkline(values: ocean.sevenDayTemps),
-                            const SizedBox(height: 2),
-                            ChartDayLabels(labels: ocean.sevenDayLabels),
-                            const SizedBox(height: 10),
-                            Text(
-                              ocean.hasTrendHistory ? '출처 · ${ocean.source}' : '출처 · ${ocean.source} · 실시간 값만 제공',
-                              style: const TextStyle(fontSize: 9.5, color: Color(0xFF8FA0B5)),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
+                  _OceanSection(
+                    stationsAsync: stationsAsync,
+                    stationCode: _stationCode,
+                    stationName: _stationName,
+                    oceanService: oceanService,
+                    onSelectStation: _selectStation,
                   ),
                   const SizedBox(height: 18),
                   const Text('수산질병 정보', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
@@ -206,6 +169,122 @@ class _InfoScreenState extends ConsumerState<InfoScreen> {
     } else {
       _scopeFilter.add(scope);
     }
+  }
+}
+
+class _OceanSection extends StatelessWidget {
+  const _OceanSection({
+    required this.stationsAsync,
+    required this.stationCode,
+    required this.stationName,
+    required this.oceanService,
+    required this.onSelectStation,
+  });
+
+  final AsyncValue<List<OceanStation>> stationsAsync;
+  final String? stationCode;
+  final String? stationName;
+  final OceanService oceanService;
+  final ValueChanged<OceanStation> onSelectStation;
+
+  @override
+  Widget build(BuildContext context) {
+    return stationsAsync.when(
+      loading: () => const Padding(
+        padding: EdgeInsets.symmetric(vertical: 32),
+        child: Center(child: CircularProgressIndicator()),
+      ),
+      error: (e, _) => Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(color: AppColors.surface, border: Border.all(color: AppColors.border), borderRadius: BorderRadius.circular(14)),
+        child: Text('관측소 목록을 불러오지 못했습니다.\n$e', style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+      ),
+      data: (stations) {
+        if (stations.isEmpty || stationCode == null || stationName == null) {
+          return Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(color: AppColors.surface, border: Border.all(color: AppColors.border), borderRadius: BorderRadius.circular(14)),
+            child: const Text('선택 가능한 관측소가 없습니다.', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('해양환경 데이터',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+                PopupMenuButton<String>(
+                  initialValue: stationCode,
+                  onSelected: (code) => onSelectStation(stations.firstWhere((s) => s.code == code)),
+                  itemBuilder: (context) =>
+                      stations.map((s) => PopupMenuItem(value: s.code, child: Text(s.name))).toList(),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(color: AppColors.brandTint, borderRadius: BorderRadius.circular(20)),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(stationName!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.brand)),
+                        const Icon(Icons.expand_more, size: 14, color: AppColors.brand),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            const Text('여러 해역의 중층·저층 수온을 확인할 수 있어요 — 위 칩을 눌러 전환 (마이페이지에서도 선택 가능)',
+                style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
+            const SizedBox(height: 10),
+            FutureBuilder<OceanSnapshot>(
+              key: ValueKey(stationCode),
+              future: oceanService.fetchSnapshot(stationCode: stationCode!, stationName: stationName!, region: stationName!),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 32),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                if (snapshot.hasError || !snapshot.hasData) {
+                  return Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(color: AppColors.surface, border: Border.all(color: AppColors.border), borderRadius: BorderRadius.circular(14)),
+                    child: Text('해양환경 데이터를 불러오지 못했습니다.\n${snapshot.error ?? ''}',
+                        style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                  );
+                }
+                final ocean = snapshot.data!;
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  decoration: BoxDecoration(color: AppColors.surface, border: Border.all(color: AppColors.border), borderRadius: BorderRadius.circular(14)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      OceanStatGrid(snapshot: ocean),
+                      const SizedBox(height: 12),
+                      Text('일별 수온 (℃) · 최근 ${ocean.sevenDayTemps.length}일',
+                          style: const TextStyle(fontSize: 11, color: AppColors.textTertiary)),
+                      const SizedBox(height: 4),
+                      TempSparkline(values: ocean.sevenDayTemps),
+                      const SizedBox(height: 2),
+                      ChartDayLabels(labels: ocean.sevenDayLabels),
+                      const SizedBox(height: 10),
+                      Text(
+                        ocean.hasTrendHistory ? '출처 · ${ocean.source}' : '출처 · ${ocean.source} · 실시간 값만 제공',
+                        style: const TextStyle(fontSize: 9.5, color: Color(0xFF8FA0B5)),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ],
+        );
+      },
+    );
   }
 }
 

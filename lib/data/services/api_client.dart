@@ -18,9 +18,8 @@ class ApiException implements Exception {
 /// (if any) to every request and surfaces the server's `{error}` body as a
 /// readable [ApiException] instead of a raw HTTP status.
 class ApiClient {
-  ApiClient({required AuthTokenStore tokenStore, http.Client? client})
-      : _tokenStore = tokenStore,
-        _client = client ?? http.Client();
+  ApiClient({required this._tokenStore, http.Client? client})
+      : _client = client ?? http.Client();
 
   final AuthTokenStore _tokenStore;
   final http.Client _client;
