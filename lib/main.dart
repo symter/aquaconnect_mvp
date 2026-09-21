@@ -10,4 +10,4 @@ Future<void> main() async {
 
   runApp(const ProviderScope(child: AquaConnectApp()));
 }
-// main
+// mains
