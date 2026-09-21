@@ -1,4 +1,5 @@
 {
+  "framework": null,
   "installCommand": "echo 'Skipping npm install — this is a Flutter web build'",
   "buildCommand": "bash scripts/vercel-build.sh",
   "outputDirectory": "build/web"
