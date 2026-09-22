@@ -48,4 +48,45 @@ class Farm {
         assignedMemberName: json['assignedMemberName'] as String?,
         ownerContact: json['ownerContact'] as String?,
       );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'orgId': orgId,
+        'name': name,
+        'region': region,
+        'address': address,
+        'nearestStationCode': nearestStationCode,
+        'nearestStationName': nearestStationName,
+        'riskLevel': riskLevel.key,
+        'headline': headline,
+        'waterTemp': waterTemp,
+        'lastVisitDays': lastVisitDays,
+        'assignedMemberName': assignedMemberName,
+        'ownerContact': ownerContact,
+      };
+
+  Farm copyWith({
+    String? name,
+    String? region,
+    String? address,
+    String? nearestStationCode,
+    String? nearestStationName,
+    String? ownerContact,
+  }) {
+    return Farm(
+      id: id,
+      orgId: orgId,
+      name: name ?? this.name,
+      region: region ?? this.region,
+      address: address ?? this.address,
+      nearestStationCode: nearestStationCode ?? this.nearestStationCode,
+      nearestStationName: nearestStationName ?? this.nearestStationName,
+      riskLevel: riskLevel,
+      headline: headline,
+      waterTemp: waterTemp,
+      lastVisitDays: lastVisitDays,
+      assignedMemberName: assignedMemberName,
+      ownerContact: ownerContact ?? this.ownerContact,
+    );
+  }
 }

@@ -72,6 +72,11 @@ class MockOceanService implements OceanService {
     );
   }
 
+  /// Surface water is a bit warmer than mid/bottom depth in this mock
+  /// world, so 표층 readings (never returned by [fetchStations], but shown
+  /// separately on MyPage) are derived as an offset from the depth value.
+  static const _surfaceOffset = 0.4;
+
   @override
   Future<List<OceanObservation>> fetchRealtime({String? station}) async {
     await Future<void>.delayed(const Duration(milliseconds: 200));
@@ -80,6 +85,15 @@ class MockOceanService implements OceanService {
       return [
         OceanObservation(
           stationCode: station!,
+          stationName: extra.name,
+          observedDate: _today(),
+          observedTime: '12:00',
+          layer: '표층',
+          waterTempC: extra.mid + _surfaceOffset,
+          status: '정상',
+        ),
+        OceanObservation(
+          stationCode: station,
           stationName: extra.name,
           observedDate: _today(),
           observedTime: '12:00',
@@ -99,14 +113,24 @@ class MockOceanService implements OceanService {
           ),
       ];
     }
+    final bottomTemp = (_tempSeries[station ?? '001'] ?? _tempSeries['001']!).last;
     return [
       OceanObservation(
         stationCode: station ?? '001',
         stationName: station == '002' ? '해남' : '완도',
         observedDate: _today(),
         observedTime: '12:00',
+        layer: '표층',
+        waterTempC: bottomTemp + _surfaceOffset,
+        status: '정상',
+      ),
+      OceanObservation(
+        stationCode: station ?? '001',
+        stationName: station == '002' ? '해남' : '완도',
+        observedDate: _today(),
+        observedTime: '12:00',
         layer: _legacyLayer,
-        waterTempC: (_tempSeries[station ?? '001'] ?? _tempSeries['001']!).last,
+        waterTempC: bottomTemp,
         status: '정상',
       ),
     ];

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<title>주소 찾기</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; }
+  #layer { width: 100%; height: 100%; }
+</style>
+</head>
+<body>
+<div id="layer"></div>
+<script src="https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
+<script>
+  new daum.Postcode({
+    oncomplete: function (data) {
+      var address = data.userSelectedType === 'R' ? data.roadAddress : data.jibunAddress;
+      if (window.opener) {
+        window.opener.postMessage({
+          source: 'aquaconnect-postcode',
+          address: address,
+          roadAddress: data.roadAddress,
+          jibunAddress: data.jibunAddress,
+          zonecode: data.zonecode,
+          sido: data.sido,
+          sigungu: data.sigungu
+        }, window.location.origin);
+      }
+      window.close();
+    },
+    width: '100%',
+    height: '100%'
+  }).embed(document.getElementById('layer'));
+</script>
+</body>
+</html>

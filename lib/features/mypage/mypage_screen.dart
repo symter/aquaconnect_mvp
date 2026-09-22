@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/providers/data_providers.dart';
 import '../../core/providers/repository_providers.dart';
@@ -14,6 +15,7 @@ class MyPageScreen extends ConsumerWidget {
     final session = ref.watch(authStateProvider).valueOrNull;
     final farmsAsync = ref.watch(farmsProvider);
     final selectedStation = ref.watch(selectedOceanStationProvider).valueOrNull;
+    final surfaceTemp = ref.watch(selectedStationSurfaceTempProvider).valueOrNull;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -78,6 +80,7 @@ class MyPageScreen extends ConsumerWidget {
                       icon: Icons.home_work_outlined,
                       label: '등록 양식장 관리',
                       trailing: farmsAsync.maybeWhen(data: (f) => '${f.length}곳', orElse: () => ''),
+                      onTap: () => context.push('/mypage/farms'),
                     ),
                     const _MenuItem(icon: Icons.history, label: '변경 이력'),
                     const _MenuItem(icon: Icons.link, label: '공유 링크 관리', trailing: '발급 2건'),
@@ -90,6 +93,11 @@ class MyPageScreen extends ConsumerWidget {
                       icon: Icons.water_outlined,
                       label: '바다 위치 (수온 관측소)',
                       trailing: selectedStation?.name ?? '미설정',
+                      subtitle: selectedStation == null
+                          ? null
+                          : (surfaceTemp != null
+                              ? '표층수온 ${surfaceTemp.waterTempC!.toStringAsFixed(1)}℃'
+                              : '표층수온 불러오는 중…'),
                       onTap: () => showOceanStationPickerSheet(context),
                     ),
                     const _MenuItem(icon: Icons.summarize_outlined, label: '하루 요약 설정', trailing: '오후 4:00'),
@@ -127,10 +135,11 @@ class _SectionLabel extends StatelessWidget {
 }
 
 class _MenuItem {
-  const _MenuItem({required this.icon, required this.label, this.trailing, this.onTap});
+  const _MenuItem({required this.icon, required this.label, this.trailing, this.subtitle, this.onTap});
   final IconData icon;
   final String label;
   final String? trailing;
+  final String? subtitle;
   final VoidCallback? onTap;
 }
 
@@ -157,7 +166,17 @@ class _MenuGroup extends StatelessWidget {
                     Icon(items[i].icon, size: 18, color: AppColors.textSecondary),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: Text(items[i].label, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(items[i].label, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                          if (items[i].subtitle != null) ...[
+                            const SizedBox(height: 2),
+                            Text(items[i].subtitle!, style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
+                          ],
+                        ],
+                      ),
                     ),
                     if (items[i].trailing != null) ...[
                       Text(items[i].trailing!, style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),

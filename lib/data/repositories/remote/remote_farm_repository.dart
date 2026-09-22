@@ -23,4 +23,50 @@ class RemoteFarmRepository implements FarmRepository {
       rethrow;
     }
   }
+
+  @override
+  Future<Farm> createFarm({
+    required String name,
+    required String address,
+    required String ownerContact,
+    required String region,
+    required String nearestStationCode,
+    required String nearestStationName,
+  }) async {
+    final json = await _api.post('/api/farms', body: {
+      'name': name,
+      'address': address,
+      'ownerContact': ownerContact,
+      'region': region,
+      'nearestStationCode': nearestStationCode,
+      'nearestStationName': nearestStationName,
+    }) as Map<String, dynamic>;
+    return Farm.fromJson(json);
+  }
+
+  @override
+  Future<Farm> updateFarm(
+    String farmId, {
+    required String name,
+    required String address,
+    required String ownerContact,
+    required String region,
+    required String nearestStationCode,
+    required String nearestStationName,
+  }) async {
+    final json = await _api.put('/api/farms/$farmId', body: {
+      'name': name,
+      'address': address,
+      'ownerContact': ownerContact,
+      'region': region,
+      'nearestStationCode': nearestStationCode,
+      'nearestStationName': nearestStationName,
+    }) as Map<String, dynamic>;
+    return Farm.fromJson(json);
+  }
+
+  @override
+  Future<void> deleteFarm(String farmId) async {
+    await _api.delete('/api/farms/$farmId');
+  }
 }

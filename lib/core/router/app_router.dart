@@ -8,6 +8,7 @@ import '../../features/auth/login_screen.dart';
 import '../../features/home/home_screen.dart';
 import '../../features/info/info_screen.dart';
 import '../../features/memo/memo_screen.dart';
+import '../../features/mypage/farm_management_screen.dart';
 import '../../features/mypage/mypage_screen.dart';
 import '../../features/reports/all_report_screen.dart';
 import '../../features/reports/report_detail_screen.dart';
@@ -61,6 +62,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/reports/:farmId',
         builder: (context, state) => ReportDetailScreen(farmId: state.pathParameters['farmId']!),
+      ),
+      GoRoute(
+        path: '/mypage/farms',
+        builder: (context, state) => const FarmManagementScreen(),
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) => AppShell(navigationShell: navigationShell),

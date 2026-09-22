@@ -56,6 +56,9 @@ Postgres가 로컬에 없다면 `npm run smoke-test`로 (pg-mem 기반 인메모
 | POST | `/api/auth/login` | 이메일/비밀번호 로그인 → JWT |
 | GET | `/api/auth/me` | 현재 세션 복원 |
 | GET | `/api/farms`, `/api/farms/:id` | 담당 양식장 목록/상세 |
+| POST | `/api/farms` | 양식장 등록 (양식장명/위치/전화번호 필수) |
+| PUT | `/api/farms/:id` | 양식장 정보 수정 |
+| DELETE | `/api/farms/:id` | 양식장 삭제 |
 | GET/POST | `/api/memos` | 메모 조회(`?farmId=`)/작성 |
 | GET | `/api/disease-info` | 수산질병 정보 |
 | GET | `/api/reports/:farmId` | 최신 리포트(없으면 즉시 생성) |
