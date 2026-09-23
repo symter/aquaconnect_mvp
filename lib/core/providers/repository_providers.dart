@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/repositories/auth_repository.dart';
@@ -20,6 +21,7 @@ import '../../data/repositories/report_repository.dart';
 import '../../data/repositories/share_link_repository.dart';
 import '../../data/services/api_client.dart';
 import '../../data/services/auth_token_store.dart';
+import '../../data/services/digest_settings_store.dart';
 import '../../data/services/mock_ocean_service.dart';
 import '../../data/services/ocean_service.dart';
 import '../../data/services/ocean_station_preference_store.dart';
@@ -109,3 +111,31 @@ final authStateProvider = StreamProvider<AuthSession?>((ref) {
   final repo = ref.watch(authRepositoryProvider);
   return repo.authStateChanges();
 });
+
+final digestSettingsStoreProvider = Provider<DigestSettingsStore>((ref) => DigestSettingsStore());
+
+/// The MyPage-selected "하루 요약 설정" (digest notification prefs), loaded
+/// from local storage on first watch. Read by both the settings screen and
+/// the MyPage list row (for its "오후 4:00" trailing value) so they always
+/// agree.
+final digestSettingsProvider = AsyncNotifierProvider<DigestSettingsNotifier, DigestSettings>(DigestSettingsNotifier.new);
+
+class DigestSettingsNotifier extends AsyncNotifier<DigestSettings> {
+  @override
+  Future<DigestSettings> build() {
+    return ref.watch(digestSettingsStoreProvider).read();
+  }
+
+  Future<void> _update(DigestSettings Function(DigestSettings) transform) async {
+    final current = state.valueOrNull ?? await ref.read(digestSettingsStoreProvider).read();
+    final next = transform(current);
+    await ref.read(digestSettingsStoreProvider).write(next);
+    state = AsyncValue.data(next);
+  }
+
+  Future<void> setDailyEnabled(bool enabled) => _update((s) => s.copyWith(dailyEnabled: enabled));
+
+  Future<void> setDailyTime(TimeOfDay time) => _update((s) => s.copyWith(dailyTime: time));
+
+  Future<void> setWeeklyEnabled(bool enabled) => _update((s) => s.copyWith(weeklyEnabled: enabled));
+}

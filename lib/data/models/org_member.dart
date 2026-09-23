@@ -1,14 +1,9 @@
-/// Role within an organization's roster. MVP-stage: purely a display label —
-/// there is no permission branching by role. See [OrgMember].
-enum MemberRole { owner, director, staff }
+// MemberRole/MemberRoleLabel live in member.dart (the real auth model) and
+// are reused here so the mock roster and the signed-in session speak the
+// same role vocabulary.
+export 'member.dart' show MemberRole, MemberRoleLabel;
 
-extension MemberRoleLabel on MemberRole {
-  String get label => switch (this) {
-        MemberRole.owner => '소유자',
-        MemberRole.director => '원장',
-        MemberRole.staff => '수산질병관리사',
-      };
-}
+import 'member.dart';
 
 enum MemberStatus { active, pending, inactive }
 
@@ -97,6 +92,13 @@ List<OrgMember> mockOrgMembers() {
       role: MemberRole.staff,
       status: MemberStatus.active,
       joinedAt: now.subtract(const Duration(days: 90)),
+    ),
+    OrgMember(
+      id: 'om-7',
+      name: '김직원',
+      role: MemberRole.employee,
+      status: MemberStatus.active,
+      joinedAt: now.subtract(const Duration(days: 60)),
     ),
     OrgMember(
       id: 'om-5',

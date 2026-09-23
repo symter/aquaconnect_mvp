@@ -18,10 +18,11 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: MemberManagementScreen()));
     await tester.pumpAndSettle();
 
-    expect(find.text('구성원 4명'), findsOneWidget);
+    expect(find.text('구성원 5명'), findsOneWidget);
     expect(find.text('이동길'), findsOneWidget);
     expect(find.text('이원장'), findsOneWidget);
     expect(find.text('박관리'), findsOneWidget);
     expect(find.text('최관리'), findsOneWidget);
+    expect(find.text('김직원'), findsOneWidget);
   });
 }

@@ -50,13 +50,12 @@ class _MemberManagementScreenState extends State<MemberManagementScreen> {
     );
   }
 
-  void _toggleDirector(OrgMember member) {
-    final promoting = member.role != MemberRole.director;
+  void _setRole(OrgMember member, MemberRole role) {
     setState(() {
       final i = _members.indexWhere((m) => m.id == member.id);
-      _members[i] = _members[i].copyWith(role: promoting ? MemberRole.director : MemberRole.staff);
+      _members[i] = _members[i].copyWith(role: role);
     });
-    _snack(promoting ? '${member.name}님을 원장으로 지정했어요' : '${member.name}님의 원장 권한을 해제했어요');
+    _snack('${member.name}님을 ${role.label}(으)로 지정했어요');
   }
 
   Future<void> _confirmDeactivate(OrgMember member) async {
@@ -152,14 +151,16 @@ class _MemberManagementScreenState extends State<MemberManagementScreen> {
                   },
                 )
               else ...[
-                ListTile(
-                  leading: const Icon(Icons.badge_outlined, color: AppColors.textSecondary),
-                  title: Text(member.role == MemberRole.director ? '원장 권한 해제' : '원장으로 지정'),
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    _toggleDirector(member);
-                  },
-                ),
+                for (final role in [MemberRole.director, MemberRole.staff, MemberRole.employee])
+                  if (role != member.role)
+                    ListTile(
+                      leading: const Icon(Icons.badge_outlined, color: AppColors.textSecondary),
+                      title: Text('${role.label}(으)로 지정'),
+                      onTap: () {
+                        Navigator.of(sheetContext).pop();
+                        _setRole(member, role);
+                      },
+                    ),
                 ListTile(
                   leading: const Icon(Icons.person_off_outlined, color: AppColors.danger),
                   title: const Text('비활성화', style: TextStyle(color: AppColors.danger)),

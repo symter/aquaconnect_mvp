@@ -66,18 +66,24 @@ class _InviteMemberSheetState extends State<InviteMemberSheet> {
               const SizedBox(height: 18),
               const Text('역할', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
               const SizedBox(height: 8),
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
                   FilterPillChip(
                     label: '원장',
                     selected: _role == MemberRole.director,
                     onTap: () => setState(() => _role = MemberRole.director),
                   ),
-                  const SizedBox(width: 8),
                   FilterPillChip(
                     label: '수산질병관리사',
                     selected: _role == MemberRole.staff,
                     onTap: () => setState(() => _role = MemberRole.staff),
+                  ),
+                  FilterPillChip(
+                    label: '직원',
+                    selected: _role == MemberRole.employee,
+                    onTap: () => setState(() => _role = MemberRole.employee),
                   ),
                 ],
               ),

@@ -17,8 +17,8 @@ async function main() {
 
   const passwordHash = await hashPassword(DEMO_PASSWORD);
   const { rows: memberRows } = await query(
-    `insert into members (org_id, name, email, password_hash, is_owner, phone)
-     values ($1, '이동길', 'leedonggil@haegang.kr', $2, true, '010-0000-0000') returning id`,
+    `insert into members (org_id, name, email, password_hash, is_owner, role, phone)
+     values ($1, '이동길', 'leedonggil@haegang.kr', $2, true, 'owner', '010-0000-0000') returning id`,
     [orgId, passwordHash],
   );
   const memberId = memberRows[0].id;

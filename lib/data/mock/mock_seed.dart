@@ -18,7 +18,7 @@ class MockSeed {
     id: 'member-leedonggil',
     orgId: orgId,
     name: '이동길',
-    isOwner: true,
+    role: MemberRole.owner,
   );
 
   static final farms = <Farm>[

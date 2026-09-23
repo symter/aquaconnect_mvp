@@ -7,7 +7,7 @@ export const authRouter = Router();
 
 async function memberWithOrg(memberId) {
   const { rows } = await query(
-    `select m.id, m.org_id, m.name, m.is_owner, m.phone, o.name as org_name
+    `select m.id, m.org_id, m.name, m.role, m.is_owner, m.phone, o.name as org_name
      from members m join organizations o on o.id = m.org_id
      where m.id = $1`,
     [memberId],
@@ -17,7 +17,7 @@ async function memberWithOrg(memberId) {
 
 function toSessionJson(row) {
   return {
-    member: { id: row.id, orgId: row.org_id, name: row.name, isOwner: row.is_owner, phone: row.phone },
+    member: { id: row.id, orgId: row.org_id, name: row.name, role: row.role, isOwner: row.is_owner, phone: row.phone },
     organization: { id: row.org_id, name: row.org_name },
   };
 }
@@ -29,7 +29,7 @@ authRouter.post('/login', async (req, res) => {
   }
 
   const { rows } = await query(
-    `select m.id, m.password_hash, m.org_id, m.name, m.is_owner, m.phone, o.name as org_name
+    `select m.id, m.password_hash, m.org_id, m.name, m.role, m.is_owner, m.phone, o.name as org_name
      from members m join organizations o on o.id = m.org_id
      where lower(m.email) = lower($1)`,
     [email],

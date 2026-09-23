@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/providers/data_providers.dart';
 import '../../core/providers/repository_providers.dart';
 import '../../core/theme/app_colors.dart';
+import 'daily_summary_settings_screen.dart';
 import 'ocean_station_picker_sheet.dart';
 
 class MyPageScreen extends ConsumerWidget {
@@ -16,6 +17,7 @@ class MyPageScreen extends ConsumerWidget {
     final farmsAsync = ref.watch(farmsProvider);
     final selectedStation = ref.watch(selectedOceanStationProvider).valueOrNull;
     final surfaceTemp = ref.watch(selectedStationSurfaceTempProvider).valueOrNull;
+    final digestSettings = ref.watch(digestSettingsProvider).valueOrNull;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -110,7 +112,14 @@ class MyPageScreen extends ConsumerWidget {
                               : '표층수온 불러오는 중…'),
                       onTap: () => showOceanStationPickerSheet(context),
                     ),
-                    const _MenuItem(icon: Icons.summarize_outlined, label: '하루 요약 설정', trailing: '오후 4:00'),
+                    _MenuItem(
+                      icon: Icons.summarize_outlined,
+                      label: '하루 요약 설정',
+                      trailing: digestSettings == null
+                          ? ''
+                          : (digestSettings.dailyEnabled ? formatKoreanTime(digestSettings.dailyTime) : '꺼짐'),
+                      onTap: () => context.push('/mypage/daily-summary'),
+                    ),
                     const _MenuItem(icon: Icons.notifications_none, label: '알림 설정'),
                     const _MenuItem(icon: Icons.file_download_outlined, label: '데이터 내보내기'),
                   ]),
