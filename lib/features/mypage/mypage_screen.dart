@@ -75,7 +75,12 @@ class MyPageScreen extends ConsumerWidget {
                   _SectionLabel('관리원 관리'),
                   const SizedBox(height: 8),
                   _MenuGroup(items: [
-                    _MenuItem(icon: Icons.groups_outlined, label: '구성원 관리', trailing: '4명'),
+                    _MenuItem(
+                      icon: Icons.groups_outlined,
+                      label: '구성원 관리',
+                      trailing: '4명',
+                      onTap: () => context.push('/mypage/members'),
+                    ),
                     _MenuItem(
                       icon: Icons.home_work_outlined,
                       label: '등록 양식장 관리',
@@ -84,6 +89,11 @@ class MyPageScreen extends ConsumerWidget {
                     ),
                     const _MenuItem(icon: Icons.history, label: '변경 이력'),
                     const _MenuItem(icon: Icons.link, label: '공유 링크 관리', trailing: '발급 2건'),
+                    _MenuItem(
+                      icon: Icons.mail_outline,
+                      label: '초대 수락 화면 미리보기 (테스트)',
+                      onTap: () => context.push('/mypage/invite-preview'),
+                    ),
                   ]),
                   const SizedBox(height: 16),
                   _SectionLabel('개인 설정'),

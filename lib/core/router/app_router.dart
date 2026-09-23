@@ -9,6 +9,8 @@ import '../../features/home/home_screen.dart';
 import '../../features/info/info_screen.dart';
 import '../../features/memo/memo_screen.dart';
 import '../../features/mypage/farm_management_screen.dart';
+import '../../features/mypage/invite_accept_screen.dart';
+import '../../features/mypage/member_management_screen.dart';
 import '../../features/mypage/mypage_screen.dart';
 import '../../features/reports/all_report_screen.dart';
 import '../../features/reports/report_detail_screen.dart';
@@ -66,6 +68,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/mypage/farms',
         builder: (context, state) => const FarmManagementScreen(),
+      ),
+      GoRoute(
+        path: '/mypage/members',
+        builder: (context, state) => const MemberManagementScreen(),
+      ),
+      GoRoute(
+        path: '/mypage/invite-preview',
+        builder: (context, state) => const InviteAcceptScreen(),
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) => AppShell(navigationShell: navigationShell),
