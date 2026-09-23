@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/buttons.dart';
 import '../../data/models/org_member.dart';
 import 'invite_member_sheet.dart';
 
@@ -82,12 +83,12 @@ class _MemberManagementScreenState extends State<MemberManagementScreen> {
   }
 
   Future<void> _confirmTransferOwner(OrgMember member) async {
-    final firstStep = await showDialog<bool>(
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('소유자를 양도할까요?'),
         content: Text(
-          '${member.name}님에게 소유자 권한을 넘기면 회원님은 원장으로 전환됩니다. 이 작업은 되돌리려면 새로운 소유자가 다시 양도해야 합니다.',
+          '${member.name}님이 소유자가 되고, 회원님은 원장으로 전환됩니다. 이 작업은 되돌리려면 새로운 소유자가 다시 양도해야 합니다.',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('취소')),
@@ -98,23 +99,7 @@ class _MemberManagementScreenState extends State<MemberManagementScreen> {
         ],
       ),
     );
-    if (firstStep != true || !mounted) return;
-
-    final secondStep = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('정말 진행할까요?'),
-        content: Text('${member.name}님이 소유자가 되고, 회원님은 원장으로 바뀝니다. 계속할까요?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('취소')),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('양도 확정', style: TextStyle(color: AppColors.danger)),
-          ),
-        ],
-      ),
-    );
-    if (secondStep != true) return;
+    if (confirmed != true) return;
 
     setState(() {
       final ownerIndex = _members.indexWhere((m) => m.role == MemberRole.owner);
@@ -142,13 +127,16 @@ class _MemberManagementScreenState extends State<MemberManagementScreen> {
                 decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(4)),
               ),
               if (member.role == MemberRole.owner)
-                ListTile(
-                  leading: const Icon(Icons.swap_horiz, color: AppColors.textSecondary),
-                  title: const Text('소유자 양도'),
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    _confirmTransferOwner(member);
-                  },
+                // Ownership is transferred *to* someone — there's nothing to
+                // offer on the owner's own row (see the other branch below,
+                // which now correctly puts "소유자로 지정" on every other
+                // member's row instead).
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  child: Text(
+                    '소유자는 다른 구성원 목록에서 "소유자로 지정"을 선택해 양도할 수 있어요.',
+                    style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                  ),
                 )
               else ...[
                 for (final role in [MemberRole.director, MemberRole.staff, MemberRole.employee])
@@ -161,6 +149,14 @@ class _MemberManagementScreenState extends State<MemberManagementScreen> {
                         _setRole(member, role);
                       },
                     ),
+                ListTile(
+                  leading: const Icon(Icons.swap_horiz, color: AppColors.textSecondary),
+                  title: const Text('소유자로 지정'),
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    _confirmTransferOwner(member);
+                  },
+                ),
                 ListTile(
                   leading: const Icon(Icons.person_off_outlined, color: AppColors.danger),
                   title: const Text('비활성화', style: TextStyle(color: AppColors.danger)),
@@ -181,7 +177,13 @@ class _MemberManagementScreenState extends State<MemberManagementScreen> {
   void _resendInvite(OrgMember invite) {
     setState(() {
       final i = _members.indexWhere((m) => m.id == invite.id);
-      _members[i] = _members[i].copyWith(joinedAt: DateTime.now());
+      final original = _members[i];
+      final now = DateTime.now();
+      // Renew for the same duration originally granted, rather than leaving
+      // the old absolute expiry in place — otherwise "resend" doesn't
+      // actually extend the invite's life.
+      final duration = original.inviteExpiresAt?.difference(original.joinedAt) ?? const Duration(days: 7);
+      _members[i] = original.copyWith(joinedAt: now, inviteExpiresAt: now.add(duration));
     });
     _snack('다시 발송했어요');
   }
@@ -299,20 +301,7 @@ class _EmptyState extends StatelessWidget {
             const Text('아직 함께하는 구성원이 없어요',
                 style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: AppColors.textMuted)),
             const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: onInvite,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.brand,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(vertical: 13),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-                child: const Text('+ 초대하기', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800)),
-              ),
-            ),
+            PrimaryButton(label: '+ 초대하기', onPressed: onInvite),
           ],
         ),
       ),

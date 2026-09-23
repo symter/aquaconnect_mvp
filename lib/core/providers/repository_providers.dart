@@ -121,16 +121,27 @@ final digestSettingsStoreProvider = Provider<DigestSettingsStore>((ref) => Diges
 final digestSettingsProvider = AsyncNotifierProvider<DigestSettingsNotifier, DigestSettings>(DigestSettingsNotifier.new);
 
 class DigestSettingsNotifier extends AsyncNotifier<DigestSettings> {
+  // Chains every _update onto the previous one so two calls fired back to
+  // back (e.g. two toggles tapped in quick succession) can't both read the
+  // same stale `state.valueOrNull` and have the slower one clobber the
+  // other's field change — each update now fully completes, including the
+  // `state =` assignment, before the next one reads `current`.
+  Future<void> _writeQueue = Future.value();
+
   @override
   Future<DigestSettings> build() {
     return ref.watch(digestSettingsStoreProvider).read();
   }
 
-  Future<void> _update(DigestSettings Function(DigestSettings) transform) async {
-    final current = state.valueOrNull ?? await ref.read(digestSettingsStoreProvider).read();
-    final next = transform(current);
-    await ref.read(digestSettingsStoreProvider).write(next);
-    state = AsyncValue.data(next);
+  Future<void> _update(DigestSettings Function(DigestSettings) transform) {
+    final result = _writeQueue.then((_) async {
+      final current = state.valueOrNull ?? await ref.read(digestSettingsStoreProvider).read();
+      final next = transform(current);
+      await ref.read(digestSettingsStoreProvider).write(next);
+      state = AsyncValue.data(next);
+    });
+    _writeQueue = result;
+    return result;
   }
 
   Future<void> setDailyEnabled(bool enabled) => _update((s) => s.copyWith(dailyEnabled: enabled));

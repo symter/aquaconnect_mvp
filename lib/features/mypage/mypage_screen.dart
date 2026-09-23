@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/providers/data_providers.dart';
 import '../../core/providers/repository_providers.dart';
 import '../../core/theme/app_colors.dart';
+import '../../data/models/org_member.dart';
 import 'daily_summary_settings_screen.dart';
 import 'ocean_station_picker_sheet.dart';
 
@@ -18,6 +19,11 @@ class MyPageScreen extends ConsumerWidget {
     final selectedStation = ref.watch(selectedOceanStationProvider).valueOrNull;
     final surfaceTemp = ref.watch(selectedStationSurfaceTempProvider).valueOrNull;
     final digestSettings = ref.watch(digestSettingsProvider).valueOrNull;
+    // No repository/provider exists yet for the member roster (it's still
+    // screen-local mock state in member_management_screen.dart) — read the
+    // same seed function directly so this count can't drift from the
+    // roster screen the way the old hardcoded '4명' did.
+    final activeMemberCount = mockOrgMembers().where((m) => m.status == MemberStatus.active).length;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -80,7 +86,7 @@ class MyPageScreen extends ConsumerWidget {
                     _MenuItem(
                       icon: Icons.groups_outlined,
                       label: '구성원 관리',
-                      trailing: '4명',
+                      trailing: '$activeMemberCount명',
                       onTap: () => context.push('/mypage/members'),
                     ),
                     _MenuItem(

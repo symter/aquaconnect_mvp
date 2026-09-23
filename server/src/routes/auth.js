@@ -17,7 +17,12 @@ async function memberWithOrg(memberId) {
 
 function toSessionJson(row) {
   return {
-    member: { id: row.id, orgId: row.org_id, name: row.name, role: row.role, isOwner: row.is_owner, phone: row.phone },
+    // `isOwner` is derived from `role`, not the separate `is_owner` column
+    // — the two are independently writable with no DB-level sync, and the
+    // client already ignores the wire `isOwner` in favor of deriving it
+    // from `role` too (see Member.isOwner in member.dart), so `role` is the
+    // single source of truth here.
+    member: { id: row.id, orgId: row.org_id, name: row.name, role: row.role, isOwner: row.role === 'owner', phone: row.phone },
     organization: { id: row.org_id, name: row.org_name },
   };
 }

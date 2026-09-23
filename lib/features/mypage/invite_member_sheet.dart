@@ -27,7 +27,9 @@ class _InviteMemberSheetState extends State<InviteMemberSheet> {
 
   void _createLink() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    final random = Random();
+    // A join-granting invite code is a bearer credential and must not be
+    // predictable — dart:math's plain Random() is not a secure RNG.
+    final random = Random.secure();
     final code = List.generate(6, (_) => chars[random.nextInt(chars.length)]).join();
     setState(() => _link = 'aquaconnect.app/invite/$code');
     widget.onInviteCreated(_role, _expireDays);
