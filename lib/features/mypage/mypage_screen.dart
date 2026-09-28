@@ -17,7 +17,7 @@ class MyPageScreen extends ConsumerWidget {
     final session = ref.watch(authStateProvider).valueOrNull;
     final farmsAsync = ref.watch(farmsProvider);
     final selectedStation = ref.watch(selectedOceanStationProvider).valueOrNull;
-    final surfaceTemp = ref.watch(selectedStationSurfaceTempProvider).valueOrNull;
+    final readingsAsync = ref.watch(selectedStationReadingsProvider);
     final digestSettings = ref.watch(digestSettingsProvider).valueOrNull;
     // No repository/provider exists yet for the member roster (it's still
     // screen-local mock state in member_management_screen.dart) — read the
@@ -113,9 +113,13 @@ class MyPageScreen extends ConsumerWidget {
                       trailing: selectedStation?.name ?? '미설정',
                       subtitle: selectedStation == null
                           ? null
-                          : (surfaceTemp != null
-                              ? '표층수온 ${surfaceTemp.waterTempC!.toStringAsFixed(1)}℃'
-                              : '표층수온 불러오는 중…'),
+                          : readingsAsync.when(
+                              data: (readings) => readings.isEmpty
+                                  ? '수온 정보 없음'
+                                  : readings.map((o) => '${o.layer} ${o.waterTempC!.toStringAsFixed(1)}℃').join(' · '),
+                              loading: () => '수온 불러오는 중…',
+                              error: (_, _) => '수온을 불러오지 못했어요',
+                            ),
                       onTap: () => showOceanStationPickerSheet(context),
                     ),
                     _MenuItem(

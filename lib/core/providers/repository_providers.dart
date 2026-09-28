@@ -21,6 +21,7 @@ import '../../data/repositories/report_repository.dart';
 import '../../data/repositories/share_link_repository.dart';
 import '../../data/services/api_client.dart';
 import '../../data/services/auth_token_store.dart';
+import '../../data/services/location_service.dart';
 import '../../data/services/digest_settings_store.dart';
 import '../../data/services/mock_ocean_service.dart';
 import '../../data/services/ocean_service.dart';
@@ -68,6 +69,8 @@ final oceanServiceProvider = Provider<OceanService>((ref) {
 final oceanStationPreferenceStoreProvider = Provider<OceanStationPreferenceStore>((ref) {
   return OceanStationPreferenceStore();
 });
+
+final locationServiceProvider = Provider<LocationService>((ref) => LocationService());
 
 /// The MyPage-selected "바다 위치" (sea location), loaded from local storage
 /// on first watch. Null means the user hasn't picked one yet.

@@ -1,3 +1,7 @@
+import 'ocean_station_catalog.dart';
+
+export 'ocean_station_catalog.dart' show OceanStationInfo, oceanStationCatalog;
+
 /// A single real-time observation, shaped after the NIFS `risaList`
 /// response normalized by `ocean_service` (ported from `D:\202609\index.mjs`).
 class OceanObservation {
@@ -37,15 +41,44 @@ class OceanObservation {
 }
 
 /// A selectable NIFS observation point (바다 위치) for the MyPage / Info
-/// station picker. [layers] holds whichever of '중층'/'저층' this station
-/// publishes — surface-only ('표층') stations are filtered out upstream so
-/// every selectable station always has a mid- or bottom-layer reading.
+/// station picker. [layers] holds every depth this station publishes
+/// ('표층'/'중층'/'저층'), surface-only stations included.
 class OceanStation {
-  const OceanStation({required this.code, required this.name, required this.layers});
+  const OceanStation({
+    required this.code,
+    required this.name,
+    required this.layers,
+    this.sea,
+    this.latitude,
+    this.longitude,
+  });
+
+  /// Builds a station from the recorded official catalog entry, keeping
+  /// [layers] from the live feed when given (it reflects what's actually
+  /// reporting right now).
+  factory OceanStation.fromCatalog(OceanStationInfo info, {List<String>? layers}) => OceanStation(
+        code: info.code,
+        name: info.name,
+        layers: layers ?? info.layers,
+        sea: info.sea,
+        latitude: info.latitude,
+        longitude: info.longitude,
+      );
 
   final String code;
   final String name;
   final List<String> layers;
+  final String? sea;
+  final double? latitude;
+  final double? longitude;
+
+  bool get hasCoordinates => latitude != null && longitude != null;
+}
+
+/// Sorts layers top-down (표층 → 중층 → 저층) for display.
+List<String> sortLayersTopDown(Iterable<String> layers) {
+  const order = ['표층', '중층', '저층'];
+  return layers.toList()..sort((a, b) => order.indexOf(a).compareTo(order.indexOf(b)));
 }
 
 /// Maps a raw NIFS layer code ('표층'/'중층'/'저층') to the label shown in

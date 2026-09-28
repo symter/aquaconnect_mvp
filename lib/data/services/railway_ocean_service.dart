@@ -80,17 +80,16 @@ class RailwayOceanService implements OceanService {
     final observations = await fetchRealtime();
     final byCode = <String, (String name, Set<String> layers)>{};
     for (final o in observations) {
-      if (o.stationCode == '-' || (o.layer != '중층' && o.layer != '저층')) continue;
-      final existing = byCode[o.stationCode];
-      if (existing == null) {
-        byCode[o.stationCode] = (o.stationName, {o.layer});
-      } else {
-        existing.$2.add(o.layer);
-      }
+      if (o.stationCode == '-' || o.waterTempC == null) continue;
+      byCode.putIfAbsent(o.stationCode, () => (o.stationName, <String>{})).$2.add(o.layer);
     }
-    final stations = byCode.entries
-        .map((e) => OceanStation(code: e.key, name: e.value.$1, layers: e.value.$2.toList()))
-        .toList()
+    final stations = byCode.entries.map((e) {
+      final layers = sortLayersTopDown(e.value.$2);
+      final info = oceanStationCatalog[e.key];
+      return info != null
+          ? OceanStation.fromCatalog(info, layers: layers)
+          : OceanStation(code: e.key, name: e.value.$1, layers: layers);
+    }).toList()
       ..sort((a, b) => a.name.compareTo(b.name));
     return stations;
   }

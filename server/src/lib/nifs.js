@@ -3,7 +3,7 @@
 // instead of a CLI script, so the Express route can call it directly and
 // Flutter Web never talks to the NIFS API (and its CORS policy) itself.
 
-const API_URL = 'https://www.nifs.go.kr/OpenAPI_json?id=risaList';
+const API_URL = 'https://www.nifs.go.kr/api/OpenAPI_json?id=risaList';
 const DEFAULT_API_KEY = 'qPwOeIrU-2607-STVDAI-1822';
 
 const LAYER_NAMES = { '1': '표층', '2': '중층', '3': '저층' };

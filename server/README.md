@@ -15,12 +15,15 @@ for Flutter Web).
    - `JWT_SECRET` — 임의의 긴 랜덤 문자열 (`node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`)
    - `NIFS_API_KEY` — (선택) 발급받은 키. 비워두면 `D:\202609`와 동일한 기본 데모 키로 동작.
    - `SEED_DEMO_PASSWORD` — (선택) `npm run seed` 실행 시 데모 로그인 비밀번호. 기본값 `demo1234`.
-4. 배포 후 Railway 콘솔의 "Run a command" (또는 `railway run`)로 한 번만 실행:
+4. 마이그레이션은 `npm start`(= `scripts/start.js`)가 서버 기동 전에
+   자동으로 적용합니다 (`_migrations` 테이블로 이미 적용된 파일은 건너뜀).
+   최초 1회만 Railway 콘솔의 "Run a command" (또는 `railway run`)로 시드를
+   넣습니다:
    ```
-   npm run migrate
    npm run seed
    ```
-   `npm run seed`는 `mock_seed.dart`와 동일한 데모 데이터(해강수산질병관리원 ·
+   ⚠️ 실데이터가 생긴 뒤에는 절대 다시 실행하지 마세요 — `npm run seed`는
+   모든 테이블을 비우고 다시 채웁니다. `npm run seed`는 `mock_seed.dart`와 동일한 데모 데이터(해강수산질병관리원 ·
    이동길 · 신일수산 1양식장 등)와 로그인 계정
    (`leedonggil@haegang.kr` / `demo1234`), 그리고 항상 열람 가능한 데모
    공유링크(`/r/demo`)를 만듭니다.
