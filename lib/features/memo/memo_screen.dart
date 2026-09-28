@@ -3,11 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/providers/data_providers.dart';
-import '../../core/providers/repository_providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/chips.dart';
 import '../../core/widgets/memo_card.dart';
-import '../../core/widgets/memo_composer.dart';
+import '../../core/widgets/memo_composer_bar.dart';
 import '../../data/models/memo.dart';
 
 class MemoScreen extends ConsumerStatefulWidget {
@@ -102,41 +101,9 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
                 error: (e, _) => Center(child: Text('불러오기 실패: $e')),
               ),
             ),
-            Container(
-              padding: const EdgeInsets.fromLTRB(20, 9, 20, 14),
-              decoration: const BoxDecoration(
-                color: AppColors.surface,
-                border: Border(top: BorderSide(color: AppColors.border)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 9),
-                    child: Text(
-                      '자세히 기록하기 · 양식장 태그·표현·사진을 한 번에',
-                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.textMuted),
-                    ),
-                  ),
-                  farmsAsync.when(
-                    data: (farms) => MemoComposer(
-                      farms: farms,
-                      showExpressionChips: true,
-                      hintText: "3수조 폐사, 유영 이상... ('/' 로 양식장 지정)",
-                      onSubmit: ({required content, farm, tags = const []}) {
-                        ref.read(memoRepositoryProvider).addMemo(
-                              farmId: farm?.id,
-                              farmName: farm?.name,
-                              content: content,
-                              tags: tags,
-                            );
-                      },
-                    ),
-                    loading: () => const SizedBox(height: 44),
-                    error: (e, _) => Text('$e'),
-                  ),
-                ],
-              ),
+            const MemoComposerBar(
+              caption: '자세히 기록하기 · 양식장 태그·표현·사진을 한 번에',
+              hintText: "3수조 폐사, 유영 이상... ('/' 로 양식장 지정)",
             ),
           ],
         ),

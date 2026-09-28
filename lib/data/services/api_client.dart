@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -47,6 +48,14 @@ class ApiClient {
   Future<dynamic> get(String path, {Map<String, String>? query}) async {
     final response = await _client.get(_uri(path, query), headers: await _headers());
     return _decode(response);
+  }
+
+  /// Raw response bytes (e.g. an image) from an authenticated endpoint.
+  Future<Uint8List> getBytes(String path) async {
+    final response = await _client.get(_uri(path), headers: await _headers());
+    if (response.statusCode >= 200 && response.statusCode < 300) return response.bodyBytes;
+    _decode(response);
+    throw ApiException('요청에 실패했습니다.', statusCode: response.statusCode);
   }
 
   Future<dynamic> post(String path, {Object? body}) async {

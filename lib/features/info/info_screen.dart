@@ -6,6 +6,7 @@ import '../../core/providers/data_providers.dart';
 import '../../core/providers/repository_providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/charts.dart';
+import '../../core/widgets/memo_composer_bar.dart';
 import '../../core/widgets/stat_grid.dart';
 import '../../data/models/disease_info.dart';
 import '../../data/models/ocean_reading.dart';
@@ -157,6 +158,7 @@ class _InfoScreenState extends ConsumerState<InfoScreen> {
                 ],
               ),
             ),
+            const MemoComposerBar(confirmOnSave: true),
           ],
         ),
       ),

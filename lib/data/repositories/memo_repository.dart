@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import '../models/memo.dart';
 
 abstract class MemoRepository {
@@ -10,6 +12,9 @@ abstract class MemoRepository {
     String? farmName,
     required String content,
     required List<String> tags,
-    int photoCount,
+    List<MemoPhotoUpload> photos,
   });
+
+  /// Image bytes for one of a memo's [Memo.photoIds].
+  Future<Uint8List> loadPhoto(String photoId);
 }

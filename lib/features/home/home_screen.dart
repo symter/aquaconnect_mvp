@@ -7,7 +7,7 @@ import '../../core/providers/repository_providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/chips.dart';
 import '../../core/widgets/farm_card.dart';
-import '../../core/widgets/memo_composer.dart';
+import '../../core/widgets/memo_composer_bar.dart';
 import '../../data/models/farm.dart';
 import '../../data/models/risk_level.dart';
 
@@ -32,7 +32,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       backgroundColor: AppColors.background,
       body: SafeArea(
         bottom: false,
-        child: CustomScrollView(
+        child: Column(
+          children: [
+            Expanded(child: _buildScroll(context, farmsAsync, orgName)),
+            const MemoComposerBar(confirmOnSave: true),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildScroll(BuildContext context, AsyncValue<List<Farm>> farmsAsync, String orgName) {
+    return CustomScrollView(
           slivers: [
             SliverToBoxAdapter(
               child: Container(
@@ -72,26 +83,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    farmsAsync.when(
-                      data: (farms) => MemoComposer(
-                        farms: farms,
-                        compact: true,
-                        onSubmit: ({required content, farm, tags = const []}) {
-                          ref.read(memoRepositoryProvider).addMemo(
-                                farmId: farm?.id,
-                                farmName: farm?.name,
-                                content: content,
-                                tags: tags,
-                              );
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('메모가 저장되었습니다.')),
-                          );
-                        },
-                      ),
-                      loading: () => const SizedBox(height: 44),
-                      error: (e, _) => Text('$e'),
-                    ),
-                    const SizedBox(height: 10),
                     InkWell(
                       onTap: () => context.push('/memo'),
                       child: Padding(
@@ -181,8 +172,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
             ),
           ],
-        ),
-      ),
     );
   }
 }

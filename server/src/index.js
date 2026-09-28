@@ -14,7 +14,8 @@ import { shareLinksRouter } from './routes/shareLinks.js';
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+// Memo photos arrive base64-encoded in the JSON body (up to 5 × 5MB).
+app.use(express.json({ limit: '40mb' }));
 
 app.get('/health', (req, res) => res.json({ ok: true }));
 

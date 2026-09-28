@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/models/disease_info.dart';
@@ -17,6 +19,12 @@ final farmByIdProvider = FutureProvider.family<Farm?, String>((ref, farmId) {
 
 final memosProvider = StreamProvider.family<List<Memo>, String?>((ref, farmId) {
   return ref.watch(memoRepositoryProvider).watchMemos(farmId: farmId);
+});
+
+/// Bytes for one memo photo. Kept (not autoDispose) so scrolling back to a
+/// memo doesn't re-download its thumbnails.
+final memoPhotoProvider = FutureProvider.family<Uint8List, String>((ref, photoId) {
+  return ref.watch(memoRepositoryProvider).loadPhoto(photoId);
 });
 
 final diseaseInfoProvider = FutureProvider<List<DiseaseInfo>>((ref) {
