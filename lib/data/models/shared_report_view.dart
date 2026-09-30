@@ -1,3 +1,5 @@
+import 'farm.dart';
+import 'report.dart';
 import 'risk_level.dart';
 import '../repositories/share_link_repository.dart';
 
@@ -130,14 +132,28 @@ class SharedReportView {
   static const _placeholderOrgName = '해강 수산질병관리원';
   static const _placeholderOrgPhone = '061-000-0000';
 
-  factory SharedReportView.fromBundle(SharedReportBundle bundle, {bool withExamples = false}) {
-    final farm = bundle.farm;
-    final report = bundle.report;
+  factory SharedReportView.fromBundle(SharedReportBundle bundle, {bool withExamples = false}) =>
+      SharedReportView.fromFarmReport(
+        farm: bundle.farm,
+        report: bundle.report,
+        sharedAt: bundle.link.createdAt,
+        withExamples: withExamples,
+      );
+
+  /// Same derivation as [fromBundle] without a share link — used by the
+  /// institute app to preview what the farm will see before sharing.
+  factory SharedReportView.fromFarmReport({
+    required Farm farm,
+    required Report report,
+    required DateTime sharedAt,
+    String? orgName,
+    bool withExamples = false,
+  }) {
     return SharedReportView(
       farmName: farm.name,
       species: '',
-      orgName: _placeholderOrgName,
-      sharedAt: bundle.link.createdAt,
+      orgName: orgName ?? _placeholderOrgName,
+      sharedAt: sharedAt,
       level: OverallLevel.fromRisk(report.riskLevel),
       summary: report.headline,
       metrics: [

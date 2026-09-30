@@ -165,7 +165,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       return Column(
                         children: [
                           for (final farm in filtered) ...[
-                            FarmCard(farm: farm, onTap: () => context.push('/reports/${farm.id}')),
+                            FarmCard(farm: farm, onTap: () => context.push('/reports/${farm.id}/farm-report')),
                             const SizedBox(height: 10),
                           ],
                         ],
