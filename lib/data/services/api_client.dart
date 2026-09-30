@@ -68,8 +68,9 @@ class ApiClient {
     return _decode(response);
   }
 
-  Future<dynamic> delete(String path) async {
-    final response = await _client.delete(_uri(path), headers: await _headers());
+  Future<dynamic> delete(String path, {Object? body}) async {
+    final response =
+        await _client.delete(_uri(path), headers: await _headers(), body: body == null ? null : jsonEncode(body));
     return _decode(response);
   }
 }

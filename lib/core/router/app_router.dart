@@ -13,6 +13,8 @@ import '../../features/mypage/farm_management_screen.dart';
 import '../../features/mypage/invite_accept_screen.dart';
 import '../../features/mypage/member_management_screen.dart';
 import '../../features/mypage/mypage_screen.dart';
+import '../../features/notifications/notification_settings_screen.dart';
+import '../../features/notifications/notifications_screen.dart';
 import '../../features/reports/all_report_screen.dart';
 import '../../features/reports/report_detail_screen.dart';
 import '../../features/reports/shared_report_web_screen.dart';
@@ -77,6 +79,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/mypage/daily-summary',
         builder: (context, state) => const DailySummarySettingsScreen(),
+      ),
+      GoRoute(
+        path: '/notifications',
+        builder: (context, state) => const NotificationsScreen(),
+      ),
+      GoRoute(
+        path: '/mypage/notifications',
+        builder: (context, state) => const NotificationSettingsScreen(),
       ),
       GoRoute(
         path: '/mypage/invite-preview',

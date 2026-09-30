@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { requireAuth } from '../auth.js';
 import { query } from '../db.js';
 import { orgIdForMember } from '../lib/orgScope.js';
+import { notifyMembers } from '../lib/notify.js';
 import { farmHeadline, generateReport } from '../lib/reportGenerator.js';
 import { fetchRealtimeObservations, pickPreferredObservation } from '../lib/nifs.js';
 
@@ -94,6 +95,9 @@ reportsRouter.post('/:farmId/generate', async (req, res) => {
   res.status(201).json(generated);
 });
 
+const RISK_SEVERITY = { good: 0, warning: 1, danger: 2 };
+const RISK_LABEL = { good: '양호', warning: '주의', danger: '위험' };
+
 export async function buildAndPersistReport(farm) {
   const { rows: memoRows } = await query(
     'select content, tags, author_type, created_at from memos where farm_id = $1 order by created_at desc',
@@ -151,6 +155,16 @@ export async function buildAndPersistReport(farm) {
     farmHeadline(report),
     ocean?.waterTemp ?? null,
   ]);
+
+  if (RISK_SEVERITY[report.riskLevel] > (RISK_SEVERITY[farm.risk_level] ?? 0)) {
+    await notifyMembers({
+      orgId: farm.org_id,
+      type: 'risk',
+      title: `${farm.name} 위험도 ${RISK_LABEL[report.riskLevel]}`,
+      body: `${farmHeadline(report)} — ${report.headline}`,
+      link: `/reports/${farm.id}`,
+    });
+  }
 
   return toReportJson(rows[0]);
 }

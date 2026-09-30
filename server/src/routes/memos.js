@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { requireAuth } from '../auth.js';
 import { pool, query } from '../db.js';
 import { orgIdForMember } from '../lib/orgScope.js';
+import { notifyMembers } from '../lib/notify.js';
 import { refreshReportQuietly } from './reports.js';
 
 export const memosRouter = Router();
@@ -129,6 +130,16 @@ memosRouter.post('/', async (req, res) => {
     // A new 폐사 count / visit changes the farm's risk and 최근 방문.
     await refreshReportQuietly(memoRow.farm_id);
   }
+
+  const preview = content.trim().replace(/\s+/g, ' ');
+  await notifyMembers({
+    orgId,
+    excludeMemberId: req.memberId,
+    type: 'memo',
+    title: `새 메모 · ${farmName ?? '미지정'}`,
+    body: `${memberRows[0]?.name ?? ''}: ${preview.length > 80 ? `${preview.slice(0, 80)}…` : preview}`,
+    link: '/memo',
+  });
 
   res.status(201).json(toMemoJson({ ...memoRow, farm_name: farmName, photo_ids: photoIds }));
 });

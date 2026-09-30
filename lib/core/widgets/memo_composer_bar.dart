@@ -39,7 +39,7 @@ class MemoComposerBar extends ConsumerWidget {
             ),
           MemoComposer(
             farms: farms,
-            hintText: hintText ?? "지금 본 것 적어두기 ('/' 로 양식장 지정)",
+            hintText: hintText ?? "/ 로 양식장 지정",
             onSubmit: (draft) async {
               await ref.read(memoRepositoryProvider).addMemo(
                     farmId: draft.farm?.id,

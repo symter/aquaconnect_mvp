@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/providers/data_providers.dart';
+import '../../core/providers/notification_providers.dart';
 import '../../core/providers/repository_providers.dart';
 import '../../core/theme/app_colors.dart';
 import 'daily_summary_settings_screen.dart';
@@ -19,6 +20,7 @@ class MyPageScreen extends ConsumerWidget {
     final readingsAsync = ref.watch(selectedStationReadingsProvider);
     final digestSettings = ref.watch(digestSettingsProvider).valueOrNull;
     final shareLinksAsync = ref.watch(shareLinksProvider);
+    final pushStatus = ref.watch(pushStatusProvider).valueOrNull;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -128,13 +130,21 @@ class MyPageScreen extends ConsumerWidget {
                           : (digestSettings.dailyEnabled ? formatKoreanTime(digestSettings.dailyTime) : '꺼짐'),
                       onTap: () => context.push('/mypage/daily-summary'),
                     ),
-                    const _MenuItem(icon: Icons.notifications_none, label: '알림 설정'),
+                    _MenuItem(
+                      icon: Icons.notifications_none,
+                      label: '알림 설정',
+                      trailing: pushStatus == null ? '' : (pushStatus.enabled ? '켜짐' : '꺼짐'),
+                      onTap: () => context.push('/mypage/notifications'),
+                    ),
                     const _MenuItem(icon: Icons.file_download_outlined, label: '데이터 내보내기'),
                   ]),
                   const SizedBox(height: 12),
                   Center(
                     child: TextButton(
-                      onPressed: () => ref.read(authRepositoryProvider).signOut(),
+                      onPressed: () async {
+                        await ref.read(pushControllerProvider).detachBeforeSignOut();
+                        await ref.read(authRepositoryProvider).signOut();
+                      },
                       child: const Text('로그아웃', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.textMuted)),
                     ),
                   ),

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/providers/data_providers.dart';
+import '../../core/providers/notification_providers.dart';
 import '../../core/providers/repository_providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/chips.dart';
@@ -10,6 +11,7 @@ import '../../core/widgets/farm_card.dart';
 import '../../core/widgets/memo_composer_bar.dart';
 import '../../data/models/farm.dart';
 import '../../data/models/risk_level.dart';
+import '../notifications/notification_permission_sheet.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -60,12 +62,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        Container(
-                          width: 38,
-                          height: 38,
-                          decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                          child: const Icon(Icons.notifications_none, size: 19, color: AppColors.neutralIconStrong),
-                        ),
+                        _NotificationBell(onTap: () => openNotifications(context, ref)),
                       ],
                     ),
                     const SizedBox(height: 10),
@@ -172,6 +169,40 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
             ),
           ],
+    );
+  }
+}
+
+class _NotificationBell extends ConsumerWidget {
+  const _NotificationBell({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final unread = ref.watch(unreadNotificationCountProvider);
+    return Semantics(
+      button: true,
+      label: unread > 0 ? '알림 $unread개' : '알림',
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: Container(
+          width: 38,
+          height: 38,
+          decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+          child: Badge(
+            isLabelVisible: unread > 0,
+            label: Text(unread > 99 ? '99+' : '$unread'),
+            backgroundColor: AppColors.danger,
+            child: Icon(
+              unread > 0 ? Icons.notifications : Icons.notifications_none,
+              size: 19,
+              color: AppColors.neutralIconStrong,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

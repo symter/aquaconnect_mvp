@@ -5,16 +5,19 @@ import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/disease_info_repository.dart';
 import '../../data/repositories/farm_repository.dart';
 import '../../data/repositories/memo_repository.dart';
+import '../../data/repositories/notification_repository.dart';
 import '../../data/repositories/mock/mock_auth_repository.dart';
 import '../../data/repositories/mock/mock_disease_info_repository.dart';
 import '../../data/repositories/mock/mock_farm_repository.dart';
 import '../../data/repositories/mock/mock_memo_repository.dart';
+import '../../data/repositories/mock/mock_notification_repository.dart';
 import '../../data/repositories/mock/mock_report_repository.dart';
 import '../../data/repositories/mock/mock_share_link_repository.dart';
 import '../../data/repositories/remote/remote_auth_repository.dart';
 import '../../data/repositories/remote/remote_disease_info_repository.dart';
 import '../../data/repositories/remote/remote_farm_repository.dart';
 import '../../data/repositories/remote/remote_memo_repository.dart';
+import '../../data/repositories/remote/remote_notification_repository.dart';
 import '../../data/repositories/remote/remote_report_repository.dart';
 import '../../data/repositories/remote/remote_share_link_repository.dart';
 import '../../data/repositories/report_repository.dart';
@@ -27,6 +30,7 @@ import '../../data/services/mock_ocean_service.dart';
 import '../../data/services/ocean_service.dart';
 import '../../data/services/ocean_station_preference_store.dart';
 import '../../data/services/railway_ocean_service.dart';
+import '../../data/services/web_push_service.dart';
 import '../config/env.dart';
 
 // `Env.useMock` (default true) picks between the in-memory mock_*
@@ -55,6 +59,13 @@ final memoRepositoryProvider = Provider<MemoRepository>((ref) {
   if (Env.useMock) return MockMemoRepository();
   return RemoteMemoRepository(apiClient: ref.watch(apiClientProvider));
 });
+
+final notificationRepositoryProvider = Provider<NotificationRepository>((ref) {
+  if (Env.useMock) return MockNotificationRepository();
+  return RemoteNotificationRepository(apiClient: ref.watch(apiClientProvider));
+});
+
+final webPushServiceProvider = Provider<WebPushService>((ref) => WebPushService());
 
 final diseaseInfoRepositoryProvider = Provider<DiseaseInfoRepository>((ref) {
   if (Env.useMock) return MockDiseaseInfoRepository();

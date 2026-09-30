@@ -18,6 +18,9 @@ for Flutter Web).
    - `SEED_ORG_NAME` / `SEED_OWNER_NAME` / `SEED_OWNER_EMAIL` / `SEED_OWNER_PHONE` — (선택) 시드할 관리원명·소유자
      이름·로그인 이메일·전화번호. 기본값 해강수산질병관리원 / 이동길 / `leedonggil@haegang.kr` / 없음.
      전화번호는 공유 리포트의 "담당 관리사에게 연락하기" 버튼이 거는 번호입니다.
+   - `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` — (선택) 휴대폰 알림(Web Push) 서명 키.
+     비워두면 서버가 처음 필요할 때 키 쌍을 만들어 DB(`app_config`)에 저장하고 계속 그 키를 씁니다.
+     키를 바꾸면 기존 기기 구독이 모두 무효가 되니(앱을 열면 자동 재구독) 한 번 정한 뒤엔 바꾸지 마세요.
 4. 마이그레이션은 `npm start`(= `scripts/start.js`)가 서버 기동 전에
    자동으로 적용합니다 (`_migrations` 테이블로 이미 적용된 파일은 건너뜀).
    최초 1회만 Railway 콘솔의 "Run a command" (또는 `railway run`)로 시드를
@@ -87,3 +90,13 @@ Postgres가 로컬에 없다면 `npm run smoke-test`로 (pg-mem 기반 인메모
 - NIFS `risaList` API는 실시간 수온만 제공하고 7일 이력/염도/용존산소/적조는
   주지 않습니다 — `oceanSnapshotForFarm()`은 그 사실을 숨기지 않고 그대로
   단일 값만 리포트 생성에 반영합니다.
+
+## 알림 (Web Push)
+
+- 알림이 생기는 경우: 양식장 위험도가 올라갈 때(양호→주의/위험, 주의→위험 — 조직 전체), 다른 구성원이
+  메모를 남길 때(작성자 제외). 각 구성원이 마이페이지 > 알림 설정에서 종류별로 끌 수 있고, 끈 종류는 알림함에도 쌓이지 않습니다.
+- `GET /api/notifications` 알림함, `POST /api/notifications/:id/read`, `POST /api/notifications/read-all`,
+  `GET|PUT /api/notifications/settings`, `GET /api/notifications/push/public-key`,
+  `POST|DELETE /api/notifications/push/subscriptions`, `POST /api/notifications/test`.
+- 기기 쪽은 `web/push_sw.js` 서비스워커가 받습니다. 안드로이드 Chrome·PC 브라우저는 바로 되고,
+  아이폰(iOS 16.4+)은 Safari에서 "홈 화면에 추가"로 설치한 앱에서만 알림을 켤 수 있습니다.
