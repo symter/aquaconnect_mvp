@@ -24,8 +24,8 @@ class _InfoScreenState extends ConsumerState<InfoScreen> {
   String? _stationCode;
   String? _stationName;
   bool _initializedFromPreference = false;
-  final Set<DiseaseInfoScope> _scopeFilter = {DiseaseInfoScope.domestic};
-  String? _speciesFilter = '넙치';
+  final Set<DiseaseInfoScope> _scopeFilter = {};
+  String? _speciesFilter;
 
   void _selectStation(OceanStation station) {
     setState(() {

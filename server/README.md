@@ -14,7 +14,10 @@ for Flutter Web).
 3. 서비스 환경변수에 다음을 추가합니다:
    - `JWT_SECRET` — 임의의 긴 랜덤 문자열 (`node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`)
    - `NIFS_API_KEY` — (선택) 발급받은 키. 비워두면 `D:\202609`와 동일한 기본 데모 키로 동작.
-   - `SEED_DEMO_PASSWORD` — (선택) `npm run seed` 실행 시 데모 로그인 비밀번호. 기본값 `demo1234`.
+   - `SEED_DEMO_PASSWORD` — (선택) `npm run seed`가 만드는 소유자 계정 비밀번호. 기본값 `demo1234`.
+   - `SEED_ORG_NAME` / `SEED_OWNER_NAME` / `SEED_OWNER_EMAIL` / `SEED_OWNER_PHONE` — (선택) 시드할 관리원명·소유자
+     이름·로그인 이메일·전화번호. 기본값 해강수산질병관리원 / 이동길 / `leedonggil@haegang.kr` / 없음.
+     전화번호는 공유 리포트의 "담당 관리사에게 연락하기" 버튼이 거는 번호입니다.
 4. 마이그레이션은 `npm start`(= `scripts/start.js`)가 서버 기동 전에
    자동으로 적용합니다 (`_migrations` 테이블로 이미 적용된 파일은 건너뜀).
    최초 1회만 Railway 콘솔의 "Run a command" (또는 `railway run`)로 시드를
@@ -22,11 +25,16 @@ for Flutter Web).
    ```
    npm run seed
    ```
-   ⚠️ 실데이터가 생긴 뒤에는 절대 다시 실행하지 마세요 — `npm run seed`는
-   모든 테이블을 비우고 다시 채웁니다. `npm run seed`는 `mock_seed.dart`와 동일한 데모 데이터(해강수산질병관리원 ·
-   이동길 · 신일수산 1양식장 등)와 로그인 계정
-   (`leedonggil@haegang.kr` / `demo1234`), 그리고 항상 열람 가능한 데모
-   공유링크(`/r/demo`)를 만듭니다.
+   시드는 관리원(organization)과 소유자 로그인 계정만 만듭니다 — 양식장·메모·
+   질병정보·공유링크 같은 데모 데이터는 넣지 않습니다. 이미 같은 이메일 계정이
+   있으면 아무것도 하지 않으므로 다시 실행해도 안전합니다.
+
+   예전 시드(데모 양식장 신일수산 1양식장 등, `/r/demo` 링크)가 이미 들어간
+   DB라면 한 번 정리하세요 — 정확히 그 데모 행만 지웁니다:
+   ```
+   npm run clear-demo            # 지울 행 수만 출력 (dry run)
+   npm run clear-demo -- --yes   # 실제 삭제
+   ```
 5. Flutter 쪽에서 이 서비스의 공개 URL을 가리키도록 빌드/실행합니다:
    ```
    flutter run -d chrome --dart-define=USE_MOCK=false --dart-define=API_BASE_URL=https://<railway-service>.up.railway.app

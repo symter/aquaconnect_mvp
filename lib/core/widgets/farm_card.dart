@@ -62,15 +62,17 @@ class FarmCard extends StatelessWidget {
             const SizedBox(height: 8),
             Row(
               children: [
-                Text(
-                  farm.headline,
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: headlineColor),
-                ),
-                const SizedBox(width: 16),
-                Text('수온 ${farm.waterTemp.toStringAsFixed(1)}℃',
+                if (farm.headline.isNotEmpty) ...[
+                  Text(
+                    farm.headline,
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: headlineColor),
+                  ),
+                  const SizedBox(width: 16),
+                ],
+                Text(farm.waterTemp == null ? '수온 -' : '수온 ${farm.waterTemp!.toStringAsFixed(1)}℃',
                     style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
                 const SizedBox(width: 16),
-                Text('방문 D-${farm.lastVisitDays}',
+                Text(farm.lastVisitDays == null ? '방문 기록 없음' : '방문 D-${farm.lastVisitDays}',
                     style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
               ],
             ),

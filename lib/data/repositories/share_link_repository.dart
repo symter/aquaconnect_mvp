@@ -3,11 +3,24 @@ import '../models/report.dart';
 import '../models/share_link.dart';
 
 class SharedReportBundle {
-  const SharedReportBundle({required this.farm, required this.report, required this.link});
+  const SharedReportBundle({
+    required this.farm,
+    required this.report,
+    required this.link,
+    this.organizationName,
+    this.assignedMemberPhone,
+  });
 
   final Farm farm;
   final Report report;
   final ShareLink link;
+
+  /// The institute that issued the link, shown as "○○ 제공".
+  final String? organizationName;
+
+  /// Phone of the farm's assigned institute member — what the farm owner's
+  /// "담당 관리사에게 연락하기" button dials.
+  final String? assignedMemberPhone;
 }
 
 abstract class ShareLinkRepository {

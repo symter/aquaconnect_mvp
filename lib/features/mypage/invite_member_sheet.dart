@@ -31,7 +31,7 @@ class _InviteMemberSheetState extends State<InviteMemberSheet> {
     // predictable — dart:math's plain Random() is not a secure RNG.
     final random = Random.secure();
     final code = List.generate(6, (_) => chars[random.nextInt(chars.length)]).join();
-    setState(() => _link = 'aquaconnect.app/invite/$code');
+    setState(() => _link = '${Uri.base.origin}/#/invite/$code');
     widget.onInviteCreated(_role, _expireDays);
   }
 

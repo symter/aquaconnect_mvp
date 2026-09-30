@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+
+import '../../core/providers/repository_providers.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/buttons.dart';
@@ -9,15 +12,18 @@ import 'invite_member_sheet.dart';
 /// "마이페이지 > 구성원 관리" — roster of the org's members plus pending
 /// invites. MVP-stage: role is a display label only, no permission
 /// branching — every signed-in user sees every action button.
-class MemberManagementScreen extends StatefulWidget {
+class MemberManagementScreen extends ConsumerStatefulWidget {
   const MemberManagementScreen({super.key});
 
   @override
-  State<MemberManagementScreen> createState() => _MemberManagementScreenState();
+  ConsumerState<MemberManagementScreen> createState() => _MemberManagementScreenState();
 }
 
-class _MemberManagementScreenState extends State<MemberManagementScreen> {
-  final List<OrgMember> _members = mockOrgMembers();
+class _MemberManagementScreenState extends ConsumerState<MemberManagementScreen> {
+  late final List<OrgMember> _members = switch (ref.read(authRepositoryProvider).currentSession) {
+    final session? => rosterFromSession(session.member),
+    null => <OrgMember>[],
+  };
 
   List<OrgMember> get _active => _members.where((m) => m.status == MemberStatus.active).toList();
   List<OrgMember> get _pending => _members.where((m) => m.status == MemberStatus.pending).toList();
@@ -38,11 +44,11 @@ class _MemberManagementScreenState extends State<MemberManagementScreen> {
           setState(() {
             _members.add(OrgMember(
               id: 'om-${DateTime.now().microsecondsSinceEpoch}',
-              name: '010-0000-0000',
+              name: '초대 링크',
               role: role,
               status: MemberStatus.pending,
               joinedAt: DateTime.now(),
-              inviteTarget: '010-0000-0000',
+              inviteTarget: '초대 링크 발급됨',
               inviteExpiresAt: DateTime.now().add(Duration(days: expireDays)),
             ));
           });

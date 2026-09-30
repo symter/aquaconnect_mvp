@@ -97,7 +97,8 @@ class _Body extends StatelessWidget {
     };
     final newMemoCount = memos.where((m) => m.createdAt.isAfter(DateTime.now().subtract(const Duration(hours: 24)))).length;
     final riskyFarms = [...farms]..sort((a, b) => a.riskLevel.index.compareTo(b.riskLevel.index));
-    final avgTemp = farms.isEmpty ? 0.0 : farms.map((f) => f.waterTemp).reduce((a, b) => a + b) / farms.length;
+    final temps = [for (final f in farms) if (f.waterTemp != null) f.waterTemp!];
+    final avgTemp = temps.isEmpty ? null : temps.reduce((a, b) => a + b) / temps.length;
     final mortalityTrend = _weeklyMortalityTrend(memos);
 
     return ListView(
@@ -139,20 +140,20 @@ class _Body extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 12),
-              OceanStatGrid(
-                snapshot: OceanSnapshot(
-                  region: '담당 해역',
-                  stationName: '평균',
-                  waterTemp: avgTemp,
-                  salinity: 32.1,
-                  redTideStatus: '없음',
-                  dissolvedOxygen: 5.2,
-                  sevenDayTemps: const [],
-                  sevenDayLabels: const [],
-                  source: '',
-                  hasTrendHistory: false,
+              if (avgTemp == null)
+                const Text('수온 정보가 있는 양식장이 없습니다.', style: TextStyle(fontSize: 12, color: AppColors.textMuted))
+              else
+                OceanStatGrid(
+                  snapshot: OceanSnapshot(
+                    region: '담당 해역',
+                    stationName: '평균',
+                    waterTemp: avgTemp,
+                    sevenDayTemps: const [],
+                    sevenDayLabels: const [],
+                    source: '',
+                    hasTrendHistory: false,
+                  ),
                 ),
-              ),
             ],
           ),
         ),

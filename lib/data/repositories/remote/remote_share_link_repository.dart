@@ -38,6 +38,8 @@ class RemoteShareLinkRepository implements ShareLinkRepository {
         farm: Farm.fromJson(json['farm'] as Map<String, dynamic>),
         report: Report.fromJson(json['report'] as Map<String, dynamic>),
         link: ShareLink.fromJson(json['link'] as Map<String, dynamic>),
+        organizationName: json['organizationName'] as String?,
+        assignedMemberPhone: json['assignedMemberPhone'] as String?,
       );
     } on ApiException catch (e) {
       if (e.statusCode == 404) return null;

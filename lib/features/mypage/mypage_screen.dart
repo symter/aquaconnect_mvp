@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import '../../core/providers/data_providers.dart';
 import '../../core/providers/repository_providers.dart';
 import '../../core/theme/app_colors.dart';
-import '../../data/models/org_member.dart';
 import 'daily_summary_settings_screen.dart';
 import 'ocean_station_picker_sheet.dart';
 
@@ -19,11 +18,7 @@ class MyPageScreen extends ConsumerWidget {
     final selectedStation = ref.watch(selectedOceanStationProvider).valueOrNull;
     final readingsAsync = ref.watch(selectedStationReadingsProvider);
     final digestSettings = ref.watch(digestSettingsProvider).valueOrNull;
-    // No repository/provider exists yet for the member roster (it's still
-    // screen-local mock state in member_management_screen.dart) — read the
-    // same seed function directly so this count can't drift from the
-    // roster screen the way the old hardcoded '4명' did.
-    final activeMemberCount = mockOrgMembers().where((m) => m.status == MemberStatus.active).length;
+    final shareLinksAsync = ref.watch(shareLinksProvider);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -86,7 +81,6 @@ class MyPageScreen extends ConsumerWidget {
                     _MenuItem(
                       icon: Icons.groups_outlined,
                       label: '구성원 관리',
-                      trailing: '$activeMemberCount명',
                       onTap: () => context.push('/mypage/members'),
                     ),
                     _MenuItem(
@@ -96,7 +90,11 @@ class MyPageScreen extends ConsumerWidget {
                       onTap: () => context.push('/mypage/farms'),
                     ),
                     const _MenuItem(icon: Icons.history, label: '변경 이력'),
-                    const _MenuItem(icon: Icons.link, label: '공유 링크 관리', trailing: '발급 2건'),
+                    _MenuItem(
+                      icon: Icons.link,
+                      label: '공유 링크 관리',
+                      trailing: shareLinksAsync.maybeWhen(data: (links) => '발급 ${links.length}건', orElse: () => ''),
+                    ),
                     _MenuItem(
                       icon: Icons.mail_outline,
                       label: '초대 수락 화면 미리보기 (테스트)',

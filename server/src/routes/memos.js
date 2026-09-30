@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { requireAuth } from '../auth.js';
 import { pool, query } from '../db.js';
 import { orgIdForMember } from '../lib/orgScope.js';
+import { refreshReportQuietly } from './reports.js';
 
 export const memosRouter = Router();
 memosRouter.use(requireAuth);
@@ -86,6 +87,10 @@ memosRouter.post('/', async (req, res) => {
   }
   const { decoded, error } = decodePhotos(photos);
   if (error) return res.status(400).json({ error });
+  if (farmId) {
+    const { rows: farmRows } = await query('select id from farms where org_id = $1 and id = $2', [orgId, farmId]);
+    if (!farmRows[0]) return res.status(404).json({ error: '양식장을 찾을 수 없습니다.' });
+  }
 
   const { rows: memberRows } = await query('select name from members where id = $1', [req.memberId]);
   const authorName = `수산질병관리원 · ${memberRows[0]?.name ?? ''}`;
@@ -121,6 +126,8 @@ memosRouter.post('/', async (req, res) => {
   if (memoRow.farm_id) {
     const { rows: farmRows } = await query('select name from farms where id = $1', [memoRow.farm_id]);
     farmName = farmRows[0]?.name ?? null;
+    // A new 폐사 count / visit changes the farm's risk and 최근 방문.
+    await refreshReportQuietly(memoRow.farm_id);
   }
 
   res.status(201).json(toMemoJson({ ...memoRow, farm_name: farmName, photo_ids: photoIds }));

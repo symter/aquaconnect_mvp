@@ -147,9 +147,9 @@ class _Body extends ConsumerWidget {
                   children: [
                     Expanded(child: _StatTile(value: '${r.weeklyMortality}마리', label: '주간 폐사')),
                     const SizedBox(width: 8),
-                    Expanded(child: _StatTile(value: '${r.avgTemp.toStringAsFixed(1)}℃', label: '평균 수온')),
+                    Expanded(child: _StatTile(value: r.avgTemp == null ? '-' : '${r.avgTemp!.toStringAsFixed(1)}℃', label: '평균 수온')),
                     const SizedBox(width: 8),
-                    Expanded(child: _StatTile(value: 'D-${r.lastVisitDays}', label: '최근 방문')),
+                    Expanded(child: _StatTile(value: r.lastVisitDays == null ? '기록 없음' : 'D-${r.lastVisitDays}', label: '최근 방문')),
                   ],
                 ),
               ],

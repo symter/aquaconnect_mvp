@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart' show Share;
 
+import '../../core/providers/data_providers.dart';
 import '../../core/providers/repository_providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/models/farm.dart';
@@ -43,6 +44,7 @@ class _ShareLinkSheetState extends ConsumerState<_ShareLinkSheet> {
           farmId: widget.farm.id,
           expiry: _expiry,
         );
+    ref.invalidate(shareLinksProvider);
     if (mounted) {
       setState(() {
         _link = link;
@@ -51,11 +53,9 @@ class _ShareLinkSheetState extends ConsumerState<_ShareLinkSheet> {
     }
   }
 
-  String get _url {
-    // Placeholder domain until the app is deployed — matches the design's
-    // aquaconnect.app/r/<token> pattern.
-    return 'aquaconnect.app${_link?.urlPath() ?? ''}';
-  }
+  // The app uses go_router's default hash URL strategy, so the public
+  // page lives at <origin>/#/r/<token> on whatever host serves this build.
+  String get _url => '${Uri.base.origin}/#${_link?.urlPath() ?? ''}';
 
   @override
   Widget build(BuildContext context) {
@@ -156,7 +156,7 @@ class _ShareLinkSheetState extends ConsumerState<_ShareLinkSheet> {
               child: ElevatedButton.icon(
                 onPressed: _loading
                     ? null
-                    : () => Share.share('https://$_url', subject: '${widget.farm.name} 리포트 링크'),
+                    : () => Share.share(_url, subject: '${widget.farm.name} 리포트 링크'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.kakaoYellow,
                   foregroundColor: AppColors.kakaoInk,

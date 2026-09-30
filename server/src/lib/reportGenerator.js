@@ -11,12 +11,16 @@ export function generateReport({ farm, farmMemos, ocean, now = new Date() }) {
   const recentMemos = farmMemos.filter((m) => new Date(m.createdAt) > sevenDaysAgo);
 
   const dayLabels = ocean?.sevenDayLabels?.length === 7 ? ocean.sevenDayLabels : lastSevenDayLabels(now);
+  // No reading at all (NIFS down / station without data, and no earlier
+  // reading stored on the farm) leaves the trend empty rather than
+  // inventing a temperature.
+  const currentTemp = ocean?.waterTemp ?? farm.waterTemp ?? null;
   const tempTrend =
-    ocean?.sevenDayTemps?.length === 7 ? ocean.sevenDayTemps : Array(7).fill(ocean?.waterTemp ?? farm.waterTemp);
+    ocean?.sevenDayTemps?.length === 7 ? ocean.sevenDayTemps : currentTemp == null ? [] : Array(7).fill(currentTemp);
   const mortalityTrend = mortalityByDay(recentMemos, now);
 
   const weeklyMortality = mortalityTrend.reduce((sum, v) => sum + Math.round(v), 0);
-  const avgTemp = tempTrend.length ? tempTrend.reduce((a, b) => a + b, 0) / tempTrend.length : farm.waterTemp;
+  const avgTemp = tempTrend.length ? tempTrend.reduce((a, b) => a + b, 0) / tempTrend.length : null;
   const tempDelta = tempTrend.length >= 2 ? tempTrend[tempTrend.length - 1] - tempTrend[0] : 0;
 
   const hasAbnormalSwimming = recentMemos.some((m) => (m.tags ?? []).includes('유영 이상'));
@@ -47,7 +51,9 @@ export function generateReport({ farm, farmMemos, ocean, now = new Date() }) {
     riskLevel === 'danger'
       ? '지난 7일 대비 폐사와 수온이 함께 상승했습니다. 즉시 방문 및 시료 채취를 권장합니다.'
       : riskLevel === 'warning'
-        ? `지난 7일 대비 폐사 ${weeklyMortality}마리, 평균 수온 ${avgTemp.toFixed(1)}℃ — 방문 및 수질 확인을 권장합니다.`
+        ? avgTemp == null
+          ? `지난 7일 대비 폐사 ${weeklyMortality}마리 — 방문 및 수질 확인을 권장합니다.`
+          : `지난 7일 대비 폐사 ${weeklyMortality}마리, 평균 수온 ${avgTemp.toFixed(1)}℃ — 방문 및 수질 확인을 권장합니다.`
         : '최근 7일간 폐사·수온 모두 안정적인 범위입니다. 정기 모니터링을 유지하세요.';
 
   return {
@@ -58,7 +64,7 @@ export function generateReport({ farm, farmMemos, ocean, now = new Date() }) {
     summary,
     weeklyMortality,
     avgTemp,
-    lastVisitDays: farm.lastVisitDays,
+    lastVisitDays: lastVisitDays(farmMemos, now) ?? farm.lastVisitDays ?? null,
     findings,
     followUps,
     mortalityTrend,
@@ -69,8 +75,9 @@ export function generateReport({ farm, farmMemos, ocean, now = new Date() }) {
 }
 
 function classify({ weeklyMortality, avgTemp, tempDelta }) {
-  if (weeklyMortality >= 15 || avgTemp >= 29.5) return 'danger';
-  if (weeklyMortality >= 5 || avgTemp >= 28.0 || tempDelta >= 0.6) return 'warning';
+  const temp = avgTemp ?? -Infinity;
+  if (weeklyMortality >= 15 || temp >= 29.5) return 'danger';
+  if (weeklyMortality >= 5 || temp >= 28.0 || tempDelta >= 0.6) return 'warning';
   return 'good';
 }
 
@@ -96,6 +103,25 @@ function mortalityByDay(memos, now) {
     if (dayIndex >= 0 && dayIndex < 7) buckets[dayIndex] += count;
   }
   return buckets;
+}
+
+// Short status line for the farm card on Home / 전체 리포트.
+export function farmHeadline(report) {
+  if (report.weeklyMortality > 0) return `최근 7일 폐사 ${report.weeklyMortality}마리`;
+  if (report.riskLevel === 'danger') return '고수온 위험';
+  if (report.riskLevel === 'warning') return '고수온 주의';
+  return '특이사항 없음';
+}
+
+// Days since the latest institute memo (a field visit), or null if none.
+export function lastVisitDays(memos, now) {
+  let latest = null;
+  for (const m of memos) {
+    if (m.authorType && m.authorType !== 'institute') continue;
+    const t = new Date(m.createdAt).getTime();
+    if (latest == null || t > latest) latest = t;
+  }
+  return latest == null ? null : Math.floor((now.getTime() - latest) / (24 * 60 * 60 * 1000));
 }
 
 function lastSevenDayLabels(now) {

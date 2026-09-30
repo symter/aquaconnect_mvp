@@ -49,7 +49,7 @@ class SharedReportWebScreen extends ConsumerWidget {
                     children: [
                       const Icon(Icons.lock_outline, size: 11, color: AppColors.neutralIcon),
                       const SizedBox(width: 6),
-                      Text('aquaconnect.app/r/$token', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF5B6B80))),
+                      Text('${Uri.base.host}/r/$token', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF5B6B80))),
                     ],
                   ),
                 ),
@@ -75,7 +75,12 @@ class SharedReportWebScreen extends ConsumerWidget {
                     children: [
                       Text(farm.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
                       const SizedBox(height: 2),
-                      Text('${farm.address} · 해강수산질병관리원 제공 · ${report.periodLabel} 리포트',
+                      Text(
+                          [
+                            farm.address,
+                            if (bundle.organizationName?.isNotEmpty ?? false) '${bundle.organizationName} 제공',
+                            '${report.periodLabel} 리포트',
+                          ].join(' · '),
                           style: const TextStyle(fontSize: 11.5, color: AppColors.textTertiary)),
                       const SizedBox(height: 14),
                       Container(
@@ -159,9 +164,9 @@ class SharedReportWebScreen extends ConsumerWidget {
                               icon: Icons.call,
                               color: AppColors.goodTint,
                               foreground: AppColors.good,
-                              onPressed: farm.ownerContact == null
-                                  ? null
-                                  : () => launchUrl(Uri.parse('tel:${farm.ownerContact}')),
+                              onPressed: bundle.assignedMemberPhone?.isNotEmpty ?? false
+                                  ? () => launchUrl(Uri.parse('tel:${bundle.assignedMemberPhone}'))
+                                  : null,
                             ),
                             const SizedBox(height: 8),
                             const Text(

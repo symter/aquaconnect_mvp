@@ -28,13 +28,17 @@ class ReportGenerator {
     final dayLabels = (ocean != null && ocean.sevenDayLabels.length == 7)
         ? ocean.sevenDayLabels
         : _lastSevenDayLabels(now);
-    final tempTrend = (ocean != null && ocean.sevenDayTemps.length == 7)
+    // No reading at all (NIFS down / station without data, and no earlier
+    // reading stored on the farm) leaves the trend empty rather than
+    // inventing a temperature.
+    final currentTemp = ocean?.waterTemp ?? farm.waterTemp;
+    final List<double> tempTrend = (ocean != null && ocean.sevenDayTemps.length == 7)
         ? ocean.sevenDayTemps
-        : List.filled(7, ocean?.waterTemp ?? farm.waterTemp);
+        : (currentTemp == null ? const [] : List.filled(7, currentTemp));
     final mortalityTrend = _mortalityByDay(recentMemos, now);
 
     final weeklyMortality = mortalityTrend.fold<int>(0, (sum, v) => sum + v.round());
-    final avgTemp = tempTrend.isEmpty ? farm.waterTemp : tempTrend.reduce((a, b) => a + b) / tempTrend.length;
+    final double? avgTemp = tempTrend.isEmpty ? null : tempTrend.reduce((a, b) => a + b) / tempTrend.length;
     final tempDelta = tempTrend.length >= 2 ? tempTrend.last - tempTrend.first : 0.0;
 
     final hasAbnormalSwimming = recentMemos.any((m) => m.tags.contains('유영 이상'));
@@ -62,7 +66,9 @@ class ReportGenerator {
 
     final summary = switch (riskLevel) {
       RiskLevel.danger => '지난 7일 대비 폐사와 수온이 함께 상승했습니다. 즉시 방문 및 시료 채취를 권장합니다.',
-      RiskLevel.warning => '지난 7일 대비 폐사 $weeklyMortality마리, 평균 수온 ${avgTemp.toStringAsFixed(1)}℃ — 방문 및 수질 확인을 권장합니다.',
+      RiskLevel.warning => avgTemp == null
+          ? '지난 7일 대비 폐사 $weeklyMortality마리 — 방문 및 수질 확인을 권장합니다.'
+          : '지난 7일 대비 폐사 $weeklyMortality마리, 평균 수온 ${avgTemp.toStringAsFixed(1)}℃ — 방문 및 수질 확인을 권장합니다.',
       RiskLevel.good => '최근 7일간 폐사·수온 모두 안정적인 범위입니다. 정기 모니터링을 유지하세요.',
     };
 
@@ -75,7 +81,7 @@ class ReportGenerator {
       summary: summary,
       weeklyMortality: weeklyMortality,
       avgTemp: avgTemp,
-      lastVisitDays: farm.lastVisitDays,
+      lastVisitDays: _lastVisitDays(farmMemos, now) ?? farm.lastVisitDays,
       findings: findings,
       followUps: followUps,
       mortalityTrend: mortalityTrend,
@@ -96,11 +102,12 @@ class ReportGenerator {
 
   static RiskLevel _classify({
     required int weeklyMortality,
-    required double avgTemp,
+    required double? avgTemp,
     required double tempDelta,
   }) {
-    if (weeklyMortality >= 15 || avgTemp >= 29.5) return RiskLevel.danger;
-    if (weeklyMortality >= 5 || avgTemp >= 28.0 || tempDelta >= 0.6) return RiskLevel.warning;
+    final temp = avgTemp ?? double.negativeInfinity;
+    if (weeklyMortality >= 15 || temp >= 29.5) return RiskLevel.danger;
+    if (weeklyMortality >= 5 || temp >= 28.0 || tempDelta >= 0.6) return RiskLevel.warning;
     return RiskLevel.good;
   }
 
@@ -134,6 +141,16 @@ class ReportGenerator {
       }
     }
     return buckets;
+  }
+
+  /// Days since the latest institute memo (a field visit), or null if none.
+  static int? _lastVisitDays(List<Memo> memos, DateTime now) {
+    DateTime? latest;
+    for (final m in memos) {
+      if (m.authorType != MemoAuthorType.institute) continue;
+      if (latest == null || m.createdAt.isAfter(latest)) latest = m.createdAt;
+    }
+    return latest == null ? null : now.difference(latest).inDays;
   }
 
   static List<String> _lastSevenDayLabels(DateTime now) {

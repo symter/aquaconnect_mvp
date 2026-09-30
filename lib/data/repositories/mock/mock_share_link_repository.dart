@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import '../../mock/mock_seed.dart';
 import '../../models/share_link.dart';
 import '../farm_repository.dart';
 import '../report_repository.dart';
@@ -15,12 +16,7 @@ class MockShareLinkRepository implements ShareLinkRepository {
   final FarmRepository _farmRepository;
   final ReportRepository _reportRepository;
 
-  // A fixed, never-expiring demo link so `/r/demo` always works in mock
-  // mode without first walking through the create-link flow — handy for
-  // trying the public SharedReportWeb page on its own.
-  final List<ShareLink> _links = [
-    ShareLink(id: 'link-demo', farmId: 'farm-sinil-1', token: 'demo', createdAt: DateTime.now()),
-  ];
+  final List<ShareLink> _links = [];
 
   static const _tokenChars = 'abcdefghijklmnopqrstuvwxyz0123456789';
   final _random = Random();
@@ -63,6 +59,12 @@ class MockShareLinkRepository implements ShareLinkRepository {
     final report = await _reportRepository.getLatestReport(link.farmId);
     if (report == null) return null;
 
-    return SharedReportBundle(farm: farm, report: report, link: link);
+    return SharedReportBundle(
+      farm: farm,
+      report: report,
+      link: link,
+      organizationName: MockSeed.organization.name,
+      assignedMemberPhone: MockSeed.currentMember.phone,
+    );
   }
 }

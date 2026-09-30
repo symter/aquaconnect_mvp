@@ -10,7 +10,7 @@ import '../../data/models/org_member.dart';
 class InviteAcceptScreen extends StatelessWidget {
   const InviteAcceptScreen({
     super.key,
-    this.orgName = '함평수산질병관리원',
+    required this.orgName,
     this.role = MemberRole.staff,
   });
 

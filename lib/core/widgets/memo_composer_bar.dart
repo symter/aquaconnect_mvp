@@ -48,6 +48,12 @@ class MemoComposerBar extends ConsumerWidget {
                     tags: draft.tags,
                     photos: draft.photos,
                   );
+              // A farm memo re-scores that farm server-side (risk / 최근 방문),
+              // so refresh what shows those.
+              if (draft.farm != null) {
+                ref.invalidate(farmsProvider);
+                ref.invalidate(reportProvider(draft.farm!.id));
+              }
               if (confirmOnSave && context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('메모가 저장되었습니다.')));
               }

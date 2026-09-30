@@ -11,8 +11,8 @@ class Farm {
     required this.nearestStationName,
     required this.riskLevel,
     required this.headline,
-    required this.waterTemp,
-    required this.lastVisitDays,
+    this.waterTemp,
+    this.lastVisitDays,
     this.assignedMemberName,
     this.ownerContact,
   });
@@ -28,8 +28,14 @@ class Farm {
 
   /// Short status line shown on the farm card, e.g. "오늘 폐사 12마리".
   final String headline;
-  final double waterTemp;
-  final int lastVisitDays;
+  /// Latest water temp at [nearestStationCode], written back whenever a
+  /// report is generated. Null until the first report / if NIFS has no
+  /// reading for the station.
+  final double? waterTemp;
+
+  /// Days since the most recent institute memo on this farm. Null when no
+  /// visit has been recorded yet.
+  final int? lastVisitDays;
   final String? assignedMemberName;
   final String? ownerContact;
 
@@ -43,8 +49,8 @@ class Farm {
         nearestStationName: json['nearestStationName'] as String,
         riskLevel: RiskLevel.fromKey(json['riskLevel'] as String),
         headline: json['headline'] as String,
-        waterTemp: (json['waterTemp'] as num).toDouble(),
-        lastVisitDays: json['lastVisitDays'] as int,
+        waterTemp: (json['waterTemp'] as num?)?.toDouble(),
+        lastVisitDays: (json['lastVisitDays'] as num?)?.toInt(),
         assignedMemberName: json['assignedMemberName'] as String?,
         ownerContact: json['ownerContact'] as String?,
       );

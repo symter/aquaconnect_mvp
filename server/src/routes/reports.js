@@ -3,7 +3,7 @@ import { Router } from 'express';
 import { requireAuth } from '../auth.js';
 import { query } from '../db.js';
 import { orgIdForMember } from '../lib/orgScope.js';
-import { generateReport } from '../lib/reportGenerator.js';
+import { farmHeadline, generateReport } from '../lib/reportGenerator.js';
 import { fetchRealtimeObservations, pickPreferredObservation } from '../lib/nifs.js';
 
 export const reportsRouter = Router();
@@ -18,7 +18,7 @@ export function toReportJson(row) {
     headline: row.headline,
     summary: row.summary,
     weeklyMortality: row.weekly_mortality,
-    avgTemp: Number(row.avg_temp),
+    avgTemp: row.avg_temp == null ? null : Number(row.avg_temp),
     lastVisitDays: row.last_visit_days,
     findings: row.findings ?? [],
     followUps: row.follow_ups ?? [],
@@ -96,17 +96,22 @@ reportsRouter.post('/:farmId/generate', async (req, res) => {
 
 export async function buildAndPersistReport(farm) {
   const { rows: memoRows } = await query(
-    'select content, tags, created_at from memos where farm_id = $1 order by created_at desc',
+    'select content, tags, author_type, created_at from memos where farm_id = $1 order by created_at desc',
     [farm.id],
   );
-  const memos = memoRows.map((r) => ({ content: r.content, tags: r.tags ?? [], createdAt: r.created_at }));
+  const memos = memoRows.map((r) => ({
+    content: r.content,
+    tags: r.tags ?? [],
+    authorType: r.author_type,
+    createdAt: r.created_at,
+  }));
   const ocean = await oceanSnapshotForFarm(farm);
 
   const report = generateReport({
     farm: {
       id: farm.id,
-      waterTemp: Number(farm.water_temp),
-      lastVisitDays: farm.last_visit_days,
+      waterTemp: farm.water_temp == null ? null : Number(farm.water_temp),
+      lastVisitDays: null,
       nearestStationName: farm.nearest_station_name,
     },
     farmMemos: memos,
@@ -137,5 +142,26 @@ export async function buildAndPersistReport(farm) {
       report.generatedAt,
     ],
   );
+
+  // Keep the farm card (Home / 전체 리포트) in step with the latest report
+  // instead of whatever it was created with.
+  await query('update farms set risk_level = $2, headline = $3, water_temp = coalesce($4, water_temp) where id = $1', [
+    farm.id,
+    report.riskLevel,
+    farmHeadline(report),
+    ocean?.waterTemp ?? null,
+  ]);
+
   return toReportJson(rows[0]);
+}
+
+// Report generation needs NIFS, which can be slow or down — never let that
+// fail the write (farm/memo save) that triggered it.
+export async function refreshReportQuietly(farmId) {
+  try {
+    const { rows } = await query('select * from farms where id = $1', [farmId]);
+    if (rows[0]) await buildAndPersistReport(rows[0]);
+  } catch (err) {
+    console.error('report refresh failed', err);
+  }
 }

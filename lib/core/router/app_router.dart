@@ -80,7 +80,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/mypage/invite-preview',
-        builder: (context, state) => const InviteAcceptScreen(),
+        builder: (context, state) => InviteAcceptScreen(orgName: authRepository.currentSession?.organization.name ?? ''),
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) => AppShell(navigationShell: navigationShell),

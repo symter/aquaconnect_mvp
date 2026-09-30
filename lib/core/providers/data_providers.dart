@@ -7,6 +7,7 @@ import '../../data/models/farm.dart';
 import '../../data/models/memo.dart';
 import '../../data/models/ocean_reading.dart';
 import '../../data/models/report.dart';
+import '../../data/models/share_link.dart';
 import 'repository_providers.dart';
 
 final farmsProvider = FutureProvider<List<Farm>>((ref) {
@@ -38,6 +39,11 @@ final reportProvider = FutureProvider.family<Report?, String>((ref, farmId) {
 final allReportsProvider = FutureProvider<List<Report>>((ref) async {
   final farms = await ref.watch(farmsProvider.future);
   return ref.watch(reportRepositoryProvider).listLatestReports(farmIds: farms.map((f) => f.id).toList());
+});
+
+/// Every share link issued by the org (active or not), newest first.
+final shareLinksProvider = FutureProvider<List<ShareLink>>((ref) {
+  return ref.watch(shareLinkRepositoryProvider).listShareLinks();
 });
 
 /// Every station selectable as a "바다 위치" from MyPage / Info, surface-only

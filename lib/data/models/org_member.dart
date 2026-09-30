@@ -59,62 +59,18 @@ class OrgMember {
   }
 }
 
-/// Mock roster seeding [MemberManagementScreen] — 6 members spanning every
-/// role/status combination the screen needs to render.
-List<OrgMember> mockOrgMembers() {
-  final now = DateTime.now();
+/// Initial roster for [MemberManagementScreen]: just the signed-in member.
+/// There is no members API yet, so invites / role changes made on that
+/// screen live only in its local state.
+List<OrgMember> rosterFromSession(Member me) {
   return [
     OrgMember(
-      id: 'om-1',
-      name: '이동길',
-      role: MemberRole.owner,
+      id: me.id,
+      name: me.name,
+      role: me.role,
       status: MemberStatus.active,
-      joinedAt: now.subtract(const Duration(days: 420)),
+      joinedAt: DateTime.now(),
       isMe: true,
-    ),
-    OrgMember(
-      id: 'om-2',
-      name: '이원장',
-      role: MemberRole.director,
-      status: MemberStatus.active,
-      joinedAt: now.subtract(const Duration(days: 300)),
-    ),
-    OrgMember(
-      id: 'om-3',
-      name: '박관리',
-      role: MemberRole.staff,
-      status: MemberStatus.active,
-      joinedAt: now.subtract(const Duration(days: 200)),
-    ),
-    OrgMember(
-      id: 'om-4',
-      name: '최관리',
-      role: MemberRole.staff,
-      status: MemberStatus.active,
-      joinedAt: now.subtract(const Duration(days: 90)),
-    ),
-    OrgMember(
-      id: 'om-7',
-      name: '김직원',
-      role: MemberRole.employee,
-      status: MemberStatus.active,
-      joinedAt: now.subtract(const Duration(days: 60)),
-    ),
-    OrgMember(
-      id: 'om-5',
-      name: '010-9876-5432',
-      role: MemberRole.staff,
-      status: MemberStatus.pending,
-      joinedAt: now.subtract(const Duration(days: 3)),
-      inviteTarget: '010-9876-5432',
-      inviteExpiresAt: now.add(const Duration(days: 4)),
-    ),
-    OrgMember(
-      id: 'om-6',
-      name: '정퇴사',
-      role: MemberRole.staff,
-      status: MemberStatus.inactive,
-      joinedAt: now.subtract(const Duration(days: 500)),
     ),
   ];
 }

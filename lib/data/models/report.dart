@@ -31,8 +31,11 @@ class Report {
   final String headline;
   final String summary;
   final int weeklyMortality;
-  final double avgTemp;
-  final int lastVisitDays;
+  /// Null when no water-temp reading was available at generation time.
+  final double? avgTemp;
+
+  /// Null when no visit memo had been recorded at generation time.
+  final int? lastVisitDays;
   final List<String> findings;
   final List<String> followUps;
   final List<double> mortalityTrend;
@@ -48,8 +51,8 @@ class Report {
         headline: json['headline'] as String,
         summary: json['summary'] as String,
         weeklyMortality: (json['weeklyMortality'] as num).toInt(),
-        avgTemp: (json['avgTemp'] as num).toDouble(),
-        lastVisitDays: (json['lastVisitDays'] as num).toInt(),
+        avgTemp: (json['avgTemp'] as num?)?.toDouble(),
+        lastVisitDays: (json['lastVisitDays'] as num?)?.toInt(),
         findings: (json['findings'] as List<dynamic>? ?? const []).cast<String>(),
         followUps: (json['followUps'] as List<dynamic>? ?? const []).cast<String>(),
         mortalityTrend:
