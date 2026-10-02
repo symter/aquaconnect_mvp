@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../../mock/mock_seed.dart';
+import '../../models/member.dart';
 import '../auth_repository.dart';
 
 /// In-memory auth for local/demo runs. Any non-empty email/password pair
@@ -37,6 +38,24 @@ class MockAuthRepository implements AuthRepository {
     );
     _controller.add(_session);
   }
+
+  /// Mock mode: signs in as the new owner of a new in-memory institute.
+  @override
+  Future<void> signUp(SignupRequest request) async {
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    final orgId = 'org-${DateTime.now().microsecondsSinceEpoch}';
+    _session = AuthSession(
+      member: Member(id: 'member-$orgId', orgId: orgId, name: request.name, role: MemberRole.owner, phone: request.phone),
+      organization: Organization(id: orgId, name: request.organizationName),
+    );
+    _controller.add(_session);
+  }
+
+  @override
+  Future<bool> isEmailAvailable(String email) async => true;
+
+  @override
+  Future<String> termsVersion() async => 'mock';
 
   @override
   Future<void> signOut() async {

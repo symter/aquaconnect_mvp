@@ -58,6 +58,26 @@ class RemoteAuthRepository implements AuthRepository {
   }
 
   @override
+  Future<void> signUp(SignupRequest request) async {
+    final json = await _api.post('/api/auth/signup', body: request.toJson()) as Map<String, dynamic>;
+    await _tokenStore.write(json['token'] as String);
+    _session = _sessionFromJson(json);
+    _controller.add(_session);
+  }
+
+  @override
+  Future<bool> isEmailAvailable(String email) async {
+    final json = await _api.get('/api/auth/check-email', query: {'email': email}) as Map<String, dynamic>;
+    return json['available'] == true;
+  }
+
+  @override
+  Future<String> termsVersion() async {
+    final json = await _api.get('/api/auth/terms') as Map<String, dynamic>;
+    return json['termsVersion'] as String;
+  }
+
+  @override
   Future<void> signOut() async {
     await _tokenStore.clear();
     _session = null;

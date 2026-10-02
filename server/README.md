@@ -108,3 +108,22 @@ Postgres가 로컬에 없다면 `npm run smoke-test`로 (pg-mem 기반 인메모
 - 접수되면 `inquiries`에 저장되고, 메모 목록에 `어가 · <양식장명>` 작성자·`문의` 태그로 남으며, 관리원 전원에게
   `inquiry` 알림(휴대폰 푸시 포함)이 갑니다. 문의 알림은 알림 설정과 관계없이 항상 갑니다.
 - 공유 리포트의 "전화 걸기"는 양식장 담당 구성원의 `members.phone`으로 겁니다 (`SEED_OWNER_PHONE` 참고).
+
+## 회원가입 (수산질병관리원)
+
+`aquaconnect_web`의 가입 위저드를 옮기되 **사업자등록증 첨부·관리자 승인은 뺐습니다** — 가입하면 즉시 사용 가능하고
+응답에 로그인 토큰이 바로 들어 있습니다. 어가는 계정 없이 공유 링크로만 보므로 가입 유형은 관리원 하나뿐입니다.
+
+- `GET /api/auth/terms` → `{ termsVersion }`
+- `GET /api/auth/check-email?email=` → `{ available }` (대소문자 무시)
+- `POST /api/auth/signup` → 201 `{ token, member, organization }` (로그인 응답과 같은 모양)
+  ```json
+  {
+    "account": { "name": "대표자명", "email": "a@b.kr", "password": "8자+2종", "phone": "01012345678" },
+    "organization": { "name": "○○수산질병관리원", "address": "주소", "businessRegNo": "선택, 10자리" },
+    "terms": { "termsVersion": "2026-10-01", "termsAgreed": true, "privacyAgreed": true, "marketingAgreed": false }
+  }
+  ```
+  관리원(organizations)과 소유자 계정(members, role=owner)을 한 트랜잭션으로 만들고 약관 동의 시각을 기록합니다.
+  이메일·사업자등록번호 중복은 409, 같은 IP에서 1시간 10건 초과는 429.
+  입력 규칙은 `src/lib/validators.js` ↔ `lib/core/utils/validators.dart`가 같은 규칙을 씁니다(한쪽을 바꾸면 둘 다).

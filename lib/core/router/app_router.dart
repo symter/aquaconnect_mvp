@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/auth/login_screen.dart';
+import '../../features/auth/signup_screen.dart';
 import '../../features/home/home_screen.dart';
 import '../../features/info/info_screen.dart';
 import '../../features/memo/memo_screen.dart';
@@ -49,13 +50,16 @@ final routerProvider = Provider<GoRouter>((ref) {
       final loggedIn = authRepository.currentSession != null;
       final path = state.matchedLocation;
 
-      final isPublic = path == '/login' || path.startsWith('/r/');
+      final isAuthPage = path == '/login' || path == '/signup';
+      final isPublic = isAuthPage || path.startsWith('/r/');
       if (!loggedIn && !isPublic) return '/login';
-      if (loggedIn && path == '/login') return '/';
+      // Covers finishing signup too: the new account is signed in, so Home.
+      if (loggedIn && isAuthPage) return '/';
       return null;
     },
     routes: [
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
+      GoRoute(path: '/signup', builder: (context, state) => const SignupScreen()),
       GoRoute(
         path: '/r/:token',
         builder: (context, state) => SharedReportWebScreen(token: state.pathParameters['token']!),
