@@ -28,6 +28,9 @@ abstract class ShareLinkRepository {
 
   Future<List<ShareLink>> listShareLinks({String? farmId});
 
+  /// 공유 링크 관리 → 회수: the link stops opening immediately.
+  Future<void> revokeShareLink(String linkId);
+
   /// Public lookup used by the unauthenticated `/r/:token` page. Returns
   /// null if the token is unknown, revoked, or expired.
   Future<SharedReportBundle?> resolveToken(String token);

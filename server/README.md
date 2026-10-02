@@ -127,3 +127,27 @@ Postgres가 로컬에 없다면 `npm run smoke-test`로 (pg-mem 기반 인메모
   관리원(organizations)과 소유자 계정(members, role=owner)을 한 트랜잭션으로 만들고 약관 동의 시각을 기록합니다.
   이메일·사업자등록번호 중복은 409, 같은 IP에서 1시간 10건 초과는 429.
   입력 규칙은 `src/lib/validators.js` ↔ `lib/core/utils/validators.dart`가 같은 규칙을 씁니다(한쪽을 바꾸면 둘 다).
+
+## 구성원 · 관리원 정보 · 변경 이력
+
+- `GET /api/members` — 관리원 구성원 목록(활성·비활성). `PATCH /api/members/:id/role` `{role: director|staff|employee}`,
+  `POST /api/members/:id/deactivate|reactivate`, `POST /api/members/:id/transfer-ownership`.
+  소유자·원장만 변경 가능, 본인·소유자는 대상이 될 수 없고, 양도는 소유자만. 비활성 구성원은 로그인이 막히고
+  이미 받은 토큰도 즉시 401이 됩니다(`requireAuth`가 매 요청 상태 확인).
+- `GET|PUT /api/organization` — 관리원명·주소·대표 연락처 (수정은 소유자·원장).
+- `GET /api/organization/audit-logs?type=member|farm|organization&before=<ISO>&limit=` — 변경 이력, 최신순.
+  구성원(역할·비활성·재활성·소유자 양도), 양식장(등록·수정·삭제, 바뀐 항목만), 관리원(가입·정보 수정)이 기록되고,
+  위험도·수온처럼 시스템이 자동으로 갱신하는 값은 기록하지 않습니다.
+  **3개월이 지난 이력은 서버가 기동 시와 6시간마다 자동 삭제**합니다(`src/lib/audit.js`의 `AUDIT_RETENTION`).
+- `POST /api/share-links/:id/revoke` — 공유 링크 회수(어가 링크 즉시 404). 목록 응답에 `farmName` 포함.
+
+## 구성원 초대
+
+- 소유자·원장: `POST /api/invitations` `{role: director|staff|employee, expireDays: 7|30, note?}` → 1회용 코드(10자) ·
+  `GET /api/invitations`(대기 중 + 만료됨) · `POST /api/invitations/:id/extend`(원래 기간만큼 지금부터 연장) ·
+  `POST /api/invitations/:id/cancel`.
+- 공개: `GET /api/public/invitations/:code` → 관리원명·역할·초대한 사람·만료 (없으면 404, 사용·취소·만료면 410과 사유) ·
+  `POST /api/public/invitations/:code/accept` `{account:{name,email,password,phone}, terms:{...}}` → 그 관리원에
+  초대 역할로 계정을 만들고 로그인 토큰 반환. 초대 소진은 같은 트랜잭션의 조건부 update라 동시에 눌러도 1명만 성공합니다.
+  가입 횟수 제한(IP당 1시간 10건)은 회원가입과 공유합니다.
+- 앱 링크는 `<웹 주소>/#/invite/<code>`. 초대 생성·취소·합류는 변경 이력에 남습니다.

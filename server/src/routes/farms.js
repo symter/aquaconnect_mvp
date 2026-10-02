@@ -3,7 +3,17 @@ import { Router } from 'express';
 import { requireAuth } from '../auth.js';
 import { query } from '../db.js';
 import { orgIdForMember } from '../lib/orgScope.js';
+import { diffFields, recordAudit } from '../lib/audit.js';
 import { refreshReportQuietly } from './reports.js';
+
+// Farm fields a user edits (and 변경 이력 tracks).
+const FARM_FIELDS = [
+  ['name', '양식장명'],
+  ['address', '주소'],
+  ['owner_contact', '어가 연락처'],
+  ['region', '지역'],
+  ['nearest_station_name', '관측소'],
+];
 
 export const farmsRouter = Router();
 farmsRouter.use(requireAuth);
@@ -79,6 +89,7 @@ farmsRouter.post('/', async (req, res) => {
   );
   await refreshReportQuietly(rows[0].id);
   const [farm] = await loadFarmRows('f.id = $1', [rows[0].id]);
+  await recordAudit({ orgId, actorId: req.memberId, entityType: 'farm', entityId: farm.id, entityName: farm.name, action: 'create' });
   res.status(201).json(toFarmJson(farm));
 });
 
@@ -88,7 +99,7 @@ farmsRouter.put('/:id', async (req, res) => {
   if (error) return res.status(400).json({ error });
 
   const { name, address, ownerContact, region = '', nearestStationCode = '', nearestStationName = '' } = req.body;
-  const { rows: before } = await query('select nearest_station_code from farms where org_id = $1 and id = $2', [
+  const { rows: before } = await query('select * from farms where org_id = $1 and id = $2', [
     orgId,
     req.params.id,
   ]);
@@ -106,12 +117,18 @@ farmsRouter.put('/:id', async (req, res) => {
     await refreshReportQuietly(req.params.id);
   }
   const [farm] = await loadFarmRows('f.id = $1', [req.params.id]);
+  const changes = diffFields(before[0], farm, FARM_FIELDS);
+  if (changes.length) {
+    await recordAudit({ orgId, actorId: req.memberId, entityType: 'farm', entityId: farm.id, entityName: farm.name, action: 'update', changes });
+  }
   res.json(toFarmJson(farm));
 });
 
 farmsRouter.delete('/:id', async (req, res) => {
   const orgId = await orgIdForMember(req.memberId);
-  const { rows } = await query('delete from farms where org_id = $1 and id = $2 returning id', [orgId, req.params.id]);
+  const { rows } = await query('delete from farms where org_id = $1 and id = $2 returning id, name', [orgId, req.params.id]);
   if (!rows[0]) return res.status(404).json({ error: '양식장을 찾을 수 없습니다.' });
+  // entity_id stays null: the farm row is gone.
+  await recordAudit({ orgId, actorId: req.memberId, entityType: 'farm', entityName: rows[0].name, action: 'delete' });
   res.status(204).end();
 });

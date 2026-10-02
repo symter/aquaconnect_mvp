@@ -43,6 +43,22 @@ class MockShareLinkRepository implements ShareLinkRepository {
   }
 
   @override
+  Future<void> revokeShareLink(String linkId) async {
+    final i = _links.indexWhere((l) => l.id == linkId);
+    if (i == -1) return;
+    final l = _links[i];
+    _links[i] = ShareLink(
+      id: l.id,
+      farmId: l.farmId,
+      token: l.token,
+      createdAt: l.createdAt,
+      expiresAt: l.expiresAt,
+      revokedAt: DateTime.now(),
+      farmName: l.farmName,
+    );
+  }
+
+  @override
   Future<SharedReportBundle?> resolveToken(String token) async {
     ShareLink? link;
     for (final l in _links) {

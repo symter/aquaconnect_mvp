@@ -186,23 +186,55 @@ class _NotificationBell extends ConsumerWidget {
     return Semantics(
       button: true,
       label: unread > 0 ? '알림 $unread개' : '알림',
-      child: InkWell(
-        onTap: onTap,
-        customBorder: const CircleBorder(),
-        child: Container(
-          width: 38,
-          height: 38,
-          decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-          child: Badge(
-            isLabelVisible: unread > 0,
-            label: Text(unread > 99 ? '99+' : '$unread'),
-            backgroundColor: AppColors.danger,
-            child: Icon(
-              unread > 0 ? Icons.notifications : Icons.notifications_none,
-              size: 19,
-              color: AppColors.neutralIconStrong,
+      // The circle stays put and the icon stays centered whatever the count;
+      // the count pill sits on the circle's top-right edge. (Material's
+      // Badge re-laid the icon out to the top-left once a label appeared.)
+      child: SizedBox(
+        width: 38,
+        height: 38,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned.fill(
+              child: Material(
+                color: Colors.white,
+                shape: const CircleBorder(),
+                child: InkWell(
+                  onTap: onTap,
+                  customBorder: const CircleBorder(),
+                  child: Center(
+                    child: Icon(
+                      unread > 0 ? Icons.notifications : Icons.notifications_none,
+                      size: 19,
+                      color: AppColors.neutralIconStrong,
+                    ),
+                  ),
+                ),
+              ),
             ),
-          ),
+            if (unread > 0)
+              Positioned(
+                top: -3,
+                right: -5,
+                child: IgnorePointer(
+                  child: Container(
+                    constraints: const BoxConstraints(minWidth: 18),
+                    height: 18,
+                    padding: const EdgeInsets.symmetric(horizontal: 5),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: AppColors.danger,
+                      borderRadius: BorderRadius.circular(9),
+                      border: Border.all(color: Colors.white, width: 1.5),
+                    ),
+                    child: Text(
+                      unread > 99 ? '99+' : '$unread',
+                      style: const TextStyle(fontSize: 10, height: 1.1, fontWeight: FontWeight.w800, color: Colors.white),
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );

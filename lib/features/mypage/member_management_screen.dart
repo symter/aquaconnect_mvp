@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
@@ -6,12 +7,14 @@ import '../../core/providers/repository_providers.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/buttons.dart';
+import '../../data/models/invitation.dart';
 import '../../data/models/org_member.dart';
 import 'invite_member_sheet.dart';
 
-/// "마이페이지 > 구성원 관리" — roster of the org's members plus pending
-/// invites. MVP-stage: role is a display label only, no permission
-/// branching — every signed-in user sees every action button.
+/// "마이페이지 > 구성원 관리" — the org's roster and pending invite links,
+/// both from the server. Role changes, deactivation, ownership transfer
+/// and invites are saved and show up in 변경 이력. Only 소유자·원장 see the
+/// management actions; the server enforces the same rule.
 class MemberManagementScreen extends ConsumerStatefulWidget {
   const MemberManagementScreen({super.key});
 
@@ -20,14 +23,60 @@ class MemberManagementScreen extends ConsumerStatefulWidget {
 }
 
 class _MemberManagementScreenState extends ConsumerState<MemberManagementScreen> {
-  late final List<OrgMember> _members = switch (ref.read(authRepositoryProvider).currentSession) {
-    final session? => rosterFromSession(session.member),
-    null => <OrgMember>[],
-  };
+  List<OrgMember> _members = [];
+  List<Invitation> _invites = [];
+  bool _loading = true;
+  String? _loadError;
 
   List<OrgMember> get _active => _members.where((m) => m.status == MemberStatus.active).toList();
-  List<OrgMember> get _pending => _members.where((m) => m.status == MemberStatus.pending).toList();
+  List<Invitation> get _pending => _invites;
   List<OrgMember> get _inactive => _members.where((m) => m.status == MemberStatus.inactive).toList();
+
+  MemberRole? get _myRole => ref.read(authRepositoryProvider).currentSession?.member.role;
+  bool get _canManage => _myRole == MemberRole.owner || _myRole == MemberRole.director;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final repo = ref.read(orgRepositoryProvider);
+      final (members, invites) = await (repo.listMembers(), repo.listInvitations()).wait;
+      if (!mounted) return;
+      setState(() {
+        _members = members;
+        _invites = invites;
+        _loading = false;
+        _loadError = null;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _loadError = '$e';
+        });
+      }
+    }
+  }
+
+  void _retry() {
+    setState(() => _loading = true);
+    _load();
+  }
+
+  /// Saves a roster change, reloads, and reports the outcome.
+  Future<void> _run(Future<void> Function() change, String done) async {
+    try {
+      await change();
+      await _load();
+      _snack(done);
+    } catch (e) {
+      _snack('변경하지 못했어요: $e');
+    }
+  }
 
   void _snack(String message) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
@@ -39,30 +88,12 @@ class _MemberManagementScreenState extends ConsumerState<MemberManagementScreen>
       isScrollControlled: true,
       backgroundColor: AppColors.surface,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) => InviteMemberSheet(
-        onInviteCreated: (role, expireDays) {
-          setState(() {
-            _members.add(OrgMember(
-              id: 'om-${DateTime.now().microsecondsSinceEpoch}',
-              name: '초대 링크',
-              role: role,
-              status: MemberStatus.pending,
-              joinedAt: DateTime.now(),
-              inviteTarget: '초대 링크 발급됨',
-              inviteExpiresAt: DateTime.now().add(Duration(days: expireDays)),
-            ));
-          });
-        },
-      ),
+      builder: (context) => InviteMemberSheet(onCreated: _load),
     );
   }
 
   void _setRole(OrgMember member, MemberRole role) {
-    setState(() {
-      final i = _members.indexWhere((m) => m.id == member.id);
-      _members[i] = _members[i].copyWith(role: role);
-    });
-    _snack('${member.name}님을 ${role.label}(으)로 지정했어요');
+    _run(() => ref.read(orgRepositoryProvider).setMemberRole(member.id, role), '${member.name}님을 ${role.label}(으)로 지정했어요');
   }
 
   Future<void> _confirmDeactivate(OrgMember member) async {
@@ -81,11 +112,7 @@ class _MemberManagementScreenState extends ConsumerState<MemberManagementScreen>
       ),
     );
     if (confirmed != true) return;
-    setState(() {
-      final i = _members.indexWhere((m) => m.id == member.id);
-      _members[i] = _members[i].copyWith(status: MemberStatus.inactive);
-    });
-    _snack('비활성화했어요');
+    await _run(() => ref.read(orgRepositoryProvider).setMemberActive(member.id, active: false), '비활성화했어요');
   }
 
   Future<void> _confirmTransferOwner(OrgMember member) async {
@@ -106,14 +133,11 @@ class _MemberManagementScreenState extends ConsumerState<MemberManagementScreen>
       ),
     );
     if (confirmed != true) return;
-
-    setState(() {
-      final ownerIndex = _members.indexWhere((m) => m.role == MemberRole.owner);
-      final targetIndex = _members.indexWhere((m) => m.id == member.id);
-      _members[ownerIndex] = _members[ownerIndex].copyWith(role: MemberRole.director);
-      _members[targetIndex] = _members[targetIndex].copyWith(role: MemberRole.owner);
-    });
-    _snack('소유자를 양도했어요');
+    await _run(() async {
+      await ref.read(orgRepositoryProvider).transferOwnership(member.id);
+      // I'm 원장 now — refresh the session so MyPage etc. stop saying 소유자.
+      await ref.read(authRepositoryProvider).refreshSession();
+    }, '소유자를 양도했어요');
   }
 
   void _showMemberActions(OrgMember member) {
@@ -155,6 +179,7 @@ class _MemberManagementScreenState extends ConsumerState<MemberManagementScreen>
                         _setRole(member, role);
                       },
                     ),
+                if (_myRole == MemberRole.owner)
                 ListTile(
                   leading: const Icon(Icons.swap_horiz, color: AppColors.textSecondary),
                   title: const Text('소유자로 지정'),
@@ -180,41 +205,36 @@ class _MemberManagementScreenState extends ConsumerState<MemberManagementScreen>
     );
   }
 
-  void _resendInvite(OrgMember invite) {
-    setState(() {
-      final i = _members.indexWhere((m) => m.id == invite.id);
-      final original = _members[i];
-      final now = DateTime.now();
-      // Renew for the same duration originally granted, rather than leaving
-      // the old absolute expiry in place — otherwise "resend" doesn't
-      // actually extend the invite's life.
-      final duration = original.inviteExpiresAt?.difference(original.joinedAt) ?? const Duration(days: 7);
-      _members[i] = original.copyWith(joinedAt: now, inviteExpiresAt: now.add(duration));
-    });
-    _snack('다시 발송했어요');
+  Future<void> _copyInvite(Invitation invite) async {
+    await Clipboard.setData(ClipboardData(text: invite.url));
+    _snack('초대 링크를 복사했어요');
   }
 
-  void _cancelInvite(OrgMember invite) {
-    final index = _members.indexWhere((m) => m.id == invite.id);
-    final removed = _members[index];
-    setState(() => _members.removeAt(index));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('초대를 취소했어요'),
-        action: SnackBarAction(
-          label: '실행취소',
-          onPressed: () => setState(() => _members.insert(index.clamp(0, _members.length), removed)),
-        ),
+  void _extendInvite(Invitation invite) {
+    _run(() => ref.read(orgRepositoryProvider).extendInvitation(invite.id), '초대 기한을 연장했어요');
+  }
+
+  Future<void> _cancelInvite(Invitation invite) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('초대를 취소할까요?'),
+        content: const Text('보낸 초대 링크로는 더 이상 가입할 수 없게 됩니다.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('닫기')),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('초대 취소', style: TextStyle(color: AppColors.danger)),
+          ),
+        ],
       ),
     );
+    if (confirmed != true) return;
+    await _run(() => ref.read(orgRepositoryProvider).cancelInvitation(invite.id), '초대를 취소했어요');
   }
 
   void _reactivate(OrgMember member) {
-    setState(() {
-      final i = _members.indexWhere((m) => m.id == member.id);
-      _members[i] = _members[i].copyWith(status: MemberStatus.active);
-    });
-    _snack('다시 활성화했어요');
+    _run(() => ref.read(orgRepositoryProvider).setMemberActive(member.id, active: true), '다시 활성화했어요');
   }
 
   @override
@@ -232,24 +252,43 @@ class _MemberManagementScreenState extends ConsumerState<MemberManagementScreen>
         foregroundColor: AppColors.brandDark,
         title: const Text('구성원 관리', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: AppColors.brandDark)),
         actions: [
+          if (_canManage)
           TextButton(
             onPressed: _openInviteSheet,
             child: const Text('+ 초대', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: AppColors.brand)),
           ),
         ],
       ),
-      body: isEmpty ? _EmptyState(onInvite: _openInviteSheet) : _buildList(active, pending, inactive),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _loadError != null
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('구성원을 불러오지 못했어요.\n$_loadError',
+                          textAlign: TextAlign.center, style: const TextStyle(color: AppColors.textMuted)),
+                      TextButton(onPressed: _retry, child: const Text('다시 시도')),
+                    ],
+                  ),
+                )
+              : isEmpty
+                  ? _EmptyState(onInvite: _openInviteSheet)
+                  : RefreshIndicator(onRefresh: _load, child: _buildList(active, pending, inactive)),
     );
   }
 
-  Widget _buildList(List<OrgMember> active, List<OrgMember> pending, List<OrgMember> inactive) {
+  Widget _buildList(List<OrgMember> active, List<Invitation> pending, List<OrgMember> inactive) {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
       children: [
         Text('구성원 ${active.length}명', style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
         const SizedBox(height: 12),
         for (final member in active) ...[
-          _ActiveMemberTile(member: member, onMore: () => _showMemberActions(member)),
+          _ActiveMemberTile(
+            member: member,
+            onMore: _canManage && !member.isMe ? () => _showMemberActions(member) : null,
+          ),
           const SizedBox(height: 8),
         ],
         if (pending.isNotEmpty) ...[
@@ -261,8 +300,9 @@ class _MemberManagementScreenState extends ConsumerState<MemberManagementScreen>
           for (final invite in pending) ...[
             _PendingInviteTile(
               invite: invite,
-              onResend: () => _resendInvite(invite),
-              onCancel: () => _cancelInvite(invite),
+              onCopy: () => _copyInvite(invite),
+              onExtend: _canManage ? () => _extendInvite(invite) : null,
+              onCancel: _canManage ? () => _cancelInvite(invite) : null,
             ),
             const SizedBox(height: 8),
           ],
@@ -279,7 +319,7 @@ class _MemberManagementScreenState extends ConsumerState<MemberManagementScreen>
                   style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
               children: [
                 for (final member in inactive)
-                  _InactiveMemberTile(member: member, onReactivate: () => _reactivate(member)),
+                  _InactiveMemberTile(member: member, onReactivate: _canManage ? () => _reactivate(member) : null),
                 const SizedBox(height: 4),
               ],
             ),
@@ -345,7 +385,9 @@ class _RoleBadge extends StatelessWidget {
 class _ActiveMemberTile extends StatelessWidget {
   const _ActiveMemberTile({required this.member, required this.onMore});
   final OrgMember member;
-  final VoidCallback onMore;
+
+  /// Null hides the ⋮ button (my own row, or I can't manage members).
+  final VoidCallback? onMore;
 
   @override
   Widget build(BuildContext context) {
@@ -388,11 +430,13 @@ class _ActiveMemberTile extends StatelessWidget {
               ],
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.more_vert, size: 18, color: AppColors.textTertiary),
-            onPressed: onMore,
-            visualDensity: VisualDensity.compact,
-          ),
+          if (onMore != null)
+            IconButton(
+              tooltip: '구성원 관리',
+              icon: const Icon(Icons.more_vert, size: 18, color: AppColors.textTertiary),
+              onPressed: onMore,
+              visualDensity: VisualDensity.compact,
+            ),
         ],
       ),
     );
@@ -400,17 +444,24 @@ class _ActiveMemberTile extends StatelessWidget {
 }
 
 class _PendingInviteTile extends StatelessWidget {
-  const _PendingInviteTile({required this.invite, required this.onResend, required this.onCancel});
-  final OrgMember invite;
-  final VoidCallback onResend;
-  final VoidCallback onCancel;
+  const _PendingInviteTile({required this.invite, required this.onCopy, required this.onExtend, required this.onCancel});
+  final Invitation invite;
+  final VoidCallback onCopy;
+  final VoidCallback? onExtend;
+  final VoidCallback? onCancel;
 
   @override
   Widget build(BuildContext context) {
-    final expiresIn = invite.inviteExpiresAt?.difference(DateTime.now()).inDays;
+    // Round up: a 7-day invite made just now reads D-7, not D-6.
+    final daysLeft = (invite.expiresAt.difference(DateTime.now()).inMinutes / (24 * 60)).ceil();
+    final buttonStyle = TextButton.styleFrom(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      minimumSize: const Size(0, 32),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    );
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
       decoration: BoxDecoration(color: AppColors.surface, border: Border.all(color: AppColors.border), borderRadius: BorderRadius.circular(10)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -418,31 +469,45 @@ class _PendingInviteTile extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Text(invite.inviteTarget ?? invite.name,
+                child: Text(invite.note.isEmpty ? '초대 링크' : invite.note,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
               ),
               _RoleBadge(role: invite.role),
               const SizedBox(width: 8),
               Text(
-                expiresIn == null ? '' : '만료 D-${expiresIn < 0 ? 0 : expiresIn}',
-                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.warning),
+                invite.expired ? '만료됨' : '만료 D-$daysLeft',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: invite.expired ? AppColors.danger : AppColors.warning),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 2),
+          Text('${DateFormat('M월 d일').format(invite.createdAt)} 발급',
+              style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
           Row(
             children: [
-              TextButton(
-                onPressed: onResend,
-                style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 32), tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-                child: const Text('재전송', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.brand)),
-              ),
-              const SizedBox(width: 16),
-              TextButton(
-                onPressed: onCancel,
-                style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 32), tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-                child: const Text('취소', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textMuted)),
-              ),
+              if (!invite.expired)
+                TextButton(
+                  onPressed: onCopy,
+                  style: buttonStyle,
+                  child: const Text('링크 복사', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.brand)),
+                ),
+              if (onExtend != null) ...[
+                const SizedBox(width: 12),
+                TextButton(
+                  onPressed: onExtend,
+                  style: buttonStyle,
+                  child: const Text('기한 연장', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.brand)),
+                ),
+              ],
+              if (onCancel != null) ...[
+                const SizedBox(width: 12),
+                TextButton(
+                  onPressed: onCancel,
+                  style: buttonStyle,
+                  child: const Text('취소', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textMuted)),
+                ),
+              ],
             ],
           ),
         ],
@@ -454,7 +519,7 @@ class _PendingInviteTile extends StatelessWidget {
 class _InactiveMemberTile extends StatelessWidget {
   const _InactiveMemberTile({required this.member, required this.onReactivate});
   final OrgMember member;
-  final VoidCallback onReactivate;
+  final VoidCallback? onReactivate;
 
   @override
   Widget build(BuildContext context) {
@@ -477,6 +542,7 @@ class _InactiveMemberTile extends StatelessWidget {
               ],
             ),
           ),
+          if (onReactivate != null)
           TextButton(
             onPressed: onReactivate,
             style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 32), tapTargetSize: MaterialTapTargetSize.shrinkWrap),

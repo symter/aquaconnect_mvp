@@ -31,6 +31,9 @@ class RemoteShareLinkRepository implements ShareLinkRepository {
   }
 
   @override
+  Future<void> revokeShareLink(String linkId) => _api.post('/api/share-links/$linkId/revoke');
+
+  @override
   Future<SharedReportBundle?> resolveToken(String token) async {
     try {
       final json = await _api.get('/api/public/reports/$token') as Map<String, dynamic>;

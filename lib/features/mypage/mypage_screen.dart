@@ -38,7 +38,10 @@ class MyPageScreen extends ConsumerWidget {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
                 children: [
-                  Container(
+                  InkWell(
+                    onTap: () => context.push('/mypage/organization'),
+                    borderRadius: BorderRadius.circular(14),
+                    child: Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(color: AppColors.surface, border: Border.all(color: AppColors.border), borderRadius: BorderRadius.circular(14)),
                     child: Row(
@@ -77,6 +80,7 @@ class MyPageScreen extends ConsumerWidget {
                       ],
                     ),
                   ),
+                  ),
                   const SizedBox(height: 16),
                   _SectionLabel('관리원 관리'),
                   const SizedBox(height: 8),
@@ -92,16 +96,20 @@ class MyPageScreen extends ConsumerWidget {
                       trailing: farmsAsync.maybeWhen(data: (f) => '${f.length}곳', orElse: () => ''),
                       onTap: () => context.push('/mypage/farms'),
                     ),
-                    const _MenuItem(icon: Icons.history, label: '변경 이력'),
+                    _MenuItem(
+                      icon: Icons.history,
+                      label: '변경 이력',
+                      trailing: '최근 3개월',
+                      onTap: () => context.push('/mypage/history'),
+                    ),
                     _MenuItem(
                       icon: Icons.link,
                       label: '공유 링크 관리',
-                      trailing: shareLinksAsync.maybeWhen(data: (links) => '발급 ${links.length}건', orElse: () => ''),
-                    ),
-                    _MenuItem(
-                      icon: Icons.mail_outline,
-                      label: '초대 수락 화면 미리보기 (테스트)',
-                      onTap: () => context.push('/mypage/invite-preview'),
+                      trailing: shareLinksAsync.maybeWhen(
+                        data: (links) => '열람 가능 ${links.where((l) => l.isActive).length}건',
+                        orElse: () => '',
+                      ),
+                      onTap: () => context.push('/mypage/share-links'),
                     ),
                   ]),
                   const SizedBox(height: 16),

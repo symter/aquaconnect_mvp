@@ -31,27 +31,77 @@ class _ShareLinkSheetState extends ConsumerState<_ShareLinkSheet> {
   ShareLinkExpiry _expiry = ShareLinkExpiry.thirtyDays;
   ShareLink? _link;
   bool _loading = true;
+  String? _error;
+
+  /// [_link] was made in this sheet and hasn't been copied or shared yet —
+  /// replacing it (by picking another 만료 기한) can safely revoke it.
+  bool _unsentNewLink = false;
 
   @override
   void initState() {
     super.initState();
-    _createLink();
+    _openExistingOrCreate();
   }
 
-  Future<void> _createLink() async {
-    setState(() => _loading = true);
-    final link = await ref.read(shareLinkRepositoryProvider).createShareLink(
-          farmId: widget.farm.id,
-          expiry: _expiry,
-        );
-    ref.invalidate(shareLinksProvider);
-    if (mounted) {
+  /// Opening the sheet reuses the farm's newest still-valid link instead of
+  /// minting a new one every time.
+  Future<void> _openExistingOrCreate() async {
+    try {
+      final links = await ref.read(shareLinkRepositoryProvider).listShareLinks(farmId: widget.farm.id);
+      final active = links.where((l) => l.isActive).toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      if (active.isEmpty) return _createLink(_expiry);
+      if (!mounted) return;
       setState(() {
-        _link = link;
+        _link = active.first;
+        _expiry = _expiryOf(active.first);
         _loading = false;
       });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = '$e';
+          _loading = false;
+        });
+      }
     }
   }
+
+  static ShareLinkExpiry _expiryOf(ShareLink link) {
+    final expiresAt = link.expiresAt;
+    if (expiresAt == null) return ShareLinkExpiry.unlimited;
+    return expiresAt.difference(link.createdAt).inDays <= 7 ? ShareLinkExpiry.sevenDays : ShareLinkExpiry.thirtyDays;
+  }
+
+  Future<void> _createLink(ShareLinkExpiry expiry) async {
+    final repo = ref.read(shareLinkRepositoryProvider);
+    final replaced = _unsentNewLink ? _link : null;
+    setState(() {
+      _expiry = expiry;
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final link = await repo.createShareLink(farmId: widget.farm.id, expiry: expiry);
+      if (replaced != null) await repo.revokeShareLink(replaced.id);
+      if (!mounted) return;
+      setState(() {
+        _link = link;
+        _unsentNewLink = true;
+        _loading = false;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = '$e';
+          _loading = false;
+        });
+      }
+    } finally {
+      ref.invalidate(shareLinksProvider);
+    }
+  }
+
+  void _markSent() => _unsentNewLink = false;
 
   // The app uses go_router's default hash URL strategy, so the public
   // page lives at <origin>/#/r/<token> on whatever host serves this build.
@@ -87,15 +137,16 @@ class _ShareLinkSheetState extends ConsumerState<_ShareLinkSheet> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      _loading ? '링크 생성 중...' : _url,
+                      _loading ? '링크 준비 중...' : (_error != null || _link == null ? '링크를 만들지 못했어요' : _url),
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
                     ),
                   ),
                   TextButton(
-                    onPressed: _loading
+                    onPressed: _loading || _link == null
                         ? null
                         : () async {
+                            _markSent();
                             await Clipboard.setData(ClipboardData(text: _url));
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('링크를 복사했습니다.')));
@@ -106,6 +157,25 @@ class _ShareLinkSheetState extends ConsumerState<_ShareLinkSheet> {
                 ],
               ),
             ),
+            if (_error != null) ...[
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(_error!, style: const TextStyle(fontSize: 11.5, color: AppColors.danger)),
+                  ),
+                  TextButton(
+                    onPressed: _loading ? null : () => _createLink(_expiry),
+                    child: const Text('다시 시도', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700)),
+                  ),
+                ],
+              ),
+            ],
+            if (_link?.expiresAt != null && !_loading) ...[
+              const SizedBox(height: 6),
+              Text('${_link!.expiresAt!.month}월 ${_link!.expiresAt!.day}일까지 열람할 수 있어요',
+                  style: const TextStyle(fontSize: 11, color: AppColors.textTertiary)),
+            ],
             const SizedBox(height: 16),
             const Text('만료 기한', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
             const SizedBox(height: 6),
@@ -115,10 +185,8 @@ class _ShareLinkSheetState extends ConsumerState<_ShareLinkSheet> {
                 return Padding(
                   padding: const EdgeInsets.only(right: 6),
                   child: GestureDetector(
-                    onTap: () {
-                      setState(() => _expiry = e);
-                      _createLink();
-                    },
+                    // A different 기한 needs a new link (a link's expiry is fixed).
+                    onTap: _loading || e == _expiry ? null : () => _createLink(e),
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                       decoration: BoxDecoration(
@@ -154,18 +222,22 @@ class _ShareLinkSheetState extends ConsumerState<_ShareLinkSheet> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: _loading
+                onPressed: _loading || _link == null
                     ? null
-                    : () => Share.share(_url, subject: '${widget.farm.name} 리포트 링크'),
+                    : () {
+                        _markSent();
+                        Share.share(_url, subject: '${widget.farm.name} 리포트 링크');
+                      },
+                // Generic system share (문자·카카오톡·메일 …), so not Kakao-branded.
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.kakaoYellow,
-                  foregroundColor: AppColors.kakaoInk,
+                  backgroundColor: AppColors.brand,
+                  foregroundColor: Colors.white,
                   elevation: 0,
                   padding: const EdgeInsets.symmetric(vertical: 13),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-                icon: const Icon(Icons.chat_bubble, size: 16),
-                label: const Text('공유하기', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
+                icon: const Icon(Icons.ios_share, size: 16),
+                label: const Text('문자·카카오톡으로 보내기', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
               ),
             ),
           ],

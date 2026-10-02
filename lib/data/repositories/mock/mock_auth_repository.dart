@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../../mock/mock_seed.dart';
+import '../../models/invitation.dart';
 import '../../models/member.dart';
 import '../auth_repository.dart';
 
@@ -34,6 +35,35 @@ class MockAuthRepository implements AuthRepository {
     await Future<void>.delayed(const Duration(milliseconds: 300));
     _session = const AuthSession(
       member: MockSeed.currentMember,
+      organization: MockSeed.organization,
+    );
+    _controller.add(_session);
+  }
+
+  @override
+  Future<void> refreshSession() async {}
+
+  /// Mock mode has no shared invite store, so any code shows a demo invite.
+  @override
+  Future<InvitationInfo> lookupInvitation(String code) async => InvitationInfo(
+        orgName: MockSeed.organization.name,
+        role: MemberRole.staff,
+        inviterName: MockSeed.currentMember.name,
+        expiresAt: DateTime.now().add(const Duration(days: 7)),
+        termsVersion: 'mock',
+      );
+
+  @override
+  Future<void> acceptInvitation(String code, InviteAcceptRequest request) async {
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    _session = AuthSession(
+      member: Member(
+        id: 'member-${DateTime.now().microsecondsSinceEpoch}',
+        orgId: MockSeed.orgId,
+        name: request.name,
+        role: MemberRole.staff,
+        phone: request.phone,
+      ),
       organization: MockSeed.organization,
     );
     _controller.add(_session);

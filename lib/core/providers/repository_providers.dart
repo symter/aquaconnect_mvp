@@ -6,11 +6,13 @@ import '../../data/repositories/disease_info_repository.dart';
 import '../../data/repositories/farm_repository.dart';
 import '../../data/repositories/memo_repository.dart';
 import '../../data/repositories/notification_repository.dart';
+import '../../data/repositories/org_repository.dart';
 import '../../data/repositories/mock/mock_auth_repository.dart';
 import '../../data/repositories/mock/mock_disease_info_repository.dart';
 import '../../data/repositories/mock/mock_farm_repository.dart';
 import '../../data/repositories/mock/mock_memo_repository.dart';
 import '../../data/repositories/mock/mock_notification_repository.dart';
+import '../../data/repositories/mock/mock_org_repository.dart';
 import '../../data/repositories/mock/mock_report_repository.dart';
 import '../../data/repositories/mock/mock_share_link_repository.dart';
 import '../../data/repositories/remote/remote_auth_repository.dart';
@@ -18,6 +20,7 @@ import '../../data/repositories/remote/remote_disease_info_repository.dart';
 import '../../data/repositories/remote/remote_farm_repository.dart';
 import '../../data/repositories/remote/remote_memo_repository.dart';
 import '../../data/repositories/remote/remote_notification_repository.dart';
+import '../../data/repositories/remote/remote_org_repository.dart';
 import '../../data/repositories/remote/remote_report_repository.dart';
 import '../../data/repositories/remote/remote_share_link_repository.dart';
 import '../../data/repositories/report_repository.dart';
@@ -63,6 +66,11 @@ final memoRepositoryProvider = Provider<MemoRepository>((ref) {
 final notificationRepositoryProvider = Provider<NotificationRepository>((ref) {
   if (Env.useMock) return MockNotificationRepository();
   return RemoteNotificationRepository(apiClient: ref.watch(apiClientProvider));
+});
+
+final orgRepositoryProvider = Provider<OrgRepository>((ref) {
+  if (Env.useMock) return MockOrgRepository(authRepository: ref.watch(authRepositoryProvider));
+  return RemoteOrgRepository(apiClient: ref.watch(apiClientProvider));
 });
 
 final webPushServiceProvider = Provider<WebPushService>((ref) => WebPushService());

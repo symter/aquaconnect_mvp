@@ -1,3 +1,4 @@
+import '../models/invitation.dart';
 import '../models/member.dart';
 
 class AuthSession {
@@ -54,6 +55,10 @@ abstract class AuthRepository {
 
   Future<void> signOut();
 
+  /// Re-reads the signed-in member/institute (after a role or 관리원 정보
+  /// change) so the app shows the current values.
+  Future<void> refreshSession();
+
   /// Creates the institute + owner account and signs in as that owner.
   Future<void> signUp(SignupRequest request);
 
@@ -62,4 +67,11 @@ abstract class AuthRepository {
 
   /// Current terms version, recorded with the consent at signup.
   Future<String> termsVersion();
+
+  /// The invite page's details; throws with a user-facing message when the
+  /// link is unknown, used, cancelled or expired.
+  Future<InvitationInfo> lookupInvitation(String code);
+
+  /// Joins the inviting institute with the invited role and signs in.
+  Future<void> acceptInvitation(String code, InviteAcceptRequest request);
 }

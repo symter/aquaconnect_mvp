@@ -9,6 +9,7 @@ import '../../core/widgets/buttons.dart';
 import '../../core/widgets/responsive_mobile_frame.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../data/services/address_search_service.dart';
+import 'auth_widgets.dart';
 
 /// 수산질병관리원 회원가입 — aquaconnect_web's signup wizard, minus the
 /// 회원 유형 step (only institutes have accounts here; farms use share
@@ -182,7 +183,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                       },
                       if (_error != null) ...[
                         const SizedBox(height: 14),
-                        _ErrorBox(message: _error!),
+                        AuthErrorBox(message: _error!),
                       ],
                       const SizedBox(height: 22),
                       PrimaryButton(
@@ -216,8 +217,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _Field(controller: _name, label: '대표자명', icon: Icons.badge_outlined, validator: (v) => validateRequired(v, '대표자명')),
-          _Field(
+          AuthTextField(controller: _name, label: '대표자명', icon: Icons.badge_outlined, validator: (v) => validateRequired(v, '대표자명')),
+          AuthTextField(
             controller: _email,
             label: '이메일',
             icon: Icons.email_outlined,
@@ -227,7 +228,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
             validator: validateEmailRequired,
             onChanged: (_) => _checkedEmail = null,
           ),
-          _Field(
+          AuthTextField(
             controller: _password,
             label: '비밀번호',
             icon: Icons.lock_outline,
@@ -236,7 +237,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
             onToggleObscure: () => setState(() => _obscurePassword = !_obscurePassword),
             validator: validatePassword,
           ),
-          _Field(
+          AuthTextField(
             controller: _passwordConfirm,
             label: '비밀번호 확인',
             icon: Icons.lock_outline,
@@ -244,7 +245,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
             onToggleObscure: () => setState(() => _obscureConfirm = !_obscureConfirm),
             validator: (v) => v != _password.text ? '비밀번호가 일치하지 않습니다.' : null,
           ),
-          _Field(
+          AuthTextField(
             controller: _phone,
             label: '휴대폰 번호',
             icon: Icons.phone_outlined,
@@ -268,13 +269,13 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _Field(
+          AuthTextField(
             controller: _orgName,
             label: '수산질병관리원명',
             icon: Icons.local_hospital_outlined,
             validator: (v) => validateRequired(v, '수산질병관리원명'),
           ),
-          _Field(
+          AuthTextField(
             controller: _address,
             label: '관리원 주소',
             icon: Icons.location_on_outlined,
@@ -282,7 +283,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
             validator: (v) => validateRequired(v, '관리원 주소'),
             suffix: IconButton(tooltip: '주소 검색', icon: const Icon(Icons.search), onPressed: _searchAddress),
           ),
-          _Field(
+          AuthTextField(
             controller: _bizRegNo,
             label: '사업자등록번호 (선택)',
             icon: Icons.numbers_outlined,
@@ -316,7 +317,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: AppColors.border),
           ),
-          child: _TermsTile(
+          child: TermsTile(
             value: allAgreed,
             emphasized: true,
             title: '전체 동의',
@@ -329,21 +330,21 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
           ),
         ),
         const SizedBox(height: 8),
-        _TermsTile(
+        TermsTile(
           value: _termsAgreed,
           required: true,
           title: '이용약관',
           detail: 'AquaConnect 서비스 이용 조건과 회원의 권리·의무를 규정합니다.',
           onChanged: (v) => setState(() => _termsAgreed = v),
         ),
-        _TermsTile(
+        TermsTile(
           value: _privacyAgreed,
           required: true,
           title: '개인정보 수집·이용 동의',
           detail: '대표자명·이메일·휴대폰 번호·관리원 정보를 계정 관리와 서비스 제공에 이용합니다.',
           onChanged: (v) => setState(() => _privacyAgreed = v),
         ),
-        _TermsTile(
+        TermsTile(
           value: _marketingAgreed,
           title: '마케팅 정보 수신 (선택)',
           detail: '신규 기능과 이벤트 안내를 이메일로 받습니다.',
@@ -355,72 +356,6 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
           style: TextStyle(fontSize: 12, color: AppColors.textTertiary),
         ),
       ],
-    );
-  }
-}
-
-class _Field extends StatelessWidget {
-  const _Field({
-    required this.controller,
-    required this.label,
-    required this.icon,
-    this.validator,
-    this.hint,
-    this.helper,
-    this.keyboardType = TextInputType.text,
-    this.action = TextInputAction.next,
-    this.obscure = false,
-    this.onToggleObscure,
-    this.onChanged,
-    this.suffix,
-    this.last = false,
-  });
-
-  final TextEditingController controller;
-  final String label;
-  final IconData icon;
-  final String? Function(String?)? validator;
-  final String? hint;
-  final String? helper;
-  final TextInputType keyboardType;
-  final TextInputAction action;
-  final bool obscure;
-  final VoidCallback? onToggleObscure;
-  final ValueChanged<String>? onChanged;
-  final Widget? suffix;
-  final bool last;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: last ? 0 : 14),
-      child: TextFormField(
-        controller: controller,
-        obscureText: obscure,
-        keyboardType: keyboardType,
-        textInputAction: action,
-        onChanged: onChanged,
-        validator: validator,
-        decoration: InputDecoration(
-          labelText: label,
-          hintText: hint,
-          helperText: helper,
-          helperMaxLines: 2,
-          prefixIcon: Icon(icon),
-          suffixIcon: suffix ??
-              (onToggleObscure == null
-                  ? null
-                  : IconButton(
-                      tooltip: obscure ? '비밀번호 보기' : '비밀번호 숨기기',
-                      icon: Icon(obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined),
-                      onPressed: onToggleObscure,
-                    )),
-          filled: true,
-          fillColor: AppColors.surface,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-          contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-        ),
-      ),
     );
   }
 }
@@ -456,101 +391,6 @@ class _WizardProgress extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _TermsTile extends StatelessWidget {
-  const _TermsTile({
-    required this.value,
-    required this.onChanged,
-    required this.title,
-    this.required = false,
-    this.detail,
-    this.emphasized = false,
-  });
-
-  final bool value;
-  final ValueChanged<bool> onChanged;
-  final String title;
-  final bool required;
-  final String? detail;
-  final bool emphasized;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: () => onChanged(!value),
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Checkbox(
-              value: value,
-              onChanged: (v) => onChanged(v ?? false),
-              activeColor: AppColors.brand,
-              visualDensity: VisualDensity.compact,
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(top: 9),
-                    child: Text.rich(
-                      TextSpan(children: [
-                        if (required)
-                          TextSpan(
-                            text: '[필수] ',
-                            style: TextStyle(fontSize: emphasized ? 15 : 13, fontWeight: FontWeight.w800, color: AppColors.brand),
-                          ),
-                        TextSpan(
-                          text: title,
-                          style: TextStyle(
-                            fontSize: emphasized ? 15 : 13,
-                            fontWeight: emphasized ? FontWeight.w800 : FontWeight.w600,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                      ]),
-                    ),
-                  ),
-                  if (detail != null) ...[
-                    const SizedBox(height: 4),
-                    Text(detail!, style: const TextStyle(fontSize: 11, color: AppColors.textTertiary)),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ErrorBox extends StatelessWidget {
-  const _ErrorBox({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
-      decoration: BoxDecoration(color: AppColors.dangerTint, borderRadius: BorderRadius.circular(12)),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(Icons.error_outline, size: 18, color: AppColors.danger),
-          const SizedBox(width: 8),
-          Expanded(child: Text(message, style: const TextStyle(fontSize: 13, color: AppColors.dangerDark))),
-        ],
-      ),
     );
   }
 }

@@ -19,9 +19,24 @@ class OrgMember {
     required this.status,
     required this.joinedAt,
     this.isMe = false,
+    this.email,
+    this.phone,
     this.inviteTarget,
     this.inviteExpiresAt,
   });
+
+  /// A row of `GET /api/members` (active or inactive — invites aren't
+  /// server-backed yet).
+  factory OrgMember.fromJson(Map<String, dynamic> json) => OrgMember(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        role: MemberRole.values.firstWhere((r) => r.name == json['role'], orElse: () => MemberRole.staff),
+        status: json['status'] == 'inactive' ? MemberStatus.inactive : MemberStatus.active,
+        joinedAt: DateTime.parse(json['joinedAt'] as String).toLocal(),
+        isMe: json['isMe'] as bool? ?? false,
+        email: json['email'] as String?,
+        phone: json['phone'] as String?,
+      );
 
   final String id;
   final String name;
@@ -32,6 +47,8 @@ class OrgMember {
   /// invite, the date the invite was (most recently) sent.
   final DateTime joinedAt;
   final bool isMe;
+  final String? email;
+  final String? phone;
 
   /// Pending invites only: "010-1234-5678" or "카카오톡 발송됨".
   final String? inviteTarget;
@@ -53,6 +70,8 @@ class OrgMember {
       status: status ?? this.status,
       joinedAt: joinedAt ?? this.joinedAt,
       isMe: isMe ?? this.isMe,
+      email: email,
+      phone: phone,
       inviteTarget: inviteTarget ?? this.inviteTarget,
       inviteExpiresAt: inviteExpiresAt ?? this.inviteExpiresAt,
     );

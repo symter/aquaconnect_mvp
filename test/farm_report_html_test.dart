@@ -58,6 +58,12 @@ void main() {
     expect(html, contains('010-1234-5678'));
     expect(html, isNot(contains('해양환경 데이터')));
     expect(html, isNot(contains('010-0000-0000')));
+    // No data for 품종/수조 → those rows are left out instead of showing "-".
+    expect(html, isNot(contains('<td>품종</td>')));
+    expect(html, isNot(contains('<td>수조</td>')));
+    expect(html, contains('<td>해역</td><td>완도 해역</td>'));
+    expect(html, contains('현장 메모와 수온 데이터를 바탕으로 정리했습니다'));
+    expect(html, isNot(contains('담당 수산질병관리사가 작성했습니다')));
   });
 
   test('데이터가 없으면 0 대신 정보 없음·기록 없음·연락처 미등록', () {

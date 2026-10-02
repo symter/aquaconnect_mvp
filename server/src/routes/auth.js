@@ -2,6 +2,7 @@ import { Router } from 'express';
 
 import { hashPassword, requireAuth, signToken, verifyPassword } from '../auth.js';
 import { pool, query } from '../db.js';
+import { recordAudit } from '../lib/audit.js';
 import {
   digitsOnly,
   formatPhone,
@@ -14,7 +15,7 @@ import {
 
 export const authRouter = Router();
 
-async function memberWithOrg(memberId) {
+export async function memberWithOrg(memberId) {
   const { rows } = await query(
     `select m.id, m.org_id, m.name, m.role, m.is_owner, m.phone, o.name as org_name
      from members m join organizations o on o.id = m.org_id
@@ -24,7 +25,7 @@ async function memberWithOrg(memberId) {
   return rows[0] ?? null;
 }
 
-function toSessionJson(row) {
+export function toSessionJson(row) {
   return {
     // `isOwner` is derived from `role`, not the separate `is_owner` column
     // — the two are independently writable with no DB-level sync, and the
@@ -43,7 +44,7 @@ authRouter.post('/login', async (req, res) => {
   }
 
   const { rows } = await query(
-    `select m.id, m.password_hash, m.org_id, m.name, m.role, m.is_owner, m.phone, o.name as org_name
+    `select m.id, m.password_hash, m.status, m.org_id, m.name, m.role, m.is_owner, m.phone, o.name as org_name
      from members m join organizations o on o.id = m.org_id
      where lower(m.email) = lower($1)`,
     [email],
@@ -51,6 +52,9 @@ authRouter.post('/login', async (req, res) => {
   const row = rows[0];
   if (!row || !(await verifyPassword(password, row.password_hash))) {
     return res.status(401).json({ error: '이메일 또는 비밀번호가 올바르지 않습니다.' });
+  }
+  if (row.status !== 'active') {
+    return res.status(403).json({ error: '비활성화된 계정입니다. 관리원에 문의해주세요.' });
   }
 
   const token = signToken(row.id);
@@ -88,7 +92,7 @@ authRouter.get('/check-email', async (req, res) => {
 const SIGNUPS_PER_IP_PER_HOUR = 10;
 const signupHits = new Map();
 
-function tooManySignups(req) {
+export function tooManySignups(req) {
   const ip = String(req.headers['x-forwarded-for'] ?? req.socket.remoteAddress ?? '').split(',')[0].trim();
   const now = Date.now();
   const recent = (signupHits.get(ip) ?? []).filter((t) => now - t < 3600_000);
@@ -162,5 +166,13 @@ authRouter.post('/signup', async (req, res) => {
   }
 
   const row = await memberWithOrg(memberId);
+  await recordAudit({
+    orgId: row.org_id,
+    actorId: memberId,
+    entityType: 'organization',
+    entityId: row.org_id,
+    entityName: row.org_name,
+    action: 'create',
+  });
   res.status(201).json({ token: signToken(memberId), ...toSessionJson(row) });
 });

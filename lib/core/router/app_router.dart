@@ -9,11 +9,14 @@ import '../../features/auth/signup_screen.dart';
 import '../../features/home/home_screen.dart';
 import '../../features/info/info_screen.dart';
 import '../../features/memo/memo_screen.dart';
+import '../../features/mypage/change_history_screen.dart';
 import '../../features/mypage/daily_summary_settings_screen.dart';
 import '../../features/mypage/farm_management_screen.dart';
 import '../../features/mypage/invite_accept_screen.dart';
 import '../../features/mypage/member_management_screen.dart';
 import '../../features/mypage/mypage_screen.dart';
+import '../../features/mypage/organization_info_screen.dart';
+import '../../features/mypage/share_link_management_screen.dart';
 import '../../features/notifications/notification_settings_screen.dart';
 import '../../features/notifications/notifications_screen.dart';
 import '../../features/reports/all_report_screen.dart';
@@ -51,7 +54,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       final path = state.matchedLocation;
 
       final isAuthPage = path == '/login' || path == '/signup';
-      final isPublic = isAuthPage || path.startsWith('/r/');
+      // /invite/<code> stays reachable when signed in, to say so on the page.
+      final isPublic = isAuthPage || path.startsWith('/r/') || path.startsWith('/invite/');
       if (!loggedIn && !isPublic) return '/login';
       // Covers finishing signup too: the new account is signed in, so Home.
       if (loggedIn && isAuthPage) return '/';
@@ -85,6 +89,18 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const MemberManagementScreen(),
       ),
       GoRoute(
+        path: '/mypage/history',
+        builder: (context, state) => const ChangeHistoryScreen(),
+      ),
+      GoRoute(
+        path: '/mypage/organization',
+        builder: (context, state) => const OrganizationInfoScreen(),
+      ),
+      GoRoute(
+        path: '/mypage/share-links',
+        builder: (context, state) => const ShareLinkManagementScreen(),
+      ),
+      GoRoute(
         path: '/mypage/daily-summary',
         builder: (context, state) => const DailySummarySettingsScreen(),
       ),
@@ -97,8 +113,8 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const NotificationSettingsScreen(),
       ),
       GoRoute(
-        path: '/mypage/invite-preview',
-        builder: (context, state) => InviteAcceptScreen(orgName: authRepository.currentSession?.organization.name ?? ''),
+        path: '/invite/:code',
+        builder: (context, state) => InviteAcceptScreen(code: state.pathParameters['code']!),
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) => AppShell(navigationShell: navigationShell),

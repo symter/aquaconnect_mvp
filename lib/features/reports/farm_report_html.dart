@@ -79,9 +79,7 @@ String _page1(FarmMonthlyReport r) {
     <div class="period">${r.isMonthly ? '${r.year}년 ${r.month}월 (${r.month}/1 ~ ${r.month}/$lastDay) 월간 리포트' : _e(r.periodLabel!)}</div>
   </div>
   <table class="meta">
-    <tr><td>해역</td><td>${_e(r.seaArea)}</td></tr>
-    <tr><td>품종</td><td>${_e(r.species)}</td></tr>
-    <tr><td>수조</td><td>${_e(r.tanksLabel)}</td></tr>
+    ${_metaRow('해역', r.seaArea)}${_metaRow('품종', r.species)}${_metaRow('수조', r.tanksLabel)}
     <tr><td>담당</td><td>수산질병관리사 ${_e(r.managerName)}</td></tr>
     <tr><td>발행일</td><td>${DateFormat('yyyy년 M월 d일').format(r.issuedAt)}</td></tr>
   </table>
@@ -95,7 +93,7 @@ String _page1(FarmMonthlyReport r) {
 ${tiles.isEmpty ? '' : '<div class="tiles">$tiles</div>'}
 
 <section>
-  <h2>관리원 소견 <small>담당 수산질병관리사가 작성했습니다</small></h2>
+  <h2>관리원 소견 <small>${r.isMonthly ? '담당 수산질병관리사가 작성했습니다' : '현장 메모와 수온 데이터를 바탕으로 정리했습니다'}</small></h2>
   <div class="memo">
     ${r.opinion.map((p) => '<p>${_md(p)}</p>').join('\n    ')}
     ${recs.isEmpty ? '' : '<h3 style="margin-top:12px">${r.isMonthly ? '$next월 ' : ''}관리 권고</h3><ul>$recs</ul>'}
@@ -315,6 +313,10 @@ String? _waterLogRow(FarmMonthlyReport r) {
 const _weekdays = ['월', '화', '수', '목', '금', '토', '일'];
 
 String _day(FarmMonthlyReport r, int day) => '${r.month}/$day (${_weekdays[DateTime(r.year, r.month, day).weekday - 1]})';
+
+/// One 해역/품종/수조 row; dropped when there's no value ("-" or empty).
+String _metaRow(String label, String value) =>
+    value.trim().isEmpty || value.trim() == '-' ? '' : '<tr><td>$label</td><td>${_e(value)}</td></tr>';
 
 String _chip(MonthlyEventType type, String label) => '<span class="chip" style="--c:var(--t-${type.name})">${_e(label)}</span>';
 
