@@ -65,6 +65,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const AllReportScreen(),
       ),
       GoRoute(
+        path: '/reports/:farmId/farm-report',
+        builder: (context, state) => SharedReportWebScreen.preview(farmId: state.pathParameters['farmId']!),
+      ),
+      GoRoute(
         path: '/reports/:farmId',
         builder: (context, state) => ReportDetailScreen(farmId: state.pathParameters['farmId']!),
       ),

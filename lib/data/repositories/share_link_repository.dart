@@ -31,4 +31,8 @@ abstract class ShareLinkRepository {
   /// Public lookup used by the unauthenticated `/r/:token` page. Returns
   /// null if the token is unknown, revoked, or expired.
   Future<SharedReportBundle?> resolveToken(String token);
+
+  /// Public: the farm's 문의 memo from the shared report page, delivered to
+  /// the institute (memo feed + notification).
+  Future<void> sendInquiry({required String token, required String message});
 }

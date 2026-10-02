@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../providers/onboarding_provider.dart';
 import '../theme/app_colors.dart';
 import 'responsive_mobile_frame.dart';
+import 'tutorial_overlay.dart';
 
-class AppShell extends StatelessWidget {
+class AppShell extends ConsumerWidget {
   const AppShell({super.key, required this.navigationShell});
 
   final StatefulNavigationShell navigationShell;
@@ -16,11 +19,53 @@ class AppShell extends StatelessWidget {
     (icon: Icons.person_outline, activeIcon: Icons.person, label: '마이페이지'),
   ];
 
+  /// One-time intro shown the first time each tab is opened (after the
+  /// welcome card). Same order as [_tabs].
+  static const _intros = [
+    (id: 'home', title: '홈', body: '담당 양식장을 위험도순으로 확인하고, 아래 입력창에서 바로 메모를 남길 수 있어요. 오른쪽 위 종 모양에서 알림을 확인해요.'),
+    (id: 'memo', title: '메모', body: '양식장별 메모를 모아 보고, 돋보기로 내용·태그·양식장·작성자를 검색할 수 있어요.'),
+    (id: 'info', title: '정보', body: '수산질병 정보와 바다 수온을 확인해요. 필터는 여러 개를 함께 선택할 수 있어요.'),
+    (id: 'mypage', title: '마이페이지', body: '양식장·구성원 관리, 바다 위치, 알림·하루 요약 설정은 여기에서 해요.'),
+  ];
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final onboarding = ref.watch(onboardingProvider).valueOrNull;
+    final notifier = ref.read(onboardingProvider.notifier);
+    final intro = _intros[navigationShell.currentIndex];
+
+    Widget? overlay;
+    if (onboarding != null && !onboarding.welcomeSeen) {
+      overlay = TutorialOverlay(
+        icon: Icons.waves,
+        title: 'AquaConnect에 오신 걸 환영해요',
+        body: '담당 양식장의 수온·질병 위험을 한눈에 확인하고, 리포트를 어가에 바로 공유해 보세요.',
+        primaryLabel: '시작하기',
+        onPrimary: notifier.markWelcomeSeen,
+        onSkip: () async {
+          for (final i in _intros) {
+            await notifier.markCoachmarkSeen(i.id);
+          }
+          await notifier.markWelcomeSeen();
+        },
+      );
+    } else if (onboarding != null && !onboarding.coachmarksSeen.contains(intro.id)) {
+      overlay = TutorialOverlay(
+        icon: _tabs[navigationShell.currentIndex].activeIcon,
+        title: intro.title,
+        body: intro.body,
+        primaryLabel: '확인',
+        onPrimary: () => notifier.markCoachmarkSeen(intro.id),
+        pointsDown: true,
+        // Tab i's center as an Alignment x. The card has a 24px side
+        // margin, so the tab centers are pulled in a little to compensate.
+        arrowX: (-1 + (2 * navigationShell.currentIndex + 1) / _tabs.length) * 1.12,
+      );
+    }
+
     return ResponsiveMobileFrame(
       child: Scaffold(
-        body: navigationShell,
+        body: Stack(children: [navigationShell, ?overlay]),
         bottomNavigationBar: DecoratedBox(
           decoration: const BoxDecoration(
             color: AppColors.surface,

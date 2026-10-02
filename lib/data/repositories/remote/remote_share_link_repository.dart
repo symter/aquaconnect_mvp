@@ -46,4 +46,8 @@ class RemoteShareLinkRepository implements ShareLinkRepository {
       rethrow;
     }
   }
+
+  @override
+  Future<void> sendInquiry({required String token, required String message}) =>
+      _api.post('/api/public/reports/$token/inquiries', body: {'message': message});
 }

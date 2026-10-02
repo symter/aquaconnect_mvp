@@ -44,7 +44,8 @@ async function loadVapidKeys() {
   return { publicKey, privateKey, subject };
 }
 
-export const NOTIFICATION_TYPES = ['risk', 'memo', 'test'];
+// 'inquiry' (a farm's 문의) has no setting: it's always delivered.
+export const NOTIFICATION_TYPES = ['risk', 'memo', 'test', 'inquiry'];
 
 const SETTING_COLUMN = { risk: 'risk_alerts', memo: 'memo_alerts' };
 

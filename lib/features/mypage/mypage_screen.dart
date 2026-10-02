@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/providers/data_providers.dart';
 import '../../core/providers/notification_providers.dart';
+import '../../core/providers/onboarding_provider.dart';
 import '../../core/providers/repository_providers.dart';
 import '../../core/theme/app_colors.dart';
 import 'daily_summary_settings_screen.dart';
@@ -137,6 +138,14 @@ class MyPageScreen extends ConsumerWidget {
                       onTap: () => context.push('/mypage/notifications'),
                     ),
                     const _MenuItem(icon: Icons.file_download_outlined, label: '데이터 내보내기'),
+                    _MenuItem(
+                      icon: Icons.help_outline,
+                      label: '사용 가이드 다시 보기',
+                      onTap: () async {
+                        await ref.read(onboardingProvider.notifier).reset();
+                        if (context.mounted) context.go('/');
+                      },
+                    ),
                   ]),
                   const SizedBox(height: 12),
                   Center(

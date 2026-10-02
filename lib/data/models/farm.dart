@@ -14,6 +14,7 @@ class Farm {
     this.waterTemp,
     this.lastVisitDays,
     this.assignedMemberName,
+    this.assignedMemberPhone,
     this.ownerContact,
   });
 
@@ -37,6 +38,10 @@ class Farm {
   /// visit has been recorded yet.
   final int? lastVisitDays;
   final String? assignedMemberName;
+
+  /// The assigned staff member's phone — the 문의 contact on the farm's
+  /// 관리 리포트.
+  final String? assignedMemberPhone;
   final String? ownerContact;
 
   factory Farm.fromJson(Map<String, dynamic> json) => Farm(
@@ -52,6 +57,7 @@ class Farm {
         waterTemp: (json['waterTemp'] as num?)?.toDouble(),
         lastVisitDays: (json['lastVisitDays'] as num?)?.toInt(),
         assignedMemberName: json['assignedMemberName'] as String?,
+        assignedMemberPhone: json['assignedMemberPhone'] as String?,
         ownerContact: json['ownerContact'] as String?,
       );
 
@@ -68,6 +74,7 @@ class Farm {
         'waterTemp': waterTemp,
         'lastVisitDays': lastVisitDays,
         'assignedMemberName': assignedMemberName,
+        'assignedMemberPhone': assignedMemberPhone,
         'ownerContact': ownerContact,
       };
 
@@ -92,6 +99,7 @@ class Farm {
       waterTemp: waterTemp,
       lastVisitDays: lastVisitDays,
       assignedMemberName: assignedMemberName,
+      assignedMemberPhone: assignedMemberPhone,
       ownerContact: ownerContact ?? this.ownerContact,
     );
   }

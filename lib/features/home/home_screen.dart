@@ -12,6 +12,7 @@ import '../../core/widgets/memo_composer_bar.dart';
 import '../../data/models/farm.dart';
 import '../../data/models/risk_level.dart';
 import '../notifications/notification_permission_sheet.dart';
+import 'onboarding_checklist_card.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -118,6 +119,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
+                  const OnboardingChecklistCard(),
                   _ReportStatusCard(),
                   const SizedBox(height: 20),
                   Row(

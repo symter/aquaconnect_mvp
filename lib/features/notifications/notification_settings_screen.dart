@@ -163,7 +163,7 @@ class _NotificationSettingsScreenState extends ConsumerState<NotificationSetting
           const SizedBox(height: 8),
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 4),
-            child: Text('끈 종류의 알림은 알림함에도 쌓이지 않아요. 알림 종류 설정은 로그인한 모든 기기에 적용돼요.',
+            child: Text('끈 종류의 알림은 알림함에도 쌓이지 않아요. 어가가 공유 리포트에서 보낸 문의 알림은 항상 받아요. 알림 종류 설정은 로그인한 모든 기기에 적용돼요.',
                 style: TextStyle(fontSize: 11, color: AppColors.textMuted, height: 1.5)),
           ),
         ],

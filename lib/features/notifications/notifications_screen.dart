@@ -119,6 +119,7 @@ class _NotificationTile extends StatelessWidget {
     final (icon, color) = switch (n.type) {
       'risk' => (Icons.warning_amber_rounded, AppColors.danger),
       'memo' => (Icons.edit_note, AppColors.brand),
+      'inquiry' => (Icons.chat_bubble_outline, AppColors.good),
       _ => (Icons.notifications_outlined, AppColors.textSecondary),
     };
 

@@ -100,3 +100,11 @@ Postgres가 로컬에 없다면 `npm run smoke-test`로 (pg-mem 기반 인메모
   `POST|DELETE /api/notifications/push/subscriptions`, `POST /api/notifications/test`.
 - 기기 쪽은 `web/push_sw.js` 서비스워커가 받습니다. 안드로이드 Chrome·PC 브라우저는 바로 되고,
   아이폰(iOS 16.4+)은 Safari에서 "홈 화면에 추가"로 설치한 앱에서만 알림을 켤 수 있습니다.
+
+## 어가 문의 (공유 리포트)
+
+- `POST /api/public/reports/:token/inquiries` (**공개**, 로그인 불필요) — body `{ "message": "..." }`, 500자 이내,
+  링크당 1시간 10건까지(초과 시 429). 만료·회수된 링크는 404.
+- 접수되면 `inquiries`에 저장되고, 메모 목록에 `어가 · <양식장명>` 작성자·`문의` 태그로 남으며, 관리원 전원에게
+  `inquiry` 알림(휴대폰 푸시 포함)이 갑니다. 문의 알림은 알림 설정과 관계없이 항상 갑니다.
+- 공유 리포트의 "전화 걸기"는 양식장 담당 구성원의 `members.phone`으로 겁니다 (`SEED_OWNER_PHONE` 참고).

@@ -67,4 +67,11 @@ class MockShareLinkRepository implements ShareLinkRepository {
       assignedMemberPhone: MockSeed.currentMember.phone,
     );
   }
+
+  /// Mock mode has no institute on the other end; the sheet's success
+  /// state is all there is to see.
+  @override
+  Future<void> sendInquiry({required String token, required String message}) async {
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+  }
 }

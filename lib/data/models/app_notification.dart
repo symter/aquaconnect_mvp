@@ -12,7 +12,8 @@ class AppNotification {
 
   final String id;
 
-  /// 'risk' (farm risk went up), 'memo' (someone else left a memo) or 'test'.
+  /// 'risk' (farm risk went up), 'memo' (someone else left a memo),
+  /// 'inquiry' (a farm sent 문의 from its shared report) or 'test'.
   final String type;
   final String title;
   final String body;

@@ -9,7 +9,7 @@ export const farmsRouter = Router();
 farmsRouter.use(requireAuth);
 
 // 최근 방문 = days since the latest institute memo on the farm.
-const FARM_SELECT = `select f.*, m.name as assigned_member_name,
+const FARM_SELECT = `select f.*, m.name as assigned_member_name, m.phone as assigned_member_phone,
     (select max(mm.created_at) from memos mm where mm.farm_id = f.id and mm.author_type = 'institute') as last_visit_at
   from farms f left join members m on m.id = f.assigned_member_id`;
 
@@ -37,6 +37,7 @@ export function toFarmJson(row) {
     waterTemp: row.water_temp == null ? null : Number(row.water_temp),
     lastVisitDays: daysSince(row.last_visit_at),
     assignedMemberName: row.assigned_member_name,
+    assignedMemberPhone: row.assigned_member_phone ?? null,
     ownerContact: row.owner_contact,
   };
 }
