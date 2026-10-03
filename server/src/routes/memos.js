@@ -143,3 +143,26 @@ memosRouter.post('/', async (req, res) => {
 
   res.status(201).json(toMemoJson({ ...memoRow, farm_name: farmName, photo_ids: photoIds }));
 });
+
+// 메모 삭제: the author or an owner/director. Photos go with it (FK cascade).
+memosRouter.delete('/:id', async (req, res) => {
+  if (!UUID_RE.test(req.params.id)) return res.status(404).json({ error: '메모를 찾을 수 없습니다.' });
+  const orgId = await orgIdForMember(req.memberId);
+  const { rows: memoRows } = await query('select id, farm_id, author_type, author_name from memos where id = $1 and org_id = $2', [
+    req.params.id,
+    orgId,
+  ]);
+  const memo = memoRows[0];
+  if (!memo) return res.status(404).json({ error: '메모를 찾을 수 없습니다.' });
+
+  const { rows: memberRows } = await query('select name, role from members where id = $1', [req.memberId]);
+  const me = memberRows[0];
+  const isManager = ['owner', 'director'].includes(me?.role);
+  const isAuthor = memo.author_type === 'institute' && memo.author_name.endsWith(me?.name ?? '\u0000');
+  if (!isManager && !isAuthor) return res.status(403).json({ error: '작성자 또는 소유자·원장만 삭제할 수 있습니다.' });
+
+  await query('delete from memos where id = $1', [memo.id]);
+  // A removed 폐사 memo changes the farm's risk and 최근 방문.
+  if (memo.farm_id) await refreshReportQuietly(memo.farm_id);
+  res.status(204).end();
+});

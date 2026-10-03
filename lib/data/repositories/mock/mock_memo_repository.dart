@@ -71,6 +71,12 @@ class MockMemoRepository implements MemoRepository {
   }
 
   @override
+  Future<void> deleteMemo(String id) async {
+    _memos = _memos.where((m) => m.id != id).toList();
+    _emit();
+  }
+
+  @override
   Future<Memo> updateMemo({required String id, required String content}) async {
     final index = _memos.indexWhere((m) => m.id == id);
     if (index == -1) throw StateError('memo not found: $id');

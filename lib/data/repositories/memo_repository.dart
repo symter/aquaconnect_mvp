@@ -19,6 +19,9 @@ abstract class MemoRepository {
   /// log, attributed to the signed-in member.
   Future<Memo> updateMemo({required String id, required String content});
 
+  /// Deletes a memo (and its photos).
+  Future<void> deleteMemo(String id);
+
   /// Image bytes for one of a memo's [Memo.photoIds].
   Future<Uint8List> loadPhoto(String photoId);
 }
