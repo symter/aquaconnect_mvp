@@ -5,27 +5,35 @@ import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/disease_info_repository.dart';
 import '../../data/repositories/farm_repository.dart';
 import '../../data/repositories/memo_repository.dart';
+import '../../data/repositories/notification_repository.dart';
+import '../../data/repositories/org_repository.dart';
 import '../../data/repositories/mock/mock_auth_repository.dart';
 import '../../data/repositories/mock/mock_disease_info_repository.dart';
 import '../../data/repositories/mock/mock_farm_repository.dart';
 import '../../data/repositories/mock/mock_memo_repository.dart';
+import '../../data/repositories/mock/mock_notification_repository.dart';
+import '../../data/repositories/mock/mock_org_repository.dart';
 import '../../data/repositories/mock/mock_report_repository.dart';
 import '../../data/repositories/mock/mock_share_link_repository.dart';
 import '../../data/repositories/remote/remote_auth_repository.dart';
 import '../../data/repositories/remote/remote_disease_info_repository.dart';
 import '../../data/repositories/remote/remote_farm_repository.dart';
 import '../../data/repositories/remote/remote_memo_repository.dart';
+import '../../data/repositories/remote/remote_notification_repository.dart';
+import '../../data/repositories/remote/remote_org_repository.dart';
 import '../../data/repositories/remote/remote_report_repository.dart';
 import '../../data/repositories/remote/remote_share_link_repository.dart';
 import '../../data/repositories/report_repository.dart';
 import '../../data/repositories/share_link_repository.dart';
 import '../../data/services/api_client.dart';
 import '../../data/services/auth_token_store.dart';
+import '../../data/services/location_service.dart';
 import '../../data/services/digest_settings_store.dart';
 import '../../data/services/mock_ocean_service.dart';
 import '../../data/services/ocean_service.dart';
 import '../../data/services/ocean_station_preference_store.dart';
 import '../../data/services/railway_ocean_service.dart';
+import '../../data/services/web_push_service.dart';
 import '../config/env.dart';
 
 // `Env.useMock` (default true) picks between the in-memory mock_*
@@ -55,6 +63,18 @@ final memoRepositoryProvider = Provider<MemoRepository>((ref) {
   return RemoteMemoRepository(apiClient: ref.watch(apiClientProvider));
 });
 
+final notificationRepositoryProvider = Provider<NotificationRepository>((ref) {
+  if (Env.useMock) return MockNotificationRepository();
+  return RemoteNotificationRepository(apiClient: ref.watch(apiClientProvider));
+});
+
+final orgRepositoryProvider = Provider<OrgRepository>((ref) {
+  if (Env.useMock) return MockOrgRepository(authRepository: ref.watch(authRepositoryProvider));
+  return RemoteOrgRepository(apiClient: ref.watch(apiClientProvider));
+});
+
+final webPushServiceProvider = Provider<WebPushService>((ref) => WebPushService());
+
 final diseaseInfoRepositoryProvider = Provider<DiseaseInfoRepository>((ref) {
   if (Env.useMock) return MockDiseaseInfoRepository();
   return RemoteDiseaseInfoRepository(apiClient: ref.watch(apiClientProvider));
@@ -68,6 +88,8 @@ final oceanServiceProvider = Provider<OceanService>((ref) {
 final oceanStationPreferenceStoreProvider = Provider<OceanStationPreferenceStore>((ref) {
   return OceanStationPreferenceStore();
 });
+
+final locationServiceProvider = Provider<LocationService>((ref) => LocationService());
 
 /// The MyPage-selected "바다 위치" (sea location), loaded from local storage
 /// on first watch. Null means the user hasn't picked one yet.
@@ -121,16 +143,27 @@ final digestSettingsStoreProvider = Provider<DigestSettingsStore>((ref) => Diges
 final digestSettingsProvider = AsyncNotifierProvider<DigestSettingsNotifier, DigestSettings>(DigestSettingsNotifier.new);
 
 class DigestSettingsNotifier extends AsyncNotifier<DigestSettings> {
+  // Chains every _update onto the previous one so two calls fired back to
+  // back (e.g. two toggles tapped in quick succession) can't both read the
+  // same stale `state.valueOrNull` and have the slower one clobber the
+  // other's field change — each update now fully completes, including the
+  // `state =` assignment, before the next one reads `current`.
+  Future<void> _writeQueue = Future.value();
+
   @override
   Future<DigestSettings> build() {
     return ref.watch(digestSettingsStoreProvider).read();
   }
 
-  Future<void> _update(DigestSettings Function(DigestSettings) transform) async {
-    final current = state.valueOrNull ?? await ref.read(digestSettingsStoreProvider).read();
-    final next = transform(current);
-    await ref.read(digestSettingsStoreProvider).write(next);
-    state = AsyncValue.data(next);
+  Future<void> _update(DigestSettings Function(DigestSettings) transform) {
+    final result = _writeQueue.then((_) async {
+      final current = state.valueOrNull ?? await ref.read(digestSettingsStoreProvider).read();
+      final next = transform(current);
+      await ref.read(digestSettingsStoreProvider).write(next);
+      state = AsyncValue.data(next);
+    });
+    _writeQueue = result;
+    return result;
   }
 
   Future<void> setDailyEnabled(bool enabled) => _update((s) => s.copyWith(dailyEnabled: enabled));

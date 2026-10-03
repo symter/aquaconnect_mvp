@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/providers/data_providers.dart';
+import '../../core/providers/notification_providers.dart';
 import '../../core/providers/onboarding_provider.dart';
 import '../../core/providers/repository_providers.dart';
 import '../../core/theme/app_colors.dart';
@@ -21,14 +23,16 @@ class _Step {
 const _steps = [
   _Step('farm', '양식장 등록하기', Icons.home_work_outlined, ownerOnly: true),
   _Step('station', '바다 위치(수온 관측소) 선택하기', Icons.water_outlined),
+  _Step('notify', '휴대폰 알림 켜기', Icons.notifications_active_outlined),
   _Step('members', '구성원 초대하기', Icons.groups_outlined, ownerOnly: true),
   _Step('memo', '첫 메모 남기기', Icons.edit_note),
   _Step('share', '리포트 공유하기', Icons.link),
 ];
 
-/// Home "시작 가이드" checklist. Steps are checked off when tapped (they jump
-/// to the relevant screen) — completion can't be derived from data because
-/// members/share links aren't backed by real state yet.
+/// Home "시작 가이드" checklist. A step counts as done once the app's data
+/// shows it happened (a farm exists, a station is picked, push is on, a
+/// memo or share link exists) or once it was tapped — 구성원 초대 has no
+/// server data yet, so tapping is the only way to check that one off.
 class OnboardingChecklistCard extends ConsumerWidget {
   const OnboardingChecklistCard({super.key});
 
@@ -39,6 +43,8 @@ class OnboardingChecklistCard extends ConsumerWidget {
         context.push('/mypage/farms');
       case 'station':
         showOceanStationPickerSheet(context);
+      case 'notify':
+        context.push('/mypage/notifications');
       case 'members':
         context.push('/mypage/members');
       case 'memo':
@@ -53,9 +59,18 @@ class OnboardingChecklistCard extends ConsumerWidget {
     final onboarding = ref.watch(onboardingProvider).valueOrNull;
     if (onboarding == null || onboarding.checklistHidden) return const SizedBox.shrink();
 
+    final doneByData = <String>{
+      if (ref.watch(farmsProvider).valueOrNull?.isNotEmpty ?? false) 'farm',
+      if (ref.watch(selectedOceanStationProvider).valueOrNull != null) 'station',
+      if (ref.watch(pushStatusProvider).valueOrNull?.enabled ?? false) 'notify',
+      if (ref.watch(memosProvider(null)).valueOrNull?.isNotEmpty ?? false) 'memo',
+      if (ref.watch(shareLinksProvider).valueOrNull?.isNotEmpty ?? false) 'share',
+    };
+    bool isDone(_Step s) => onboarding.checklistDone.contains(s.id) || doneByData.contains(s.id);
+
     final isEmployee = ref.watch(authStateProvider).valueOrNull?.member.role == MemberRole.employee;
     final steps = _steps.where((s) => !(isEmployee && s.ownerOnly)).toList();
-    final doneCount = steps.where((s) => onboarding.checklistDone.contains(s.id)).length;
+    final doneCount = steps.where(isDone).length;
     if (doneCount == steps.length) return const SizedBox.shrink();
 
     return Container(
@@ -106,9 +121,9 @@ class OnboardingChecklistCard extends ConsumerWidget {
                 child: Row(
                   children: [
                     Icon(
-                      onboarding.checklistDone.contains(step.id) ? Icons.check_circle : Icons.radio_button_unchecked,
+                      isDone(step) ? Icons.check_circle : Icons.radio_button_unchecked,
                       size: 20,
-                      color: onboarding.checklistDone.contains(step.id) ? AppColors.brand : AppColors.textMuted,
+                      color: isDone(step) ? AppColors.brand : AppColors.textMuted,
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -117,8 +132,8 @@ class OnboardingChecklistCard extends ConsumerWidget {
                         style: TextStyle(
                           fontSize: 13.5,
                           fontWeight: FontWeight.w600,
-                          color: onboarding.checklistDone.contains(step.id) ? AppColors.textMuted : AppColors.textPrimary,
-                          decoration: onboarding.checklistDone.contains(step.id) ? TextDecoration.lineThrough : null,
+                          color: isDone(step) ? AppColors.textMuted : AppColors.textPrimary,
+                          decoration: isDone(step) ? TextDecoration.lineThrough : null,
                         ),
                       ),
                     ),

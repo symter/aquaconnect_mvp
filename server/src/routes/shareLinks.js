@@ -23,6 +23,7 @@ function toShareLinkJson(row) {
     createdAt: row.created_at,
     expiresAt: row.expires_at,
     revokedAt: row.revoked_at,
+    farmName: row.farm_name ?? null,
   };
 }
 
@@ -47,10 +48,27 @@ shareLinksRouter.get('/', async (req, res) => {
   const orgId = await orgIdForMember(req.memberId);
   const farmId = req.query.farmId ?? null;
   const { rows } = await query(
-    `select sl.* from share_links sl join farms f on f.id = sl.farm_id
+    `select sl.*, f.name as farm_name from share_links sl join farms f on f.id = sl.farm_id
      where f.org_id = $1 and ($2::uuid is null or sl.farm_id = $2)
      order by sl.created_at desc`,
     [orgId, farmId],
   );
   res.json(rows.map(toShareLinkJson));
+});
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// 공유 링크 관리 → 회수: the farm's link stops working immediately.
+shareLinksRouter.post('/:id/revoke', async (req, res) => {
+  if (!UUID_RE.test(req.params.id)) return res.status(404).json({ error: '공유 링크를 찾을 수 없습니다.' });
+  const orgId = await orgIdForMember(req.memberId);
+  const { rows } = await query(
+    `update share_links sl set revoked_at = coalesce(sl.revoked_at, now())
+     from farms f
+     where sl.id = $1 and f.id = sl.farm_id and f.org_id = $2
+     returning sl.*, f.name as farm_name`,
+    [req.params.id, orgId],
+  );
+  if (!rows[0]) return res.status(404).json({ error: '공유 링크를 찾을 수 없습니다.' });
+  res.json(toShareLinkJson(rows[0]));
 });

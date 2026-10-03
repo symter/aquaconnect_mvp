@@ -1,7 +1,6 @@
 import '../../models/farm.dart';
 import '../../models/report.dart';
 import '../../models/share_link.dart';
-import '../../models/shared_report_view.dart';
 import '../../services/api_client.dart';
 import '../share_link_repository.dart';
 
@@ -32,6 +31,9 @@ class RemoteShareLinkRepository implements ShareLinkRepository {
   }
 
   @override
+  Future<void> revokeShareLink(String linkId) => _api.post('/api/share-links/$linkId/revoke');
+
+  @override
   Future<SharedReportBundle?> resolveToken(String token) async {
     try {
       final json = await _api.get('/api/public/reports/$token') as Map<String, dynamic>;
@@ -39,7 +41,8 @@ class RemoteShareLinkRepository implements ShareLinkRepository {
         farm: Farm.fromJson(json['farm'] as Map<String, dynamic>),
         report: Report.fromJson(json['report'] as Map<String, dynamic>),
         link: ShareLink.fromJson(json['link'] as Map<String, dynamic>),
-        view: json['shared'] == null ? null : SharedReportView.fromJson(json['shared'] as Map<String, dynamic>),
+        organizationName: json['organizationName'] as String?,
+        assignedMemberPhone: json['assignedMemberPhone'] as String?,
       );
     } on ApiException catch (e) {
       if (e.statusCode == 404) return null;
@@ -48,12 +51,6 @@ class RemoteShareLinkRepository implements ShareLinkRepository {
   }
 
   @override
-  Future<void> setActionDone({required String token, required String actionId, required bool done}) async {
-    await _api.patch('/api/public/reports/$token/actions/$actionId', body: {'done': done});
-  }
-
-  @override
-  Future<void> sendInquiry({required String token, required String message}) async {
-    await _api.post('/api/public/reports/$token/inquiries', body: {'message': message});
-  }
+  Future<void> sendInquiry({required String token, required String message}) =>
+      _api.post('/api/public/reports/$token/inquiries', body: {'message': message});
 }

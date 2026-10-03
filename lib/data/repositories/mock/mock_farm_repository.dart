@@ -40,8 +40,6 @@ class MockFarmRepository implements FarmRepository {
       nearestStationName: nearestStationName,
       riskLevel: RiskLevel.good,
       headline: '',
-      waterTemp: 0,
-      lastVisitDays: 0,
       assignedMemberName: MockSeed.currentMember.name,
       ownerContact: ownerContact,
     );

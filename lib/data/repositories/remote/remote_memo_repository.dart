@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 
 import '../../models/memo.dart';
 import '../../services/api_client.dart';
@@ -65,11 +67,18 @@ class RemoteMemoRepository implements MemoRepository {
     String? farmName,
     required String content,
     required List<String> tags,
-    int photoCount = 0,
+    List<MemoPhotoUpload> photos = const [],
   }) async {
     final json = await _api.post(
       '/api/memos',
-      body: {'farmId': farmId, 'content': content, 'tags': tags, 'photoCount': photoCount},
+      body: {
+        'farmId': farmId,
+        'content': content,
+        'tags': tags,
+        'photos': [
+          for (final p in photos) {'contentType': p.contentType, 'dataBase64': base64Encode(p.bytes)},
+        ],
+      },
     ) as Map<String, dynamic>;
     _refresh.add(null);
     return Memo.fromJson(json);
@@ -81,4 +90,7 @@ class RemoteMemoRepository implements MemoRepository {
     _refresh.add(null);
     return Memo.fromJson(json);
   }
+
+  @override
+  Future<Uint8List> loadPhoto(String photoId) => _api.getBytes('/api/memos/photos/$photoId');
 }

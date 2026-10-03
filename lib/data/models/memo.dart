@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 enum MemoAuthorType {
   institute,
   farm;
@@ -36,6 +38,7 @@ class Memo {
     this.farmId,
     this.farmName,
     this.photoCount = 0,
+    this.photoIds = const [],
     this.readByFarm = false,
     this.edits = const [],
   });
@@ -50,7 +53,12 @@ class Memo {
   final String authorName;
   final String content;
   final List<String> tags;
+  /// Total photos attached. Seed memos predate real photo storage, so this
+  /// can exceed [photoIds].length — those extras render as placeholders.
   final int photoCount;
+
+  /// IDs of stored photos, loadable via MemoRepository.loadPhoto.
+  final List<String> photoIds;
   final bool readByFarm;
   final DateTime createdAt;
 
@@ -86,10 +94,19 @@ class Memo {
         content: json['content'] as String,
         tags: (json['tags'] as List<dynamic>? ?? const []).cast<String>(),
         photoCount: json['photoCount'] as int? ?? 0,
+        photoIds: (json['photoIds'] as List<dynamic>? ?? const []).cast<String>(),
         readByFarm: json['readByFarm'] as bool? ?? false,
         createdAt: DateTime.parse(json['createdAt'] as String),
         edits: (json['edits'] as List<dynamic>? ?? const [])
             .map((e) => MemoEdit.fromJson(e as Map<String, dynamic>))
             .toList(),
       );
+}
+
+/// A photo taken/picked in the composer, already downscaled on-device.
+class MemoPhotoUpload {
+  const MemoPhotoUpload({required this.bytes, required this.contentType});
+
+  final Uint8List bytes;
+  final String contentType;
 }

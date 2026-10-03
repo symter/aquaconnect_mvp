@@ -1,18 +1,26 @@
 import '../models/farm.dart';
 import '../models/report.dart';
 import '../models/share_link.dart';
-import '../models/shared_report_view.dart';
 
 class SharedReportBundle {
-  const SharedReportBundle({required this.farm, required this.report, required this.link, this.view});
+  const SharedReportBundle({
+    required this.farm,
+    required this.report,
+    required this.link,
+    this.organizationName,
+    this.assignedMemberPhone,
+  });
 
   final Farm farm;
   final Report report;
   final ShareLink link;
 
-  /// Farm-side page content. Null when the source does not provide it;
-  /// [SharedReportView.fromBundle] is the fallback.
-  final SharedReportView? view;
+  /// The institute that issued the link, shown as "○○ 제공".
+  final String? organizationName;
+
+  /// Phone of the farm's assigned institute member — what the farm owner's
+  /// "담당 관리사에게 연락하기" button dials.
+  final String? assignedMemberPhone;
 }
 
 abstract class ShareLinkRepository {
@@ -20,13 +28,14 @@ abstract class ShareLinkRepository {
 
   Future<List<ShareLink>> listShareLinks({String? farmId});
 
+  /// 공유 링크 관리 → 회수: the link stops opening immediately.
+  Future<void> revokeShareLink(String linkId);
+
   /// Public lookup used by the unauthenticated `/r/:token` page. Returns
   /// null if the token is unknown, revoked, or expired.
   Future<SharedReportBundle?> resolveToken(String token);
 
-  /// Persists a checklist toggle made by the farm on the shared page.
-  Future<void> setActionDone({required String token, required String actionId, required bool done});
-
-  /// Sends the farm's inquiry memo to the institute.
+  /// Public: the farm's 문의 memo from the shared report page, delivered to
+  /// the institute (memo feed + notification).
   Future<void> sendInquiry({required String token, required String message});
 }

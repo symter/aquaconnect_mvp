@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -49,6 +50,14 @@ class ApiClient {
     return _decode(response);
   }
 
+  /// Raw response bytes (e.g. an image) from an authenticated endpoint.
+  Future<Uint8List> getBytes(String path) async {
+    final response = await _client.get(_uri(path), headers: await _headers());
+    if (response.statusCode >= 200 && response.statusCode < 300) return response.bodyBytes;
+    _decode(response);
+    throw ApiException('요청에 실패했습니다.', statusCode: response.statusCode);
+  }
+
   Future<dynamic> post(String path, {Object? body}) async {
     final response = await _client.post(_uri(path), headers: await _headers(), body: body == null ? null : jsonEncode(body));
     return _decode(response);
@@ -64,8 +73,9 @@ class ApiClient {
     return _decode(response);
   }
 
-  Future<dynamic> delete(String path) async {
-    final response = await _client.delete(_uri(path), headers: await _headers());
+  Future<dynamic> delete(String path, {Object? body}) async {
+    final response =
+        await _client.delete(_uri(path), headers: await _headers(), body: body == null ? null : jsonEncode(body));
     return _decode(response);
   }
 }

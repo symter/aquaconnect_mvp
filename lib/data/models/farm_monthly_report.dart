@@ -1,4 +1,17 @@
-import 'monthly_report.dart';
+/// 기록 종류. 리포트 표의 칩 문구·색(CSS `--t-<name>`)에 쓴다.
+enum MonthlyEventType {
+  patrol('예찰'),
+  delivery('배달'),
+  diag('바이러스 진단'),
+  exam('검사'),
+  safety('안전성 검사'),
+  vacc('접종'),
+  water('DO·pH 측정');
+
+  const MonthlyEventType(this.label);
+
+  final String label;
+}
 
 /// 수산질병관리원이 양식장(어가)에 보내는 월간 관리 리포트.
 ///
@@ -120,6 +133,7 @@ class FarmMonthlyReport {
     this.logs = const [],
     this.exams = const [],
     this.deliveries = const [],
+    this.periodLabel,
   });
 
   final String orgName;
@@ -156,6 +170,12 @@ class FarmMonthlyReport {
 
   /// 예: "평일 09:00~18:00 · 061-000-0000"
   final String orgContact;
+
+  /// 월 단위가 아닌 리포트(예: "최근 7일 (9/26 ~ 10/2)")의 기간 문구.
+  /// 있으면 HTML이 "이달·N월" 대신 기간 중립 문구를 쓴다.
+  final String? periodLabel;
+
+  bool get isMonthly => periodLabel == null;
 
   String get title => '$farmName 관리 리포트 · $year년 $month월';
 }

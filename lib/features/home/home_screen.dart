@@ -3,13 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/providers/data_providers.dart';
+import '../../core/providers/notification_providers.dart';
 import '../../core/providers/repository_providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/chips.dart';
 import '../../core/widgets/farm_card.dart';
-import '../../core/widgets/memo_composer.dart';
+import '../../core/widgets/memo_composer_bar.dart';
 import '../../data/models/farm.dart';
 import '../../data/models/risk_level.dart';
+import '../notifications/notification_permission_sheet.dart';
 import 'onboarding_checklist_card.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -33,7 +35,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       backgroundColor: AppColors.background,
       body: SafeArea(
         bottom: false,
-        child: CustomScrollView(
+        child: Column(
+          children: [
+            Expanded(child: _buildScroll(context, farmsAsync, orgName)),
+            const MemoComposerBar(confirmOnSave: true),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildScroll(BuildContext context, AsyncValue<List<Farm>> farmsAsync, String orgName) {
+    return CustomScrollView(
           slivers: [
             SliverToBoxAdapter(
               child: Container(
@@ -50,12 +63,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        Container(
-                          width: 38,
-                          height: 38,
-                          decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                          child: const Icon(Icons.notifications_none, size: 19, color: AppColors.neutralIconStrong),
-                        ),
+                        _NotificationBell(onTap: () => openNotifications(context, ref)),
                       ],
                     ),
                     const SizedBox(height: 10),
@@ -73,26 +81,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    farmsAsync.when(
-                      data: (farms) => MemoComposer(
-                        farms: farms,
-                        compact: true,
-                        onSubmit: ({required content, farm, tags = const []}) {
-                          ref.read(memoRepositoryProvider).addMemo(
-                                farmId: farm?.id,
-                                farmName: farm?.name,
-                                content: content,
-                                tags: tags,
-                              );
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('메모가 저장되었습니다.')),
-                          );
-                        },
-                      ),
-                      loading: () => const SizedBox(height: 44),
-                      error: (e, _) => Text('$e'),
-                    ),
-                    const SizedBox(height: 10),
                     InkWell(
                       onTap: () => context.push('/memo'),
                       child: Padding(
@@ -167,7 +155,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       return Column(
                         children: [
                           for (final farm in filtered) ...[
-                            FarmCard(farm: farm, onTap: () => context.push('/reports/${farm.id}/farm-report')),
+                            FarmCard(farm: farm, onTap: () => context.push('/reports/${farm.id}')),
                             const SizedBox(height: 10),
                           ],
                         ],
@@ -182,6 +170,70 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ]),
               ),
             ),
+          ],
+    );
+  }
+}
+
+class _NotificationBell extends ConsumerWidget {
+  const _NotificationBell({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final unread = ref.watch(unreadNotificationCountProvider);
+    return Semantics(
+      button: true,
+      label: unread > 0 ? '알림 $unread개' : '알림',
+      // The circle stays put and the icon stays centered whatever the count;
+      // the count pill sits on the circle's top-right edge. (Material's
+      // Badge re-laid the icon out to the top-left once a label appeared.)
+      child: SizedBox(
+        width: 38,
+        height: 38,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned.fill(
+              child: Material(
+                color: Colors.white,
+                shape: const CircleBorder(),
+                child: InkWell(
+                  onTap: onTap,
+                  customBorder: const CircleBorder(),
+                  child: Center(
+                    child: Icon(
+                      unread > 0 ? Icons.notifications : Icons.notifications_none,
+                      size: 19,
+                      color: AppColors.neutralIconStrong,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            if (unread > 0)
+              Positioned(
+                top: -3,
+                right: -5,
+                child: IgnorePointer(
+                  child: Container(
+                    constraints: const BoxConstraints(minWidth: 18),
+                    height: 18,
+                    padding: const EdgeInsets.symmetric(horizontal: 5),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: AppColors.danger,
+                      borderRadius: BorderRadius.circular(9),
+                      border: Border.all(color: Colors.white, width: 1.5),
+                    ),
+                    child: Text(
+                      unread > 99 ? '99+' : '$unread',
+                      style: const TextStyle(fontSize: 10, height: 1.1, fontWeight: FontWeight.w800, color: Colors.white),
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),

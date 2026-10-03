@@ -19,9 +19,24 @@ class OrgMember {
     required this.status,
     required this.joinedAt,
     this.isMe = false,
+    this.email,
+    this.phone,
     this.inviteTarget,
     this.inviteExpiresAt,
   });
+
+  /// A row of `GET /api/members` (active or inactive — invites aren't
+  /// server-backed yet).
+  factory OrgMember.fromJson(Map<String, dynamic> json) => OrgMember(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        role: MemberRole.values.firstWhere((r) => r.name == json['role'], orElse: () => MemberRole.staff),
+        status: json['status'] == 'inactive' ? MemberStatus.inactive : MemberStatus.active,
+        joinedAt: DateTime.parse(json['joinedAt'] as String).toLocal(),
+        isMe: json['isMe'] as bool? ?? false,
+        email: json['email'] as String?,
+        phone: json['phone'] as String?,
+      );
 
   final String id;
   final String name;
@@ -32,6 +47,8 @@ class OrgMember {
   /// invite, the date the invite was (most recently) sent.
   final DateTime joinedAt;
   final bool isMe;
+  final String? email;
+  final String? phone;
 
   /// Pending invites only: "010-1234-5678" or "카카오톡 발송됨".
   final String? inviteTarget;
@@ -53,68 +70,26 @@ class OrgMember {
       status: status ?? this.status,
       joinedAt: joinedAt ?? this.joinedAt,
       isMe: isMe ?? this.isMe,
+      email: email,
+      phone: phone,
       inviteTarget: inviteTarget ?? this.inviteTarget,
       inviteExpiresAt: inviteExpiresAt ?? this.inviteExpiresAt,
     );
   }
 }
 
-/// Mock roster seeding [MemberManagementScreen] — 6 members spanning every
-/// role/status combination the screen needs to render.
-List<OrgMember> mockOrgMembers() {
-  final now = DateTime.now();
+/// Initial roster for [MemberManagementScreen]: just the signed-in member.
+/// There is no members API yet, so invites / role changes made on that
+/// screen live only in its local state.
+List<OrgMember> rosterFromSession(Member me) {
   return [
     OrgMember(
-      id: 'om-1',
-      name: '이동길',
-      role: MemberRole.owner,
+      id: me.id,
+      name: me.name,
+      role: me.role,
       status: MemberStatus.active,
-      joinedAt: now.subtract(const Duration(days: 420)),
+      joinedAt: DateTime.now(),
       isMe: true,
-    ),
-    OrgMember(
-      id: 'om-2',
-      name: '이원장',
-      role: MemberRole.director,
-      status: MemberStatus.active,
-      joinedAt: now.subtract(const Duration(days: 300)),
-    ),
-    OrgMember(
-      id: 'om-3',
-      name: '박관리',
-      role: MemberRole.staff,
-      status: MemberStatus.active,
-      joinedAt: now.subtract(const Duration(days: 200)),
-    ),
-    OrgMember(
-      id: 'om-4',
-      name: '최관리',
-      role: MemberRole.staff,
-      status: MemberStatus.active,
-      joinedAt: now.subtract(const Duration(days: 90)),
-    ),
-    OrgMember(
-      id: 'om-7',
-      name: '김직원',
-      role: MemberRole.employee,
-      status: MemberStatus.active,
-      joinedAt: now.subtract(const Duration(days: 60)),
-    ),
-    OrgMember(
-      id: 'om-5',
-      name: '010-9876-5432',
-      role: MemberRole.staff,
-      status: MemberStatus.pending,
-      joinedAt: now.subtract(const Duration(days: 3)),
-      inviteTarget: '010-9876-5432',
-      inviteExpiresAt: now.add(const Duration(days: 4)),
-    ),
-    OrgMember(
-      id: 'om-6',
-      name: '정퇴사',
-      role: MemberRole.staff,
-      status: MemberStatus.inactive,
-      joinedAt: now.subtract(const Duration(days: 500)),
     ),
   ];
 }

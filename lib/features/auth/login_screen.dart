@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/config/env.dart';
 import '../../core/providers/repository_providers.dart';
@@ -90,6 +91,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   PrimaryButton(
                     label: _loading ? '로그인 중...' : '로그인',
                     onPressed: _loading ? null : _submit,
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text('처음 사용하시나요?', style: TextStyle(fontSize: 12.5, color: AppColors.textTertiary)),
+                      TextButton(
+                        onPressed: _loading ? null : () => context.push('/signup'),
+                        child: const Text('회원가입',
+                            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: AppColors.brand)),
+                      ),
+                    ],
                   ),
                   if (Env.useMock) ...[
                     const SizedBox(height: 16),

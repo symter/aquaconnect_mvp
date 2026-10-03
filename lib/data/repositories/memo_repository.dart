@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import '../models/memo.dart';
 
 abstract class MemoRepository {
@@ -10,10 +12,13 @@ abstract class MemoRepository {
     String? farmName,
     required String content,
     required List<String> tags,
-    int photoCount,
+    List<MemoPhotoUpload> photos,
   });
 
   /// Replaces a memo's content and appends the previous content to its edit
   /// log, attributed to the signed-in member.
   Future<Memo> updateMemo({required String id, required String content});
+
+  /// Image bytes for one of a memo's [Memo.photoIds].
+  Future<Uint8List> loadPhoto(String photoId);
 }

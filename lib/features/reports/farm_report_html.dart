@@ -3,7 +3,6 @@ import 'dart:math' as math;
 import 'package:intl/intl.dart';
 
 import '../../data/models/farm_monthly_report.dart';
-import '../../data/models/monthly_report.dart';
 
 /// [FarmMonthlyReport] → A4 세로 여러 쪽짜리 HTML (`양식장_관리리포트` 양식).
 ///
@@ -12,7 +11,9 @@ import '../../data/models/monthly_report.dart';
 /// 빠지고, 두 번째 쪽은 해양환경·수조 데이터가 모두 없으면 생략된다.
 String buildFarmReportHtml(FarmMonthlyReport r) {
   final pages = <String>[_page1(r), if (r.seaTemps.isNotEmpty || r.tanks.isNotEmpty) _page2(r), _page3(r)];
-  final footLeft = '${_e(r.orgName)} · ${_e(r.farmName)} · ${r.year}년 ${r.month}월 관리 리포트';
+  final footLeft = r.isMonthly
+      ? '${_e(r.orgName)} · ${_e(r.farmName)} · ${r.year}년 ${r.month}월 관리 리포트'
+      : '${_e(r.orgName)} · ${_e(r.farmName)} · 관리 리포트';
   final body = [
     for (var i = 0; i < pages.length; i++)
       '<div class="page">${pages[i]}'
@@ -75,29 +76,27 @@ String _page1(FarmMonthlyReport r) {
   <div>
     <div class="kicker">${_e(r.orgName)} · 양식장 관리 리포트</div>
     <h1>${_e(r.farmName)}</h1>
-    <div class="period">${r.year}년 ${r.month}월 (${r.month}/1 ~ ${r.month}/$lastDay) 월간 리포트</div>
+    <div class="period">${r.isMonthly ? '${r.year}년 ${r.month}월 (${r.month}/1 ~ ${r.month}/$lastDay) 월간 리포트' : _e(r.periodLabel!)}</div>
   </div>
   <table class="meta">
-    <tr><td>해역</td><td>${_e(r.seaArea)}</td></tr>
-    <tr><td>품종</td><td>${_e(r.species)}</td></tr>
-    <tr><td>수조</td><td>${_e(r.tanksLabel)}</td></tr>
+    ${_metaRow('해역', r.seaArea)}${_metaRow('품종', r.species)}${_metaRow('수조', r.tanksLabel)}
     <tr><td>담당</td><td>수산질병관리사 ${_e(r.managerName)}</td></tr>
     <tr><td>발행일</td><td>${DateFormat('yyyy년 M월 d일').format(r.issuedAt)}</td></tr>
   </table>
 </div>
 
 <div class="status $statusClass">
-  <div class="big">$statusIcon 이달 상태: ${r.status.label}</div>
+  <div class="big">$statusIcon ${r.isMonthly ? '이달' : '현재'} 상태: ${r.status.label}</div>
   <p>${_md(r.statusSummary)}</p>
 </div>
 
 ${tiles.isEmpty ? '' : '<div class="tiles">$tiles</div>'}
 
 <section>
-  <h2>관리원 소견 <small>담당 수산질병관리사가 작성했습니다</small></h2>
+  <h2>관리원 소견 <small>${r.isMonthly ? '담당 수산질병관리사가 작성했습니다' : '현장 메모와 수온 데이터를 바탕으로 정리했습니다'}</small></h2>
   <div class="memo">
     ${r.opinion.map((p) => '<p>${_md(p)}</p>').join('\n    ')}
-    ${recs.isEmpty ? '' : '<h3 style="margin-top:12px">$next월 관리 권고</h3><ul>$recs</ul>'}
+    ${recs.isEmpty ? '' : '<h3 style="margin-top:12px">${r.isMonthly ? '$next월 ' : ''}관리 권고</h3><ul>$recs</ul>'}
     <div class="sign">${_e(r.orgName)} · 수산질병관리사 ${_e(r.managerName)}</div>
   </div>
 </section>
@@ -283,7 +282,7 @@ String _page3(FarmMonthlyReport r) {
 </section>
 <section>
   <div class="notice">
-    <p>· 이 리포트는 해양수산 공공서비스의 해양환경 관측값과, 수산질병관리원·양식장이 $m월 동안 남긴 현장 기록을 합쳐 만들었습니다.</p>
+    <p>· 이 리포트는 해양수산 공공서비스의 해양환경 관측값과, 수산질병관리원·양식장이 ${r.isMonthly ? '$m월' : '이 기간'} 동안 남긴 현장 기록을 합쳐 만들었습니다.</p>
     <p>· 질병 판단과 처방은 담당 수산질병관리사가 합니다. 궁금한 점은 위 연락처로 문의해 주세요.</p>
     <p>· 이 리포트는 ${_e(r.farmName)}에만 보내 드리는 자료입니다.</p>
   </div>
@@ -314,6 +313,10 @@ String? _waterLogRow(FarmMonthlyReport r) {
 const _weekdays = ['월', '화', '수', '목', '금', '토', '일'];
 
 String _day(FarmMonthlyReport r, int day) => '${r.month}/$day (${_weekdays[DateTime(r.year, r.month, day).weekday - 1]})';
+
+/// One 해역/품종/수조 row; dropped when there's no value ("-" or empty).
+String _metaRow(String label, String value) =>
+    value.trim().isEmpty || value.trim() == '-' ? '' : '<tr><td>$label</td><td>${_e(value)}</td></tr>';
 
 String _chip(MonthlyEventType type, String label) => '<span class="chip" style="--c:var(--t-${type.name})">${_e(label)}</span>';
 

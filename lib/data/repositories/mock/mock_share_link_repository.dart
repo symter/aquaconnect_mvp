@@ -1,7 +1,7 @@
 import 'dart:math';
 
+import '../../mock/mock_seed.dart';
 import '../../models/share_link.dart';
-import '../../models/shared_report_view.dart';
 import '../farm_repository.dart';
 import '../report_repository.dart';
 import '../share_link_repository.dart';
@@ -16,12 +16,7 @@ class MockShareLinkRepository implements ShareLinkRepository {
   final FarmRepository _farmRepository;
   final ReportRepository _reportRepository;
 
-  // A fixed, never-expiring demo link so `/r/demo` always works in mock
-  // mode without first walking through the create-link flow — handy for
-  // trying the public SharedReportWeb page on its own.
-  final List<ShareLink> _links = [
-    ShareLink(id: 'link-demo', farmId: 'farm-sinil-1', token: 'demo', createdAt: DateTime.now()),
-  ];
+  final List<ShareLink> _links = [];
 
   static const _tokenChars = 'abcdefghijklmnopqrstuvwxyz0123456789';
   final _random = Random();
@@ -48,6 +43,22 @@ class MockShareLinkRepository implements ShareLinkRepository {
   }
 
   @override
+  Future<void> revokeShareLink(String linkId) async {
+    final i = _links.indexWhere((l) => l.id == linkId);
+    if (i == -1) return;
+    final l = _links[i];
+    _links[i] = ShareLink(
+      id: l.id,
+      farmId: l.farmId,
+      token: l.token,
+      createdAt: l.createdAt,
+      expiresAt: l.expiresAt,
+      revokedAt: DateTime.now(),
+      farmName: l.farmName,
+    );
+  }
+
+  @override
   Future<SharedReportBundle?> resolveToken(String token) async {
     ShareLink? link;
     for (final l in _links) {
@@ -64,22 +75,19 @@ class MockShareLinkRepository implements ShareLinkRepository {
     final report = await _reportRepository.getLatestReport(link.farmId);
     if (report == null) return null;
 
-    final bundle = SharedReportBundle(farm: farm, report: report, link: link);
     return SharedReportBundle(
       farm: farm,
       report: report,
       link: link,
-      view: SharedReportView.fromBundle(bundle, withExamples: true),
+      organizationName: MockSeed.organization.name,
+      assignedMemberPhone: MockSeed.currentMember.phone,
     );
   }
 
-  @override
-  Future<void> setActionDone({required String token, required String actionId, required bool done}) async {
-    await Future<void>.delayed(const Duration(milliseconds: 250));
-  }
-
+  /// Mock mode has no institute on the other end; the sheet's success
+  /// state is all there is to see.
   @override
   Future<void> sendInquiry({required String token, required String message}) async {
-    await Future<void>.delayed(const Duration(milliseconds: 500));
+    await Future<void>.delayed(const Duration(milliseconds: 400));
   }
 }

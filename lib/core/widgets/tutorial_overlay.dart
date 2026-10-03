@@ -15,6 +15,7 @@ class TutorialOverlay extends StatelessWidget {
     required this.onPrimary,
     this.onSkip,
     this.pointsDown = false,
+    this.arrowX = 0,
   });
 
   final IconData icon;
@@ -28,6 +29,10 @@ class TutorialOverlay extends StatelessWidget {
 
   /// Adds a down-arrow under the card, for intros that describe a bottom tab.
   final bool pointsDown;
+
+  /// Horizontal position of that arrow, -1 (left edge) to 1 (right edge), so
+  /// it sits above the tab being described.
+  final double arrowX;
 
   @override
   Widget build(BuildContext context) {
@@ -84,7 +89,11 @@ class TutorialOverlay extends StatelessWidget {
                         ],
                       ),
                     ),
-                    if (pointsDown) const Icon(Icons.arrow_drop_down, size: 40, color: Colors.white),
+                    if (pointsDown)
+                      Align(
+                        alignment: Alignment(arrowX, 0),
+                        child: const Icon(Icons.arrow_drop_down, size: 40, color: Colors.white),
+                      ),
                   ],
                 ),
               ),

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../../models/invitation.dart';
 import '../../models/member.dart';
 import '../../services/api_client.dart';
 import '../../services/auth_token_store.dart';
@@ -55,6 +56,49 @@ class RemoteAuthRepository implements AuthRepository {
     await _tokenStore.write(json['token'] as String);
     _session = _sessionFromJson(json);
     _controller.add(_session);
+  }
+
+  @override
+  Future<InvitationInfo> lookupInvitation(String code) async {
+    final json = await _api.get('/api/public/invitations/${Uri.encodeComponent(code)}') as Map<String, dynamic>;
+    return InvitationInfo.fromJson(json);
+  }
+
+  @override
+  Future<void> acceptInvitation(String code, InviteAcceptRequest request) async {
+    final json = await _api.post('/api/public/invitations/${Uri.encodeComponent(code)}/accept', body: request.toJson())
+        as Map<String, dynamic>;
+    await _tokenStore.write(json['token'] as String);
+    _session = _sessionFromJson(json);
+    _controller.add(_session);
+  }
+
+  @override
+  Future<void> refreshSession() async {
+    if (_session == null) return;
+    final json = await _api.get('/api/auth/me') as Map<String, dynamic>;
+    _session = _sessionFromJson(json);
+    _controller.add(_session);
+  }
+
+  @override
+  Future<void> signUp(SignupRequest request) async {
+    final json = await _api.post('/api/auth/signup', body: request.toJson()) as Map<String, dynamic>;
+    await _tokenStore.write(json['token'] as String);
+    _session = _sessionFromJson(json);
+    _controller.add(_session);
+  }
+
+  @override
+  Future<bool> isEmailAvailable(String email) async {
+    final json = await _api.get('/api/auth/check-email', query: {'email': email}) as Map<String, dynamic>;
+    return json['available'] == true;
+  }
+
+  @override
+  Future<String> termsVersion() async {
+    final json = await _api.get('/api/auth/terms') as Map<String, dynamic>;
+    return json['termsVersion'] as String;
   }
 
   @override

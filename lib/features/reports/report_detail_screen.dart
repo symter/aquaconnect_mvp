@@ -147,9 +147,9 @@ class _Body extends ConsumerWidget {
                   children: [
                     Expanded(child: _StatTile(value: '${r.weeklyMortality}마리', label: '주간 폐사')),
                     const SizedBox(width: 8),
-                    Expanded(child: _StatTile(value: '${r.avgTemp.toStringAsFixed(1)}℃', label: '평균 수온')),
+                    Expanded(child: _StatTile(value: r.avgTemp == null ? '-' : '${r.avgTemp!.toStringAsFixed(1)}℃', label: '평균 수온')),
                     const SizedBox(width: 8),
-                    Expanded(child: _StatTile(value: 'D-${r.lastVisitDays}', label: '최근 방문')),
+                    Expanded(child: _StatTile(value: r.lastVisitDays == null ? '기록 없음' : 'D-${r.lastVisitDays}', label: '최근 방문')),
                   ],
                 ),
               ],
@@ -348,10 +348,20 @@ class _BottomActions extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          TextButton.icon(
-            onPressed: () => showShareLinkSheet(context, farm: farm),
-            icon: const Icon(Icons.link, size: 14, color: AppColors.brand),
-            label: const Text('어가에 리포트 링크 공유', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.brand)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              TextButton.icon(
+                onPressed: () => context.push('/reports/${farm.id}/farm-report'),
+                icon: const Icon(Icons.visibility_outlined, size: 14, color: AppColors.brand),
+                label: const Text('어가 화면 미리보기', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.brand)),
+              ),
+              TextButton.icon(
+                onPressed: () => showShareLinkSheet(context, farm: farm),
+                icon: const Icon(Icons.link, size: 14, color: AppColors.brand),
+                label: const Text('어가에 리포트 링크 공유', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.brand)),
+              ),
+            ],
           ),
           Row(
             children: [

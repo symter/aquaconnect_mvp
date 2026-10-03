@@ -24,6 +24,7 @@ class ShareLink {
     required this.createdAt,
     this.expiresAt,
     this.revokedAt,
+    this.farmName,
   });
 
   final String id;
@@ -32,6 +33,9 @@ class ShareLink {
   final DateTime createdAt;
   final DateTime? expiresAt;
   final DateTime? revokedAt;
+
+  /// Present in the institute's link list (`GET /api/share-links`).
+  final String? farmName;
 
   bool get isActive {
     if (revokedAt != null) return false;
@@ -48,5 +52,6 @@ class ShareLink {
         createdAt: DateTime.parse(json['createdAt'] as String),
         expiresAt: json['expiresAt'] == null ? null : DateTime.parse(json['expiresAt'] as String),
         revokedAt: json['revokedAt'] == null ? null : DateTime.parse(json['revokedAt'] as String),
+        farmName: json['farmName'] as String?,
       );
 }

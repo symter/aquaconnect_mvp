@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/providers/data_providers.dart';
+import '../../core/providers/notification_providers.dart';
 import '../../core/providers/onboarding_provider.dart';
 import '../../core/providers/repository_providers.dart';
 import '../../core/theme/app_colors.dart';
@@ -17,8 +18,10 @@ class MyPageScreen extends ConsumerWidget {
     final session = ref.watch(authStateProvider).valueOrNull;
     final farmsAsync = ref.watch(farmsProvider);
     final selectedStation = ref.watch(selectedOceanStationProvider).valueOrNull;
-    final surfaceTemp = ref.watch(selectedStationSurfaceTempProvider).valueOrNull;
+    final readingsAsync = ref.watch(selectedStationReadingsProvider);
     final digestSettings = ref.watch(digestSettingsProvider).valueOrNull;
+    final shareLinksAsync = ref.watch(shareLinksProvider);
+    final pushStatus = ref.watch(pushStatusProvider).valueOrNull;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -35,7 +38,10 @@ class MyPageScreen extends ConsumerWidget {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
                 children: [
-                  Container(
+                  InkWell(
+                    onTap: () => context.push('/mypage/organization'),
+                    borderRadius: BorderRadius.circular(14),
+                    child: Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(color: AppColors.surface, border: Border.all(color: AppColors.border), borderRadius: BorderRadius.circular(14)),
                     child: Row(
@@ -74,6 +80,7 @@ class MyPageScreen extends ConsumerWidget {
                       ],
                     ),
                   ),
+                  ),
                   const SizedBox(height: 16),
                   _SectionLabel('관리원 관리'),
                   const SizedBox(height: 8),
@@ -81,7 +88,6 @@ class MyPageScreen extends ConsumerWidget {
                     _MenuItem(
                       icon: Icons.groups_outlined,
                       label: '구성원 관리',
-                      trailing: '4명',
                       onTap: () => context.push('/mypage/members'),
                     ),
                     _MenuItem(
@@ -90,12 +96,20 @@ class MyPageScreen extends ConsumerWidget {
                       trailing: farmsAsync.maybeWhen(data: (f) => '${f.length}곳', orElse: () => ''),
                       onTap: () => context.push('/mypage/farms'),
                     ),
-                    const _MenuItem(icon: Icons.history, label: '변경 이력'),
-                    const _MenuItem(icon: Icons.link, label: '공유 링크 관리', trailing: '발급 2건'),
                     _MenuItem(
-                      icon: Icons.mail_outline,
-                      label: '초대 수락 화면 미리보기 (테스트)',
-                      onTap: () => context.push('/mypage/invite-preview'),
+                      icon: Icons.history,
+                      label: '변경 이력',
+                      trailing: '최근 3개월',
+                      onTap: () => context.push('/mypage/history'),
+                    ),
+                    _MenuItem(
+                      icon: Icons.link,
+                      label: '공유 링크 관리',
+                      trailing: shareLinksAsync.maybeWhen(
+                        data: (links) => '열람 가능 ${links.where((l) => l.isActive).length}건',
+                        orElse: () => '',
+                      ),
+                      onTap: () => context.push('/mypage/share-links'),
                     ),
                   ]),
                   const SizedBox(height: 16),
@@ -108,9 +122,13 @@ class MyPageScreen extends ConsumerWidget {
                       trailing: selectedStation?.name ?? '미설정',
                       subtitle: selectedStation == null
                           ? null
-                          : (surfaceTemp != null
-                              ? '표층수온 ${surfaceTemp.waterTempC!.toStringAsFixed(1)}℃'
-                              : '표층수온 불러오는 중…'),
+                          : readingsAsync.when(
+                              data: (readings) => readings.isEmpty
+                                  ? '수온 정보 없음'
+                                  : readings.map((o) => '${o.layer} ${o.waterTempC!.toStringAsFixed(1)}℃').join(' · '),
+                              loading: () => '수온 불러오는 중…',
+                              error: (_, _) => '수온을 불러오지 못했어요',
+                            ),
                       onTap: () => showOceanStationPickerSheet(context),
                     ),
                     _MenuItem(
@@ -121,7 +139,12 @@ class MyPageScreen extends ConsumerWidget {
                           : (digestSettings.dailyEnabled ? formatKoreanTime(digestSettings.dailyTime) : '꺼짐'),
                       onTap: () => context.push('/mypage/daily-summary'),
                     ),
-                    const _MenuItem(icon: Icons.notifications_none, label: '알림 설정'),
+                    _MenuItem(
+                      icon: Icons.notifications_none,
+                      label: '알림 설정',
+                      trailing: pushStatus == null ? '' : (pushStatus.enabled ? '켜짐' : '꺼짐'),
+                      onTap: () => context.push('/mypage/notifications'),
+                    ),
                     const _MenuItem(icon: Icons.file_download_outlined, label: '데이터 내보내기'),
                     _MenuItem(
                       icon: Icons.help_outline,
@@ -135,7 +158,10 @@ class MyPageScreen extends ConsumerWidget {
                   const SizedBox(height: 12),
                   Center(
                     child: TextButton(
-                      onPressed: () => ref.read(authRepositoryProvider).signOut(),
+                      onPressed: () async {
+                        await ref.read(pushControllerProvider).detachBeforeSignOut();
+                        await ref.read(authRepositoryProvider).signOut();
+                      },
                       child: const Text('로그아웃', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.textMuted)),
                     ),
                   ),

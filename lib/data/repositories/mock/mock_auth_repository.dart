@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import '../../mock/mock_seed.dart';
+import '../../models/invitation.dart';
+import '../../models/member.dart';
 import '../auth_repository.dart';
 
 /// In-memory auth for local/demo runs. Any non-empty email/password pair
@@ -37,6 +39,53 @@ class MockAuthRepository implements AuthRepository {
     );
     _controller.add(_session);
   }
+
+  @override
+  Future<void> refreshSession() async {}
+
+  /// Mock mode has no shared invite store, so any code shows a demo invite.
+  @override
+  Future<InvitationInfo> lookupInvitation(String code) async => InvitationInfo(
+        orgName: MockSeed.organization.name,
+        role: MemberRole.staff,
+        inviterName: MockSeed.currentMember.name,
+        expiresAt: DateTime.now().add(const Duration(days: 7)),
+        termsVersion: 'mock',
+      );
+
+  @override
+  Future<void> acceptInvitation(String code, InviteAcceptRequest request) async {
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    _session = AuthSession(
+      member: Member(
+        id: 'member-${DateTime.now().microsecondsSinceEpoch}',
+        orgId: MockSeed.orgId,
+        name: request.name,
+        role: MemberRole.staff,
+        phone: request.phone,
+      ),
+      organization: MockSeed.organization,
+    );
+    _controller.add(_session);
+  }
+
+  /// Mock mode: signs in as the new owner of a new in-memory institute.
+  @override
+  Future<void> signUp(SignupRequest request) async {
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    final orgId = 'org-${DateTime.now().microsecondsSinceEpoch}';
+    _session = AuthSession(
+      member: Member(id: 'member-$orgId', orgId: orgId, name: request.name, role: MemberRole.owner, phone: request.phone),
+      organization: Organization(id: orgId, name: request.organizationName),
+    );
+    _controller.add(_session);
+  }
+
+  @override
+  Future<bool> isEmailAvailable(String email) async => true;
+
+  @override
+  Future<String> termsVersion() async => 'mock';
 
   @override
   Future<void> signOut() async {

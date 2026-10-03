@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import '../../mock/mock_seed.dart';
 import '../../models/memo.dart';
@@ -10,6 +11,7 @@ class MockMemoRepository implements MemoRepository {
   }
 
   late List<Memo> _memos;
+  final _photos = <String, Uint8List>{};
   final _controller = StreamController<List<Memo>>.broadcast();
 
   List<Memo> get _sorted => [..._memos]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -29,15 +31,29 @@ class MockMemoRepository implements MemoRepository {
   }
 
   @override
+  Future<Uint8List> loadPhoto(String photoId) async {
+    final bytes = _photos[photoId];
+    if (bytes == null) throw Exception('사진을 찾을 수 없습니다.');
+    return bytes;
+  }
+
+  @override
   Future<Memo> addMemo({
     String? farmId,
     String? farmName,
     required String content,
     required List<String> tags,
-    int photoCount = 0,
+    List<MemoPhotoUpload> photos = const [],
   }) async {
+    final stamp = DateTime.now().microsecondsSinceEpoch;
+    final photoIds = <String>[];
+    for (var i = 0; i < photos.length; i++) {
+      final id = 'photo-$stamp-$i';
+      _photos[id] = photos[i].bytes;
+      photoIds.add(id);
+    }
     final memo = Memo(
-      id: 'memo-${DateTime.now().microsecondsSinceEpoch}',
+      id: 'memo-$stamp',
       orgId: MockSeed.orgId,
       farmId: farmId,
       farmName: farmName,
@@ -46,7 +62,8 @@ class MockMemoRepository implements MemoRepository {
       content: content,
       tags: tags,
       createdAt: DateTime.now(),
-      photoCount: photoCount,
+      photoCount: photoIds.length,
+      photoIds: photoIds,
     );
     _memos = [memo, ..._memos];
     _emit();

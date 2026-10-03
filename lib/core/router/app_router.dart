@@ -5,14 +5,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/auth/login_screen.dart';
+import '../../features/auth/signup_screen.dart';
 import '../../features/home/home_screen.dart';
 import '../../features/info/info_screen.dart';
 import '../../features/memo/memo_screen.dart';
+import '../../features/mypage/change_history_screen.dart';
 import '../../features/mypage/daily_summary_settings_screen.dart';
 import '../../features/mypage/farm_management_screen.dart';
 import '../../features/mypage/invite_accept_screen.dart';
 import '../../features/mypage/member_management_screen.dart';
 import '../../features/mypage/mypage_screen.dart';
+import '../../features/mypage/organization_info_screen.dart';
+import '../../features/mypage/share_link_management_screen.dart';
+import '../../features/notifications/notification_settings_screen.dart';
+import '../../features/notifications/notifications_screen.dart';
 import '../../features/reports/all_report_screen.dart';
 import '../../features/reports/report_detail_screen.dart';
 import '../../features/reports/shared_report_web_screen.dart';
@@ -47,13 +53,17 @@ final routerProvider = Provider<GoRouter>((ref) {
       final loggedIn = authRepository.currentSession != null;
       final path = state.matchedLocation;
 
-      final isPublic = path == '/login' || path.startsWith('/r/');
+      final isAuthPage = path == '/login' || path == '/signup';
+      // /invite/<code> stays reachable when signed in, to say so on the page.
+      final isPublic = isAuthPage || path.startsWith('/r/') || path.startsWith('/invite/');
       if (!loggedIn && !isPublic) return '/login';
-      if (loggedIn && path == '/login') return '/';
+      // Covers finishing signup too: the new account is signed in, so Home.
+      if (loggedIn && isAuthPage) return '/';
       return null;
     },
     routes: [
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
+      GoRoute(path: '/signup', builder: (context, state) => const SignupScreen()),
       GoRoute(
         path: '/r/:token',
         builder: (context, state) => SharedReportWebScreen(token: state.pathParameters['token']!),
@@ -79,12 +89,32 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const MemberManagementScreen(),
       ),
       GoRoute(
+        path: '/mypage/history',
+        builder: (context, state) => const ChangeHistoryScreen(),
+      ),
+      GoRoute(
+        path: '/mypage/organization',
+        builder: (context, state) => const OrganizationInfoScreen(),
+      ),
+      GoRoute(
+        path: '/mypage/share-links',
+        builder: (context, state) => const ShareLinkManagementScreen(),
+      ),
+      GoRoute(
         path: '/mypage/daily-summary',
         builder: (context, state) => const DailySummarySettingsScreen(),
       ),
       GoRoute(
-        path: '/mypage/invite-preview',
-        builder: (context, state) => const InviteAcceptScreen(),
+        path: '/notifications',
+        builder: (context, state) => const NotificationsScreen(),
+      ),
+      GoRoute(
+        path: '/mypage/notifications',
+        builder: (context, state) => const NotificationSettingsScreen(),
+      ),
+      GoRoute(
+        path: '/invite/:code',
+        builder: (context, state) => InviteAcceptScreen(code: state.pathParameters['code']!),
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) => AppShell(navigationShell: navigationShell),

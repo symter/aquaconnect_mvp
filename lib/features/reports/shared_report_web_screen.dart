@@ -3,13 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../../core/config/env.dart';
 import '../../core/providers/repository_providers.dart';
-import '../../data/mock/mock_farm_monthly_reports.dart';
+import '../../data/logic/farm_monthly_report_builder.dart';
 import '../../data/models/farm.dart';
 import '../../data/models/farm_monthly_report.dart';
 import '../../data/models/report.dart';
-import '../../data/models/shared_report_view.dart';
 import 'farm_report_frame.dart';
 import 'farm_report_html.dart';
 import 'inquiry_sheet.dart';
@@ -40,14 +38,15 @@ class SharedReportWebScreen extends ConsumerStatefulWidget {
 }
 
 class _Loaded {
-  const _Loaded({required this.farm, required this.report, required this.html, this.view});
+  const _Loaded({required this.farm, required this.report, required this.html, required this.orgName, this.phone});
 
   final Farm farm;
   final FarmMonthlyReport report;
   final String html;
+  final String orgName;
 
-  /// Share-link data for the inquiry sheet; null in preview.
-  final SharedReportView? view;
+  /// The assigned staff member's phone, for the inquiry sheet's 전화 걸기.
+  final String? phone;
 }
 
 class _SharedReportWebScreenState extends ConsumerState<SharedReportWebScreen> {
@@ -57,8 +56,8 @@ class _SharedReportWebScreenState extends ConsumerState<SharedReportWebScreen> {
   Future<_Loaded?> _load() async {
     final bundle = await ref.read(shareLinkRepositoryProvider).resolveToken(widget.token!);
     if (bundle == null) return null;
-    final view = bundle.view ?? SharedReportView.fromBundle(bundle);
-    return _build(bundle.farm, bundle.report, orgName: view.orgName, view: view);
+    final orgName = (bundle.organizationName?.isNotEmpty ?? false) ? bundle.organizationName! : '수산질병관리원';
+    return _build(bundle.farm, bundle.report, orgName: orgName, phone: bundle.assignedMemberPhone);
   }
 
   Future<_Loaded?> _loadPreview() async {
@@ -66,27 +65,31 @@ class _SharedReportWebScreenState extends ConsumerState<SharedReportWebScreen> {
     if (farm == null) return null;
     final report = await ref.read(reportRepositoryProvider).getLatestReport(farm.id);
     final orgName = ref.read(authStateProvider).valueOrNull?.organization.name ?? '수산질병관리원';
-    return _build(farm, report, orgName: orgName);
+    return _build(farm, report, orgName: orgName, phone: farm.assignedMemberPhone);
   }
 
-  _Loaded _build(Farm farm, Report? report, {required String orgName, SharedReportView? view}) {
-    final monthly = Env.useMock
-        ? FarmMonthlyReports.forFarm(farm, report: report, orgName: orgName)
-        : FarmMonthlyReports.fallback(farm, report: report, orgName: orgName);
-    return _Loaded(farm: farm, report: monthly, html: buildFarmReportHtml(monthly), view: view);
+  _Loaded _build(Farm farm, Report? report, {required String orgName, String? phone}) {
+    final monthly = FarmMonthlyReportBuilder.build(farm, report: report, orgName: orgName, managerPhone: phone);
+    return _Loaded(
+      farm: farm,
+      report: monthly,
+      html: buildFarmReportHtml(monthly),
+      orgName: orgName,
+      phone: (phone?.isNotEmpty ?? false) ? phone : null,
+    );
   }
 
   Future<void> _sendInquiry(String message) =>
       ref.read(shareLinkRepositoryProvider).sendInquiry(token: widget.token!, message: message);
 
-  void _openInquiry(SharedReportView view) {
+  void _openInquiry(_Loaded loaded) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       barrierColor: SharedTokens.scrim,
       constraints: const BoxConstraints(maxWidth: SharedTokens.maxWidth),
-      builder: (_) => InquirySheet(orgName: view.orgName, phone: view.contactPhone, onSend: _sendInquiry),
+      builder: (_) => InquirySheet(orgName: loaded.orgName, phone: loaded.phone, onSend: _sendInquiry),
     );
   }
 
@@ -125,7 +128,6 @@ class _SharedReportWebScreenState extends ConsumerState<SharedReportWebScreen> {
                       ),
                     );
                   }
-                  final view = loaded.view;
                   return SafeArea(
                     child: Column(
                       children: [
@@ -133,8 +135,8 @@ class _SharedReportWebScreenState extends ConsumerState<SharedReportWebScreen> {
                         if (widget.isPreview)
                           const Padding(padding: EdgeInsets.fromLTRB(12, 10, 12, 0), child: _PreviewBanner()),
                         Expanded(child: FarmReportFrame(html: loaded.html, controller: _frame)),
-                        if (view != null)
-                          _InquiryCta(orgName: view.orgName, onTap: () => _openInquiry(view))
+                        if (!widget.isPreview)
+                          _InquiryCta(orgName: loaded.orgName, onTap: () => _openInquiry(loaded))
                         else
                           _PreviewActions(
                             onMemo: () => context.go('/memo'),
@@ -197,14 +199,17 @@ class _Header extends StatelessWidget {
       decoration: const BoxDecoration(color: SharedTokens.card, border: Border(bottom: BorderSide(color: SharedTokens.line))),
       child: Row(
         children: [
-          IconButton(
-            tooltip: '뒤로가기',
-            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-            icon: const Icon(Icons.arrow_back_ios_new, size: 18, color: SharedTokens.text),
-            onPressed: () {
-              if (context.canPop()) context.pop();
-            },
-          ),
+          // The farm opens the share link as the first page, so there's
+          // nothing to go back to — keep the slot so the title stays centered.
+          if (context.canPop())
+            IconButton(
+              tooltip: '뒤로가기',
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+              icon: const Icon(Icons.arrow_back_ios_new, size: 18, color: SharedTokens.text),
+              onPressed: () => context.pop(),
+            )
+          else
+            const SizedBox(width: 48),
           Expanded(
             child: Column(
               children: [

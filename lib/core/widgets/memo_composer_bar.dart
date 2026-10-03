@@ -1,0 +1,68 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../providers/data_providers.dart';
+import '../providers/repository_providers.dart';
+import '../theme/app_colors.dart';
+import 'memo_composer.dart';
+
+/// The memo composer as a bar pinned to the bottom of a screen (above the
+/// tab bar), matching the Memo tab design. Saves through the memo
+/// repository, photos included.
+class MemoComposerBar extends ConsumerWidget {
+  const MemoComposerBar({super.key, this.caption, this.hintText, this.confirmOnSave = false});
+
+  final String? caption;
+  final String? hintText;
+
+  /// Show a "saved" snackbar — useful where the memo list isn't on screen.
+  final bool confirmOnSave;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final farms = ref.watch(farmsProvider).valueOrNull ?? const [];
+    final members = ref.watch(orgMembersProvider).valueOrNull ?? const [];
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 9, 16, 10),
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        border: Border(top: BorderSide(color: AppColors.border)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (caption != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+              child: Text(caption!, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.textMuted)),
+            ),
+          MemoComposer(
+            farms: farms,
+            members: members,
+            hintText: hintText ?? "/ 로 양식장·담당자 지정",
+            onSubmit: (draft) async {
+              await ref.read(memoRepositoryProvider).addMemo(
+                    farmId: draft.farm?.id,
+                    farmName: draft.farm?.name,
+                    content: draft.content,
+                    tags: draft.tags,
+                    photos: draft.photos,
+                  );
+              // A farm memo re-scores that farm server-side (risk / 최근 방문),
+              // so refresh what shows those.
+              if (draft.farm != null) {
+                ref.invalidate(farmsProvider);
+                ref.invalidate(reportProvider(draft.farm!.id));
+              }
+              if (confirmOnSave && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('메모가 저장되었습니다.')));
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
