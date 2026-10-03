@@ -1,10 +1,11 @@
 import 'farm.dart';
 
 /// How Home orders / sections the 담당 양식장 list.
+/// 지역별 is the default; the order here is also the order in the sort menu.
 enum FarmSort {
-  risk,
   region,
-  group;
+  group,
+  risk;
 
   String get label => switch (this) {
         FarmSort.risk => '위험도순',
@@ -12,7 +13,7 @@ enum FarmSort {
         FarmSort.group => '그룹별',
       };
 
-  static FarmSort fromKey(String? key) => FarmSort.values.firstWhere((s) => s.name == key, orElse: () => FarmSort.risk);
+  static FarmSort fromKey(String? key) => FarmSort.values.firstWhere((s) => s.name == key, orElse: () => FarmSort.region);
 }
 
 /// A named set of farms the institute built itself ("완도 A권역" …). A farm

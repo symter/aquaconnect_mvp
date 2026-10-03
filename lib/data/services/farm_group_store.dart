@@ -8,7 +8,7 @@ import '../models/farm_group.dart';
 /// groups. Per-device, persisted locally like [DigestSettingsStore]: there is
 /// no groups API yet, so groups are not shared between devices or members.
 class FarmListPrefs {
-  const FarmListPrefs({this.sort = FarmSort.risk, this.groups = const []});
+  const FarmListPrefs({this.sort = FarmSort.region, this.groups = const []});
 
   final FarmSort sort;
   final List<FarmGroup> groups;
