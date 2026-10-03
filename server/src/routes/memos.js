@@ -13,7 +13,9 @@ const MAX_PHOTOS = 5;
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 const ALLOWED_PHOTO_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
-function toMemoJson(row) {
+// [withEdits] — only owners/directors see the 수정 이력 contents; everyone
+// else just gets the count (for the "수정됨" label).
+function toMemoJson(row, { withEdits = false } = {}) {
   return {
     id: row.id,
     orgId: row.org_id,
@@ -27,6 +29,8 @@ function toMemoJson(row) {
     photoIds: row.photo_ids ?? [],
     readByFarm: row.read_by_farm,
     createdAt: row.created_at,
+    editCount: row.edit_count ?? 0,
+    edits: withEdits ? (row.edits ?? []) : [],
   };
 }
 
@@ -35,17 +39,38 @@ const PHOTO_IDS_SQL = `coalesce(
   '{}'
 ) as photo_ids`;
 
+const EDITS_SQL = `(select count(*)::int from memo_edits e where e.memo_id = mm.id) as edit_count,
+coalesce(
+  (select json_agg(json_build_object('editorName', e.editor_name, 'editedAt', e.edited_at, 'previousContent', e.previous_content)
+                   order by e.edited_at)
+   from memo_edits e where e.memo_id = mm.id),
+  '[]'::json
+) as edits`;
+
+const MEMO_SELECT_SQL = `select mm.*, f.name as farm_name, ${PHOTO_IDS_SQL}, ${EDITS_SQL}
+  from memos mm left join farms f on f.id = mm.farm_id`;
+
+async function currentMember(memberId) {
+  const { rows } = await query('select name, role from members where id = $1', [memberId]);
+  return rows[0] ?? null;
+}
+
+const isManager = (me) => ['owner', 'director'].includes(me?.role);
+
+// Institute memos are signed "수산질병관리원 · <name>" (see POST below).
+const isAuthor = (memo, me) => memo.author_type === 'institute' && !!me && memo.author_name.endsWith(` · ${me.name}`);
+
 memosRouter.get('/', async (req, res) => {
   const orgId = await orgIdForMember(req.memberId);
   const farmId = req.query.farmId ?? null;
+  const me = await currentMember(req.memberId);
   const { rows } = await query(
-    `select mm.*, f.name as farm_name, ${PHOTO_IDS_SQL}
-     from memos mm left join farms f on f.id = mm.farm_id
+    `${MEMO_SELECT_SQL}
      where mm.org_id = $1 and ($2::uuid is null or mm.farm_id = $2)
      order by mm.created_at desc`,
     [orgId, farmId],
   );
-  res.json(rows.map(toMemoJson));
+  res.json(rows.map((row) => toMemoJson(row, { withEdits: isManager(me) })));
 });
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -144,7 +169,52 @@ memosRouter.post('/', async (req, res) => {
   res.status(201).json(toMemoJson({ ...memoRow, farm_name: farmName, photo_ids: photoIds }));
 });
 
-// 메모 삭제: the author or an owner/director. Photos go with it (FK cascade).
+// 메모 수정: institute memos only (a farm's 문의 stays as the farm sent it),
+// by the author or an owner/director. The old content goes to memo_edits.
+memosRouter.patch('/:id', async (req, res) => {
+  if (!UUID_RE.test(req.params.id)) return res.status(404).json({ error: '메모를 찾을 수 없습니다.' });
+  const content = typeof req.body?.content === 'string' ? req.body.content.trim() : '';
+  if (!content) return res.status(400).json({ error: '메모 내용을 입력해주세요.' });
+
+  const orgId = await orgIdForMember(req.memberId);
+  const { rows: memoRows } = await query(
+    'select id, farm_id, author_type, author_name, content from memos where id = $1 and org_id = $2',
+    [req.params.id, orgId],
+  );
+  const memo = memoRows[0];
+  if (!memo) return res.status(404).json({ error: '메모를 찾을 수 없습니다.' });
+
+  const me = await currentMember(req.memberId);
+  if (memo.author_type !== 'institute') return res.status(403).json({ error: '어가가 보낸 메모는 수정할 수 없습니다.' });
+  if (!isManager(me) && !isAuthor(memo, me)) {
+    return res.status(403).json({ error: '작성자 또는 소유자·원장만 수정할 수 있습니다.' });
+  }
+
+  if (content !== memo.content) {
+    const client = await pool.connect();
+    try {
+      await client.query('begin');
+      await client.query(
+        'insert into memo_edits (memo_id, editor_member_id, editor_name, previous_content) values ($1, $2, $3, $4)',
+        [memo.id, req.memberId, me?.name ?? '', memo.content],
+      );
+      await client.query('update memos set content = $2 where id = $1', [memo.id, content]);
+      await client.query('commit');
+    } catch (err) {
+      await client.query('rollback');
+      throw err;
+    } finally {
+      client.release();
+    }
+    // An edited 폐사 count changes the farm's risk.
+    if (memo.farm_id) await refreshReportQuietly(memo.farm_id);
+  }
+
+  const { rows } = await query(`${MEMO_SELECT_SQL} where mm.id = $1`, [memo.id]);
+  res.json(toMemoJson(rows[0], { withEdits: isManager(me) }));
+});
+
+// 메모 삭제: the author or an owner/director. Photos and edits go with it (FK cascade).
 memosRouter.delete('/:id', async (req, res) => {
   if (!UUID_RE.test(req.params.id)) return res.status(404).json({ error: '메모를 찾을 수 없습니다.' });
   const orgId = await orgIdForMember(req.memberId);
@@ -155,11 +225,10 @@ memosRouter.delete('/:id', async (req, res) => {
   const memo = memoRows[0];
   if (!memo) return res.status(404).json({ error: '메모를 찾을 수 없습니다.' });
 
-  const { rows: memberRows } = await query('select name, role from members where id = $1', [req.memberId]);
-  const me = memberRows[0];
-  const isManager = ['owner', 'director'].includes(me?.role);
-  const isAuthor = memo.author_type === 'institute' && !!me && memo.author_name.endsWith(` · ${me.name}`);
-  if (!isManager && !isAuthor) return res.status(403).json({ error: '작성자 또는 소유자·원장만 삭제할 수 있습니다.' });
+  const me = await currentMember(req.memberId);
+  if (!isManager(me) && !isAuthor(memo, me)) {
+    return res.status(403).json({ error: '작성자 또는 소유자·원장만 삭제할 수 있습니다.' });
+  }
 
   await query('delete from memos where id = $1', [memo.id]);
   // A removed 폐사 memo changes the farm's risk and 최근 방문.

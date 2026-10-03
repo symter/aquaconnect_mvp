@@ -71,6 +71,26 @@ class MockMemoRepository implements MemoRepository {
   }
 
   @override
+  Future<Memo> updateMemo({required String id, required String content}) async {
+    final index = _memos.indexWhere((m) => m.id == id);
+    if (index == -1) throw Exception('메모를 찾을 수 없습니다.');
+    final old = _memos[index];
+    final text = content.trim();
+    if (text.isEmpty) throw Exception('메모 내용을 입력해주세요.');
+    if (text == old.content) return old;
+    final updated = old.copyWith(
+      content: text,
+      edits: [
+        ...old.edits,
+        MemoEdit(editorName: MockSeed.currentMember.name, editedAt: DateTime.now(), previousContent: old.content),
+      ],
+    );
+    _memos = [..._memos]..[index] = updated;
+    _emit();
+    return updated;
+  }
+
+  @override
   Future<void> deleteMemo(String id) async {
     _memos = _memos.where((m) => m.id != id).toList();
     _emit();

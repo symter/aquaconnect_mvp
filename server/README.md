@@ -74,6 +74,7 @@ Postgres가 로컬에 없다면 `npm run smoke-test`로 (pg-mem 기반 인메모
 | PUT | `/api/farms/:id` | 양식장 정보 수정 |
 | DELETE | `/api/farms/:id` | 양식장 삭제 |
 | GET/POST | `/api/memos` | 메모 조회(`?farmId=`)/작성 |
+| PATCH | `/api/memos/:id` | 메모 수정 `{content}` — 기관 메모만, 작성자 또는 소유자·원장. 수정 전 내용은 `memo_edits`에 남고, 이력 내용은 소유자·원장에게만 응답 (다른 구성원은 `editCount`만) |
 | DELETE | `/api/memos/:id` | 메모 삭제 (작성자 또는 소유자·원장) |
 | GET | `/api/disease-info` | 수산질병 정보 |
 | GET | `/api/reports/:farmId` | 최신 리포트(없으면 즉시 생성) |

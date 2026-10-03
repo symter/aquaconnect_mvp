@@ -15,6 +15,10 @@ abstract class MemoRepository {
     List<MemoPhotoUpload> photos,
   });
 
+  /// Replaces an institute memo's content and logs the previous content as an
+  /// edit by the signed-in member. Only its author or an owner/director may.
+  Future<Memo> updateMemo({required String id, required String content});
+
   /// Deletes a memo (and its photos).
   Future<void> deleteMemo(String id);
 

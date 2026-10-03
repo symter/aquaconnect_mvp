@@ -21,11 +21,13 @@ class MemoCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final member = ref.watch(authStateProvider).valueOrNull?.member;
     final isPrivileged = member?.role == MemberRole.owner || member?.role == MemberRole.director;
-    // Institute memos can be deleted by their author ("기관명 · 이름") or by an
-    // owner/director — the same rule the server enforces.
-    final canDelete = memo.authorType == MemoAuthorType.institute &&
+    // Institute memos can be edited or deleted by their author ("기관명 · 이름")
+    // or by an owner/director — the same rule the server enforces. A farm's
+    // 문의 memo is never editable.
+    final canModify = memo.authorType == MemoAuthorType.institute &&
         member != null &&
         (isPrivileged || memo.authorName.endsWith(' · ${member.name}'));
+    final canSeeHistory = isPrivileged && memo.edits.isNotEmpty;
     final isInstitute = memo.authorType == MemoAuthorType.institute;
     final authorBg = isInstitute ? AppColors.brandTint : AppColors.goodTint;
     final authorFg = isInstitute ? AppColors.brand : AppColors.goodDark;
@@ -63,7 +65,7 @@ class MemoCard extends ConsumerWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              Text(DateFormat('M/d HH:mm').format(memo.createdAt),
+              Text(DateFormat('M/d HH:mm').format(memo.createdAt) + (memo.isEdited ? ' · 수정됨' : ''),
                   style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
             ],
           ),
@@ -103,7 +105,10 @@ class MemoCard extends ConsumerWidget {
                   children: [
                     const Text('댓글 달기', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMuted)),
                     _FooterAction(label: '공유', onTap: () => _share(context)),
-                    if (canDelete) _FooterAction(label: '삭제', onTap: () => _confirmDelete(context, ref), danger: true),
+                    if (canModify) _FooterAction(label: '수정', onTap: () => _showEditSheet(context)),
+                    if (canSeeHistory)
+                      _FooterAction(label: '수정 이력 ${memo.edits.length}', onTap: () => _showHistorySheet(context)),
+                    if (canModify) _FooterAction(label: '삭제', onTap: () => _confirmDelete(context, ref), danger: true),
                   ],
                 ),
               ),
@@ -160,6 +165,153 @@ class MemoCard extends ConsumerWidget {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('삭제하지 못했어요: $e')));
       }
     }
+  }
+
+  void _showEditSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (_) => _MemoEditSheet(memo: memo),
+    );
+  }
+
+  void _showHistorySheet(BuildContext context) {
+    final fmt = DateFormat('M/d HH:mm');
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (_) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.7),
+          child: ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+            children: [
+              const Text('수정 이력', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+              const SizedBox(height: 12),
+              // Newest edit first; each row shows the text as it stood before that edit.
+              for (final e in memo.edits.reversed) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: AppColors.background, borderRadius: BorderRadius.circular(10)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('${e.editorName} · ${fmt.format(e.editedAt.toLocal())}',
+                          style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.brand)),
+                      const SizedBox(height: 4),
+                      const Text('수정 전', style: TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
+                      Text(e.previousContent,
+                          style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary, height: 1.5)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+              const Text('현재 내용', style: TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
+              Text(memo.content, style: const TextStyle(fontSize: 12.5, color: AppColors.textPrimary, height: 1.5)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Bottom sheet for 메모 수정. Stays open (with the error shown) if saving
+/// fails, so the edited text isn't lost.
+class _MemoEditSheet extends ConsumerStatefulWidget {
+  const _MemoEditSheet({required this.memo});
+
+  final Memo memo;
+
+  @override
+  ConsumerState<_MemoEditSheet> createState() => _MemoEditSheetState();
+}
+
+class _MemoEditSheetState extends ConsumerState<_MemoEditSheet> {
+  late final _controller = TextEditingController(text: widget.memo.content);
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final text = _controller.text.trim();
+    if (text.isEmpty) {
+      setState(() => _error = '메모 내용을 입력해주세요.');
+      return;
+    }
+    if (text == widget.memo.content) {
+      Navigator.of(context).pop();
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await ref.read(memoRepositoryProvider).updateMemo(id: widget.memo.id, content: text);
+      // An edited 폐사 count can change the farm's risk.
+      if (widget.memo.farmId != null) ref.invalidate(farmsProvider);
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _error = '저장하지 못했어요: $e';
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 18, 20, 16 + MediaQuery.of(context).viewInsets.bottom),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text('메모 수정', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+          const SizedBox(height: 4),
+          const Text('수정 전 내용은 원장·소유자가 이력으로 확인할 수 있어요.',
+              style: TextStyle(fontSize: 11.5, color: AppColors.textMuted)),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            minLines: 3,
+            maxLines: 8,
+            enabled: !_saving,
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: AppColors.background,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+            ),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 8),
+            Text(_error!, style: const TextStyle(fontSize: 12, color: AppColors.danger)),
+          ],
+          const SizedBox(height: 12),
+          FilledButton(
+            onPressed: _saving ? null : _save,
+            child: _saving
+                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Text('저장'),
+          ),
+        ],
+      ),
+    );
   }
 }
 
