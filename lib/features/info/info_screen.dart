@@ -66,10 +66,8 @@ class _InfoScreenState extends ConsumerState<InfoScreen> {
           children: [
             Container(
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
-              decoration: const BoxDecoration(
-                color: AppColors.surface,
-                border: Border(bottom: BorderSide(color: AppColors.border)),
-              ),
+              width: double.infinity,
+              color: AppColors.background,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: const [
