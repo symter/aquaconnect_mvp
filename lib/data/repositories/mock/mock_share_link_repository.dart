@@ -8,10 +8,9 @@ import '../share_link_repository.dart';
 
 class MockShareLinkRepository implements ShareLinkRepository {
   MockShareLinkRepository({
-    required FarmRepository farmRepository,
-    required ReportRepository reportRepository,
-  })  : _farmRepository = farmRepository,
-        _reportRepository = reportRepository;
+    required this._farmRepository,
+    required this._reportRepository,
+  });
 
   final FarmRepository _farmRepository;
   final ReportRepository _reportRepository;
