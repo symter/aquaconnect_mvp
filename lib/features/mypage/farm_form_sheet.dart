@@ -26,6 +26,7 @@ class _FarmFormSheetState extends ConsumerState<FarmFormSheet> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameController;
   late final TextEditingController _addressController;
+  late final TextEditingController _detailAddressController;
   late final TextEditingController _phoneController;
   OceanStation? _selectedStation;
   bool _submitting = false;
@@ -36,6 +37,7 @@ class _FarmFormSheetState extends ConsumerState<FarmFormSheet> {
     final existing = widget.existing;
     _nameController = TextEditingController(text: existing?.name ?? '');
     _addressController = TextEditingController(text: existing?.address ?? '');
+    _detailAddressController = TextEditingController();
     _phoneController = TextEditingController(text: existing?.ownerContact ?? '');
   }
 
@@ -43,6 +45,7 @@ class _FarmFormSheetState extends ConsumerState<FarmFormSheet> {
   void dispose() {
     _nameController.dispose();
     _addressController.dispose();
+    _detailAddressController.dispose();
     _phoneController.dispose();
     super.dispose();
   }
@@ -50,8 +53,19 @@ class _FarmFormSheetState extends ConsumerState<FarmFormSheet> {
   Future<void> _searchAddress() async {
     final result = await AddressSearchService().search();
     if (result != null && mounted) {
-      setState(() => _addressController.text = result.address);
+      setState(() {
+        _addressController.text = result.address;
+        _detailAddressController.clear();
+      });
     }
+  }
+
+  /// The optional 상세 주소 has no column of its own, so it is stored
+  /// appended to the 도로명 주소 ("도로명 상세").
+  String get _fullAddress {
+    final base = _addressController.text.trim();
+    final detail = _detailAddressController.text.trim();
+    return detail.isEmpty ? base : '$base $detail';
   }
 
   Future<void> _submit() async {
@@ -78,7 +92,7 @@ class _FarmFormSheetState extends ConsumerState<FarmFormSheet> {
       if (widget.existing == null) {
         await repo.createFarm(
           name: _nameController.text.trim(),
-          address: _addressController.text.trim(),
+          address: _fullAddress,
           ownerContact: _phoneController.text.trim(),
           region: region,
           nearestStationCode: stationCode,
@@ -88,7 +102,7 @@ class _FarmFormSheetState extends ConsumerState<FarmFormSheet> {
         await repo.updateFarm(
           widget.existing!.id,
           name: _nameController.text.trim(),
-          address: _addressController.text.trim(),
+          address: _fullAddress,
           ownerContact: _phoneController.text.trim(),
           region: region,
           nearestStationCode: stationCode,
@@ -172,6 +186,12 @@ class _FarmFormSheetState extends ConsumerState<FarmFormSheet> {
                     ),
                   ),
                   validator: (v) => (v == null || v.trim().isEmpty) ? '주소찾기로 위치를 지정해주세요.' : null,
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _detailAddressController,
+                  style: const TextStyle(fontSize: 13.5),
+                  decoration: _decoration('상세 주소 (선택) 예: 2동 양식장'),
                 ),
                 const SizedBox(height: 14),
                 const _FieldLabel('전화번호 *'),
