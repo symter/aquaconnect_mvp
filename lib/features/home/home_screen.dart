@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/providers/data_providers.dart';
+import '../../core/providers/farm_group_provider.dart';
 import '../../core/providers/notification_providers.dart';
 import '../../core/providers/repository_providers.dart';
 import '../../core/theme/app_colors.dart';
@@ -10,7 +11,9 @@ import '../../core/widgets/chips.dart';
 import '../../core/widgets/farm_card.dart';
 import '../../core/widgets/memo_composer_bar.dart';
 import '../../data/models/farm.dart';
+import '../../data/models/farm_group.dart';
 import '../../data/models/risk_level.dart';
+import '../../data/services/farm_group_store.dart';
 import '../notifications/notification_permission_sheet.dart';
 import 'onboarding_checklist_card.dart';
 
@@ -46,6 +49,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _buildScroll(BuildContext context, AsyncValue<List<Farm>> farmsAsync, String orgName) {
+    final prefs = ref.watch(farmListPrefsProvider).valueOrNull ?? const FarmListPrefs();
+    final sort = prefs.sort;
     return CustomScrollView(
           slivers: [
             SliverToBoxAdapter(
@@ -124,9 +129,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   const SizedBox(height: 20),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: const [
-                      Text('담당 양식장들', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
-                      Text('위험도순', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.brand)),
+    children: [
+                      const Text('담당 양식장들', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+                      _SortMenu(
+                        sort: sort,
+                        onSelected: (s) => ref.read(farmListPrefsProvider.notifier).setSort(s),
+                        onManageGroups: () => context.push('/mypage/farm-groups'),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 10),
@@ -153,11 +162,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     data: (farms) {
                       final filtered = farms.where((f) => _riskFilter == null || f.riskLevel == _riskFilter).toList();
                       return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          for (final farm in filtered) ...[
-                            FarmCard(farm: farm, onTap: () => context.push('/reports/${farm.id}')),
-                            const SizedBox(height: 10),
+                          for (final section in _sections(filtered, sort, prefs.groups)) ...[
+                            if (section.title != null) _SectionHeader(title: section.title!, count: section.farms.length),
+                            for (final farm in section.farms) ...[
+                              FarmCard(farm: farm, onTap: () => context.push('/reports/${farm.id}')),
+                              const SizedBox(height: 10),
+                            ],
                           ],
+                          if (sort == FarmSort.group && prefs.groups.isEmpty)
+                            _GroupEmptyHint(onTap: () => context.push('/mypage/farm-groups')),
                         ],
                       );
                     },
@@ -395,6 +410,127 @@ class _ReportStatusCard extends ConsumerWidget {
               label: const Text('전체 리포트 보기', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800)),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One block of the farm list; [title] is null when there is no section header
+/// (위험도순).
+class _FarmSection {
+  const _FarmSection(this.title, this.farms);
+
+  final String? title;
+  final List<Farm> farms;
+}
+
+List<Farm> _byRisk(Iterable<Farm> farms) => farms.toList()..sort((a, b) => a.riskLevel.index.compareTo(b.riskLevel.index));
+
+/// Lays [farms] out for the chosen [sort]. Inside every section the farms stay
+/// in risk order (위험 → 주의 → 양호).
+List<_FarmSection> _sections(List<Farm> farms, FarmSort sort, List<FarmGroup> groups) {
+  switch (sort) {
+    case FarmSort.risk:
+      return [_FarmSection(null, _byRisk(farms))];
+    case FarmSort.region:
+      final byRegion = <String, List<Farm>>{};
+      for (final f in farms) {
+        byRegion.putIfAbsent(regionOf(f), () => []).add(f);
+      }
+      final names = byRegion.keys.toList()..sort();
+      return [for (final n in names) _FarmSection(n, _byRisk(byRegion[n]!))];
+    case FarmSort.group:
+      final byId = {for (final f in farms) f.id: f};
+      final used = <String>{};
+      final result = <_FarmSection>[];
+      for (final g in groups) {
+        final members = [for (final id in g.farmIds) ?byId[id]];
+        used.addAll(members.map((f) => f.id));
+        if (members.isNotEmpty) result.add(_FarmSection(g.name, _byRisk(members)));
+      }
+      final rest = farms.where((f) => !used.contains(f.id)).toList();
+      if (rest.isNotEmpty) result.add(_FarmSection('그룹 미지정', _byRisk(rest)));
+      return result;
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.title, required this.count});
+
+  final String title;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(2, 6, 2, 8),
+      child: Row(
+        children: [
+          Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+          const SizedBox(width: 6),
+          Text('$count', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.brand)),
+        ],
+      ),
+    );
+  }
+}
+
+class _GroupEmptyHint extends StatelessWidget {
+  const _GroupEmptyHint({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(color: AppColors.brandTint, borderRadius: BorderRadius.circular(12)),
+        child: const Row(
+          children: [
+            Icon(Icons.folder_copy_outlined, size: 18, color: AppColors.brand),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text('아직 만든 그룹이 없어요. 탭해서 그룹을 만들어 보세요.',
+                  style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.brandDark)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// "위험도순 ▾" — switches how the list is ordered, plus a shortcut to the
+/// group builder.
+class _SortMenu extends StatelessWidget {
+  const _SortMenu({required this.sort, required this.onSelected, required this.onManageGroups});
+
+  final FarmSort sort;
+  final ValueChanged<FarmSort> onSelected;
+  final VoidCallback onManageGroups;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<Object>(
+      tooltip: '정렬 방식',
+      position: PopupMenuPosition.under,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      onSelected: (v) => v is FarmSort ? onSelected(v) : onManageGroups(),
+      itemBuilder: (_) => [
+        for (final s in FarmSort.values)
+          CheckedPopupMenuItem<Object>(value: s, checked: s == sort, child: Text(s.label, style: const TextStyle(fontSize: 13.5))),
+        const PopupMenuDivider(),
+        const PopupMenuItem<Object>(value: 'manage', child: Text('그룹 만들기·관리', style: TextStyle(fontSize: 13.5))),
+      ],
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(sort.label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.brand)),
+          const Icon(Icons.arrow_drop_down, size: 18, color: AppColors.brand),
         ],
       ),
     );

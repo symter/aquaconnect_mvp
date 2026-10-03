@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/providers/farm_group_provider.dart';
+
 import '../../core/providers/data_providers.dart';
 import '../../core/providers/notification_providers.dart';
 import '../../core/providers/onboarding_provider.dart';
@@ -95,6 +97,15 @@ class MyPageScreen extends ConsumerWidget {
                       label: '등록 양식장 관리',
                       trailing: farmsAsync.maybeWhen(data: (f) => '${f.length}곳', orElse: () => ''),
                       onTap: () => context.push('/mypage/farms'),
+                    ),
+                    _MenuItem(
+                      icon: Icons.folder_copy_outlined,
+                      label: '양식장 그룹 관리',
+                      trailing: ref.watch(farmListPrefsProvider).maybeWhen(
+                            data: (p) => p.groups.isEmpty ? '' : '${p.groups.length}개',
+                            orElse: () => '',
+                          ),
+                      onTap: () => context.push('/mypage/farm-groups'),
                     ),
                     _MenuItem(
                       icon: Icons.history,
