@@ -211,7 +211,7 @@ class _MemberManagementScreenState extends ConsumerState<MemberManagementScreen>
   }
 
   void _extendInvite(Invitation invite) {
-    _run(() => ref.read(orgRepositoryProvider).extendInvitation(invite.id), '초대 기한을 연장했어요');
+    _run(() => ref.read(orgRepositoryProvider).extendInvitation(invite.id), '초대 기한을 7일 연장했어요');
   }
 
   Future<void> _cancelInvite(Invitation invite) async {

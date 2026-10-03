@@ -124,7 +124,7 @@ class MockOrgRepository implements OrgRepository {
       role: old.role,
       note: old.note,
       createdAt: now,
-      expiresAt: now.add(old.expiresAt.difference(old.createdAt)),
+      expiresAt: now.add(const Duration(days: 7)),
       expired: false,
     );
   }
