@@ -12,4 +12,8 @@ abstract class MemoRepository {
     required List<String> tags,
     int photoCount,
   });
+
+  /// Replaces a memo's content and appends the previous content to its edit
+  /// log, attributed to the signed-in member.
+  Future<Memo> updateMemo({required String id, required String content});
 }

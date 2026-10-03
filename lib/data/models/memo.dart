@@ -8,6 +8,22 @@ enum MemoAuthorType {
   String get key => this == MemoAuthorType.farm ? 'farm' : 'institute';
 }
 
+/// One entry in a memo's edit log: who changed it, when, and what the
+/// content said *before* that edit.
+class MemoEdit {
+  const MemoEdit({required this.editorName, required this.editedAt, required this.previousContent});
+
+  final String editorName;
+  final DateTime editedAt;
+  final String previousContent;
+
+  factory MemoEdit.fromJson(Map<String, dynamic> json) => MemoEdit(
+        editorName: json['editorName'] as String,
+        editedAt: DateTime.parse(json['editedAt'] as String),
+        previousContent: json['previousContent'] as String,
+      );
+}
+
 class Memo {
   const Memo({
     required this.id,
@@ -21,6 +37,7 @@ class Memo {
     this.farmName,
     this.photoCount = 0,
     this.readByFarm = false,
+    this.edits = const [],
   });
 
   final String id;
@@ -37,7 +54,27 @@ class Memo {
   final bool readByFarm;
   final DateTime createdAt;
 
+  /// Edit log, oldest first. Empty when the memo was never edited.
+  final List<MemoEdit> edits;
+
+  bool get isEdited => edits.isNotEmpty;
+
   String get farmLabel => farmName ?? '미지정';
+
+  Memo copyWith({String? content, List<MemoEdit>? edits}) => Memo(
+        id: id,
+        orgId: orgId,
+        farmId: farmId,
+        farmName: farmName,
+        authorType: authorType,
+        authorName: authorName,
+        content: content ?? this.content,
+        tags: tags,
+        photoCount: photoCount,
+        readByFarm: readByFarm,
+        createdAt: createdAt,
+        edits: edits ?? this.edits,
+      );
 
   factory Memo.fromJson(Map<String, dynamic> json) => Memo(
         id: json['id'] as String,
@@ -51,5 +88,8 @@ class Memo {
         photoCount: json['photoCount'] as int? ?? 0,
         readByFarm: json['readByFarm'] as bool? ?? false,
         createdAt: DateTime.parse(json['createdAt'] as String),
+        edits: (json['edits'] as List<dynamic>? ?? const [])
+            .map((e) => MemoEdit.fromJson(e as Map<String, dynamic>))
+            .toList(),
       );
 }

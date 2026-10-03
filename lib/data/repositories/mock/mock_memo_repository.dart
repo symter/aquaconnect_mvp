@@ -52,4 +52,22 @@ class MockMemoRepository implements MemoRepository {
     _emit();
     return memo;
   }
+
+  @override
+  Future<Memo> updateMemo({required String id, required String content}) async {
+    final index = _memos.indexWhere((m) => m.id == id);
+    if (index == -1) throw StateError('memo not found: $id');
+    final old = _memos[index];
+    if (old.content == content) return old;
+    final updated = old.copyWith(
+      content: content,
+      edits: [
+        ...old.edits,
+        MemoEdit(editorName: MockSeed.currentMember.name, editedAt: DateTime.now(), previousContent: old.content),
+      ],
+    );
+    _memos = [..._memos]..[index] = updated;
+    _emit();
+    return updated;
+  }
 }

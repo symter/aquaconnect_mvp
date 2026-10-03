@@ -124,7 +124,7 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
                     data: (farms) => MemoComposer(
                       farms: farms,
                       showExpressionChips: true,
-                      hintText: "3수조 폐사, 유영 이상... ('/' 로 양식장 지정)",
+                      hintText: "3수조 폐사, 유영 이상... ('/' 로 양식장·담당자 지정)",
                       onSubmit: ({required content, farm, tags = const []}) {
                         ref.read(memoRepositoryProvider).addMemo(
                               farmId: farm?.id,

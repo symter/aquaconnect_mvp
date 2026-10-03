@@ -1,26 +1,31 @@
 import 'package:flutter/material.dart';
 
 import '../../data/models/farm.dart';
+import '../../data/models/org_member.dart';
 import '../theme/app_colors.dart';
 
 /// Shared memo input used by both Home (compact, single line) and Memo
-/// (full, with expression chips + photo). Typing `/` opens a farm-tag
-/// autocomplete popover, matching every `.dc.html` design's "'/' 로 양식장
-/// 지정" pattern.
+/// (full). Keyword chips sit directly above the input so they can be tapped
+/// in one go; typing `/` opens an autocomplete popover for the farm tag and
+/// the assignee (담당자).
 class MemoComposer extends StatefulWidget {
   const MemoComposer({
     super.key,
     required this.farms,
     required this.onSubmit,
     this.compact = false,
-    this.showExpressionChips = false,
-    this.hintText = "지금 본 것 적어두기 ('/' 로 양식장 지정)",
+    this.showExpressionChips = true,
+    this.members,
+    this.hintText = "지금 본 것 적어두기 ('/' 로 양식장·담당자 지정)",
   });
 
   final List<Farm> farms;
   final void Function({required String content, Farm? farm, List<String> tags}) onSubmit;
   final bool compact;
   final bool showExpressionChips;
+
+  /// Assignee candidates for the '/' menu. Defaults to the org's active roster.
+  final List<OrgMember>? members;
   final String hintText;
 
   @override
@@ -31,9 +36,10 @@ class _MemoComposerState extends State<MemoComposer> {
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
   Farm? _selectedFarm;
+  OrgMember? _selectedAssignee;
   final Set<String> _selectedExpressions = {};
 
-  static const _expressions = ['배달완료', '폐사', '투약', '방문', '할일'];
+  static const _expressions = ['배달','폐사', '접종', '방문', '할일'];
 
   @override
   void dispose() {
@@ -58,54 +64,89 @@ class _MemoComposerState extends State<MemoComposer> {
     return widget.farms.where((f) => f.name.contains(query)).toList();
   }
 
-  void _pickFarm(Farm farm) {
+  List<OrgMember> get _memberSuggestions {
+    final query = _slashQuery;
+    if (query == null) return const [];
+    final roster = (widget.members ?? mockOrgMembers()).where((m) => m.status == MemberStatus.active);
+    if (query.isEmpty) return roster.toList();
+    return roster.where((m) => m.name.contains(query)).toList();
+  }
+
+  void _stripSlash() {
     final text = _controller.text;
     final slashIndex = text.lastIndexOf('/');
+    if (slashIndex != -1) {
+      _controller.text = text.substring(0, slashIndex);
+      _controller.selection = TextSelection.collapsed(offset: _controller.text.length);
+    }
+  }
+
+  void _pickFarm(Farm farm) {
     setState(() {
       _selectedFarm = farm;
-      if (slashIndex != -1) {
-        _controller.text = text.substring(0, slashIndex);
-        _controller.selection = TextSelection.collapsed(offset: _controller.text.length);
-      }
+      _stripSlash();
+    });
+  }
+
+  void _pickAssignee(OrgMember member) {
+    setState(() {
+      _selectedAssignee = member;
+      _stripSlash();
     });
   }
 
   void _submit() {
     final content = _controller.text.trim();
     if (content.isEmpty) return;
-    widget.onSubmit(content: content, farm: _selectedFarm, tags: _selectedExpressions.toList());
+    widget.onSubmit(
+      content: content,
+      farm: _selectedFarm,
+      tags: [
+        ..._selectedExpressions,
+        if (_selectedAssignee != null) '담당:${_selectedAssignee!.name}',
+      ],
+    );
     setState(() {
       _controller.clear();
       _selectedFarm = null;
+      _selectedAssignee = null;
       _selectedExpressions.clear();
     });
   }
 
+  Widget _selectedChip(String label, VoidCallback onDeleted) => Chip(
+        label: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+        backgroundColor: AppColors.brandTint,
+        labelStyle: const TextStyle(color: AppColors.brandDark),
+        deleteIcon: const Icon(Icons.close, size: 14),
+        onDeleted: onDeleted,
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+      );
+
+  Widget _menuHeader(String title) => Padding(
+        padding: const EdgeInsets.fromLTRB(12, 7, 12, 4),
+        child: Text(title, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.textMuted)),
+      );
+
+  Widget _menuItem(String label, VoidCallback onTap) => InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Text(label, style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     final suggestions = _suggestions;
+    final memberSuggestions = _memberSuggestions;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (_selectedFarm != null)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Chip(
-                label: Text(_selectedFarm!.name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-                backgroundColor: AppColors.brandTint,
-                labelStyle: const TextStyle(color: AppColors.brandDark),
-                deleteIcon: const Icon(Icons.close, size: 14),
-                onDeleted: () => setState(() => _selectedFarm = null),
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                visualDensity: VisualDensity.compact,
-              ),
-            ),
-          ),
-        if (suggestions.isNotEmpty)
+        if (suggestions.isNotEmpty || memberSuggestions.isNotEmpty)
           Container(
             margin: const EdgeInsets.only(bottom: 8),
             decoration: BoxDecoration(
@@ -117,22 +158,26 @@ class _MemoComposerState extends State<MemoComposer> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(12, 7, 12, 4),
-                  child: Text(
-                    "'/' 입력 시 표시 · 등록된 양식장",
-                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.textMuted),
-                  ),
-                ),
-                ...suggestions.map(
-                  (f) => InkWell(
-                    onTap: () => _pickFarm(f),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      child: Text(f.name, style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
-                    ),
-                  ),
-                ),
+                if (suggestions.isNotEmpty) ...[
+                  _menuHeader('양식장'),
+                  ...suggestions.map((f) => _menuItem(f.name, () => _pickFarm(f))),
+                ],
+                if (memberSuggestions.isNotEmpty) ...[
+                  _menuHeader('담당자'),
+                  ...memberSuggestions.map((m) => _menuItem('${m.name} · ${m.role.label}', () => _pickAssignee(m))),
+                ],
+              ],
+            ),
+          ),
+        if (_selectedFarm != null || _selectedAssignee != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Wrap(
+              spacing: 6,
+              children: [
+                if (_selectedFarm != null) _selectedChip(_selectedFarm!.name, () => setState(() => _selectedFarm = null)),
+                if (_selectedAssignee != null)
+                  _selectedChip('담당 ${_selectedAssignee!.name}', () => setState(() => _selectedAssignee = null)),
               ],
             ),
           ),
