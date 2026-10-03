@@ -6,9 +6,15 @@ import '../../data/models/disease_info.dart';
 import '../../data/models/farm.dart';
 import '../../data/models/memo.dart';
 import '../../data/models/ocean_reading.dart';
+import '../../data/models/org_member.dart';
 import '../../data/models/report.dart';
 import '../../data/models/share_link.dart';
 import 'repository_providers.dart';
+
+/// Org roster, used by the memo composer's '/' assignee menu.
+final orgMembersProvider = FutureProvider<List<OrgMember>>((ref) {
+  return ref.watch(orgRepositoryProvider).listMembers();
+});
 
 final farmsProvider = FutureProvider<List<Farm>>((ref) {
   return ref.watch(farmRepositoryProvider).listFarms();

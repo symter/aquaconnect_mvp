@@ -21,6 +21,7 @@ class MemoComposerBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final farms = ref.watch(farmsProvider).valueOrNull ?? const [];
+    final members = ref.watch(orgMembersProvider).valueOrNull ?? const [];
 
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 9, 16, 10),
@@ -39,7 +40,8 @@ class MemoComposerBar extends ConsumerWidget {
             ),
           MemoComposer(
             farms: farms,
-            hintText: hintText ?? "/ 로 양식장 지정",
+            members: members,
+            hintText: hintText ?? "/ 로 양식장·담당자 지정",
             onSubmit: (draft) async {
               await ref.read(memoRepositoryProvider).addMemo(
                     farmId: draft.farm?.id,

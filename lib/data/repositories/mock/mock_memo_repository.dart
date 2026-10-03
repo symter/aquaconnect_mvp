@@ -69,4 +69,10 @@ class MockMemoRepository implements MemoRepository {
     _emit();
     return memo;
   }
+
+  @override
+  Future<void> deleteMemo(String id) async {
+    _memos = _memos.where((m) => m.id != id).toList();
+    _emit();
+  }
 }

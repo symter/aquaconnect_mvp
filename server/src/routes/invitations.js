@@ -101,7 +101,7 @@ invitationsRouter.post('/', async (req, res) => {
   res.status(201).json(toInvitationJson(rows[0]));
 });
 
-// 기한 연장: restarts the invite's original duration from now.
+// 기한 연장: always grants 7 more days from now, whatever the invite's original duration was.
 invitationsRouter.post('/:id/extend', async (req, res) => {
   const me = await manager(req, res);
   if (!me) return;
@@ -109,7 +109,7 @@ invitationsRouter.post('/:id/extend', async (req, res) => {
   if (!inv) return;
   if (inv.accepted_at || inv.revoked_at) return res.status(400).json({ error: '이미 사용되었거나 취소된 초대입니다.' });
   const { rows } = await query(
-    'update invitations set expires_at = now() + (expires_at - created_at), created_at = now() where id = $1 returning *',
+    'update invitations set expires_at = now() + make_interval(days => 7), created_at = now() where id = $1 returning *',
     [inv.id],
   );
   res.json(toInvitationJson(rows[0]));

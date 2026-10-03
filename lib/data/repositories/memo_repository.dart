@@ -15,6 +15,9 @@ abstract class MemoRepository {
     List<MemoPhotoUpload> photos,
   });
 
+  /// Deletes a memo (and its photos).
+  Future<void> deleteMemo(String id);
+
   /// Image bytes for one of a memo's [Memo.photoIds].
   Future<Uint8List> loadPhoto(String photoId);
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../data/models/farm.dart';
 import '../../data/models/memo.dart';
+import '../../data/models/org_member.dart';
 import '../theme/app_colors.dart';
 import 'camera_capture_screen.dart';
 
@@ -16,18 +17,23 @@ class MemoDraft {
 }
 
 /// Memo input pinned to the bottom of Home and Memo:
-/// [+ 프리셋] [입력창] [카메라] [전송]. Typing `/` opens a farm-tag
-/// autocomplete popover ("'/' 로 양식장 지정"). Selected farm, presets and
-/// photos show above the input and can be removed before sending.
+/// [입력창] [카메라] [전송], with the keyword presets in a row right above the
+/// input so each is one tap. Typing `/` opens an autocomplete popover for the
+/// farm tag and the assignee (담당자). Selected farm, assignee and photos show
+/// above the input and can be removed before sending.
 class MemoComposer extends StatefulWidget {
   const MemoComposer({
     super.key,
     required this.farms,
     required this.onSubmit,
-    this.hintText = "지금 본 것 적어두기 ('/' 로 양식장 지정)",
+    this.members = const [],
+    this.hintText = "지금 본 것 적어두기 ('/' 로 양식장·담당자 지정)",
   });
 
   final List<Farm> farms;
+
+  /// Assignee candidates for the '/' menu (inactive members are skipped).
+  final List<OrgMember> members;
 
   /// Should throw on failure — the composer then keeps the draft and shows
   /// the error instead of clearing.
@@ -39,13 +45,13 @@ class MemoComposer extends StatefulWidget {
 }
 
 class _MemoComposerState extends State<MemoComposer> {
-  static const presets = ['배달완료', '폐사', '투약', '방문'];
+  static const presets = ['배달', '폐사', '접종', '방문', '할일'];
   static const maxPhotos = 5;
 
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
-  final _plusKey = GlobalKey();
   Farm? _selectedFarm;
+  OrgMember? _selectedAssignee;
   final List<String> _selectedPresets = [];
   final List<MemoPhotoUpload> _photos = [];
   bool _sending = false;
@@ -73,54 +79,42 @@ class _MemoComposerState extends State<MemoComposer> {
     return widget.farms.where((f) => f.name.contains(query)).toList();
   }
 
+  List<OrgMember> get _memberSuggestions {
+    final query = _slashQuery;
+    if (query == null) return const [];
+    final roster = widget.members.where((m) => m.status == MemberStatus.active);
+    return query.isEmpty ? roster.toList() : roster.where((m) => m.name.contains(query)).toList();
+  }
+
   bool get _canSend =>
       !_sending && (_controller.text.trim().isNotEmpty || _selectedPresets.isNotEmpty || _photos.isNotEmpty);
 
-  void _pickFarm(Farm farm) {
+  void _stripSlash() {
     final text = _controller.text;
     final slashIndex = text.lastIndexOf('/');
+    if (slashIndex != -1) {
+      _controller.text = text.substring(0, slashIndex);
+      _controller.selection = TextSelection.collapsed(offset: _controller.text.length);
+    }
+  }
+
+  void _pickFarm(Farm farm) {
     setState(() {
       _selectedFarm = farm;
-      if (slashIndex != -1) {
-        _controller.text = text.substring(0, slashIndex);
-        _controller.selection = TextSelection.collapsed(offset: _controller.text.length);
-      }
+      _stripSlash();
     });
   }
 
-  Future<void> _openPresets() async {
-    final box = _plusKey.currentContext!.findRenderObject()! as RenderBox;
-    final overlay = Overlay.of(context).context.findRenderObject()! as RenderBox;
-    final topLeft = box.localToGlobal(Offset.zero, ancestor: overlay);
-    // Header row + one row per preset + padding — opened above the bar so
-    // it doesn't cover the input.
-    final menuHeight = 30.0 + presets.length * kMinInteractiveDimension + 16;
-    final picked = await showMenu<String>(
-      context: context,
-      position: RelativeRect.fromLTRB(
-        topLeft.dx,
-        topLeft.dy - menuHeight - 12,
-        overlay.size.width - topLeft.dx,
-        overlay.size.height - topLeft.dy,
-      ),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      items: [
-        const PopupMenuItem<String>(
-          enabled: false,
-          height: 30,
-          child: Text('빠른 입력', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textMuted)),
-        ),
-        for (final preset in presets)
-          CheckedPopupMenuItem<String>(
-            value: preset,
-            checked: _selectedPresets.contains(preset),
-            child: Text(preset, style: const TextStyle(fontSize: 13.5)),
-          ),
-      ],
-    );
-    if (picked == null) return;
+  void _pickAssignee(OrgMember member) {
     setState(() {
-      _selectedPresets.contains(picked) ? _selectedPresets.remove(picked) : _selectedPresets.add(picked);
+      _selectedAssignee = member;
+      _stripSlash();
+    });
+  }
+
+  void _togglePreset(String preset) {
+    setState(() {
+      _selectedPresets.contains(preset) ? _selectedPresets.remove(preset) : _selectedPresets.add(preset);
     });
   }
 
@@ -144,13 +138,14 @@ class _MemoComposerState extends State<MemoComposer> {
       await widget.onSubmit(MemoDraft(
         content: content,
         farm: _selectedFarm,
-        tags: List.of(_selectedPresets),
+        tags: [..._selectedPresets, if (_selectedAssignee != null) '담당:${_selectedAssignee!.name}'],
         photos: List.of(_photos),
       ));
       if (!mounted) return;
       setState(() {
         _controller.clear();
         _selectedFarm = null;
+        _selectedAssignee = null;
         _selectedPresets.clear();
         _photos.clear();
       });
@@ -168,13 +163,15 @@ class _MemoComposerState extends State<MemoComposer> {
   @override
   Widget build(BuildContext context) {
     final suggestions = _suggestions;
-    final hasAttachments = _selectedFarm != null || _selectedPresets.isNotEmpty || _photos.isNotEmpty;
+    final memberSuggestions = _memberSuggestions;
+    final hasAttachments = _selectedFarm != null || _selectedAssignee != null || _photos.isNotEmpty;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (suggestions.isNotEmpty) _FarmSuggestions(farms: suggestions, onPick: _pickFarm),
+        if (suggestions.isNotEmpty || memberSuggestions.isNotEmpty)
+          _SlashSuggestions(farms: suggestions, members: memberSuggestions, onPickFarm: _pickFarm, onPickMember: _pickAssignee),
         if (hasAttachments)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
@@ -189,24 +186,48 @@ class _MemoComposerState extends State<MemoComposer> {
                     icon: Icons.home_work_outlined,
                     onRemove: () => setState(() => _selectedFarm = null),
                   ),
-                for (final preset in _selectedPresets)
-                  _RemovableChip(label: preset, onRemove: () => setState(() => _selectedPresets.remove(preset))),
+                if (_selectedAssignee != null)
+                  _RemovableChip(
+                    label: '담당 ${_selectedAssignee!.name}',
+                    icon: Icons.person_outline,
+                    onRemove: () => setState(() => _selectedAssignee = null),
+                  ),
                 for (var i = 0; i < _photos.length; i++)
                   _PhotoThumb(photo: _photos[i], onRemove: () => setState(() => _photos.removeAt(i))),
               ],
             ),
           ),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: SizedBox(
+            height: 30,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                for (final preset in presets)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: ChoiceChip(
+                      label: Text(preset, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600)),
+                      selected: _selectedPresets.contains(preset),
+                      onSelected: (_) => _togglePreset(preset),
+                      selectedColor: AppColors.brandTint,
+                      backgroundColor: AppColors.brandTint,
+                      labelStyle: TextStyle(
+                        color: _selectedPresets.contains(preset) ? AppColors.brand : AppColors.textSecondary,
+                      ),
+                      side: _selectedPresets.contains(preset) ? const BorderSide(color: AppColors.brand) : BorderSide.none,
+                      showCheckmark: false,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
         Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            _RoundIconButton(
-              key: _plusKey,
-              icon: Icons.add,
-              tooltip: '빠른 입력 (배달완료·폐사·투약·방문)',
-              onTap: _openPresets,
-              highlighted: _selectedPresets.isNotEmpty,
-            ),
-            const SizedBox(width: 8),
             Expanded(
               child: TextField(
                 controller: _controller,
@@ -249,17 +270,37 @@ class _MemoComposerState extends State<MemoComposer> {
   }
 }
 
-class _FarmSuggestions extends StatelessWidget {
-  const _FarmSuggestions({required this.farms, required this.onPick});
+class _SlashSuggestions extends StatelessWidget {
+  const _SlashSuggestions({
+    required this.farms,
+    required this.members,
+    required this.onPickFarm,
+    required this.onPickMember,
+  });
 
   final List<Farm> farms;
-  final ValueChanged<Farm> onPick;
+  final List<OrgMember> members;
+  final ValueChanged<Farm> onPickFarm;
+  final ValueChanged<OrgMember> onPickMember;
+
+  Widget _header(String title) => Padding(
+        padding: const EdgeInsets.fromLTRB(12, 7, 12, 4),
+        child: Text(title, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.textMuted)),
+      );
+
+  Widget _item(String label, VoidCallback onTap) => InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Text(label, style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      constraints: const BoxConstraints(maxHeight: 180),
+      constraints: const BoxConstraints(maxHeight: 220),
       decoration: BoxDecoration(
         color: AppColors.surface,
         border: Border.all(color: AppColors.borderStrong),
@@ -270,19 +311,14 @@ class _FarmSuggestions extends StatelessWidget {
         shrinkWrap: true,
         padding: EdgeInsets.zero,
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(12, 7, 12, 4),
-            child: Text("'/' 입력 시 표시 · 등록된 양식장",
-                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.textMuted)),
-          ),
-          for (final f in farms)
-            InkWell(
-              onTap: () => onPick(f),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                child: Text(f.name, style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
-              ),
-            ),
+          if (farms.isNotEmpty) ...[
+            _header('양식장'),
+            for (final f in farms) _item(f.name, () => onPickFarm(f)),
+          ],
+          if (members.isNotEmpty) ...[
+            _header('담당자'),
+            for (final m in members) _item('${m.name} · ${m.role.label}', () => onPickMember(m)),
+          ],
         ],
       ),
     );
@@ -360,12 +396,10 @@ class _PhotoThumb extends StatelessWidget {
 
 class _RoundIconButton extends StatelessWidget {
   const _RoundIconButton({
-    super.key,
     required this.icon,
     required this.tooltip,
     required this.onTap,
     this.filled = false,
-    this.highlighted = false,
     this.loading = false,
     this.badge,
   });
@@ -374,7 +408,6 @@ class _RoundIconButton extends StatelessWidget {
   final String tooltip;
   final VoidCallback? onTap;
   final bool filled;
-  final bool highlighted;
   final bool loading;
   final String? badge;
 
@@ -383,8 +416,8 @@ class _RoundIconButton extends StatelessWidget {
     final enabled = onTap != null;
     final Color bg = filled
         ? (enabled || loading ? AppColors.brand : AppColors.brand.withValues(alpha: 0.4))
-        : (highlighted ? AppColors.brandTint : AppColors.background);
-    final Color fg = filled ? Colors.white : (highlighted ? AppColors.brand : AppColors.neutralIcon);
+        : AppColors.background;
+    final Color fg = filled ? Colors.white : AppColors.neutralIcon;
 
     return Tooltip(
       message: tooltip,

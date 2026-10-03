@@ -74,6 +74,7 @@ Postgres가 로컬에 없다면 `npm run smoke-test`로 (pg-mem 기반 인메모
 | PUT | `/api/farms/:id` | 양식장 정보 수정 |
 | DELETE | `/api/farms/:id` | 양식장 삭제 |
 | GET/POST | `/api/memos` | 메모 조회(`?farmId=`)/작성 |
+| DELETE | `/api/memos/:id` | 메모 삭제 (작성자 또는 소유자·원장) |
 | GET | `/api/disease-info` | 수산질병 정보 |
 | GET | `/api/reports/:farmId` | 최신 리포트(없으면 즉시 생성) |
 | GET | `/api/reports?farmIds=a,b` | 여러 양식장 최신 리포트 일괄 조회 |
@@ -144,7 +145,7 @@ Postgres가 로컬에 없다면 `npm run smoke-test`로 (pg-mem 기반 인메모
 ## 구성원 초대
 
 - 소유자·원장: `POST /api/invitations` `{role: director|staff|employee, expireDays: 7|30, note?}` → 1회용 코드(10자) ·
-  `GET /api/invitations`(대기 중 + 만료됨) · `POST /api/invitations/:id/extend`(원래 기간만큼 지금부터 연장) ·
+  `GET /api/invitations`(대기 중 + 만료됨) · `POST /api/invitations/:id/extend`(지금부터 7일로 연장) ·
   `POST /api/invitations/:id/cancel`.
 - 공개: `GET /api/public/invitations/:code` → 관리원명·역할·초대한 사람·만료 (없으면 404, 사용·취소·만료면 410과 사유) ·
   `POST /api/public/invitations/:code/accept` `{account:{name,email,password,phone}, terms:{...}}` → 그 관리원에

@@ -11,6 +11,7 @@ import '../../features/info/info_screen.dart';
 import '../../features/memo/memo_screen.dart';
 import '../../features/mypage/change_history_screen.dart';
 import '../../features/mypage/daily_summary_settings_screen.dart';
+import '../../features/mypage/farm_group_screen.dart';
 import '../../features/mypage/farm_management_screen.dart';
 import '../../features/mypage/invite_accept_screen.dart';
 import '../../features/mypage/member_management_screen.dart';
@@ -83,6 +84,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/mypage/farms',
         builder: (context, state) => const FarmManagementScreen(),
+      ),
+      GoRoute(
+        path: '/mypage/farm-groups',
+        builder: (context, state) => const FarmGroupScreen(),
       ),
       GoRoute(
         path: '/mypage/members',

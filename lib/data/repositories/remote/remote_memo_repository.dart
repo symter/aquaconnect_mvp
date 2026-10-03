@@ -85,5 +85,11 @@ class RemoteMemoRepository implements MemoRepository {
   }
 
   @override
+  Future<void> deleteMemo(String id) async {
+    await _api.delete('/api/memos/$id');
+    _refresh.add(null);
+  }
+
+  @override
   Future<Uint8List> loadPhoto(String photoId) => _api.getBytes('/api/memos/photos/$photoId');
 }

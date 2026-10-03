@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/providers/data_providers.dart';
-import '../../core/providers/notification_providers.dart';
 import '../../core/providers/onboarding_provider.dart';
 import '../../core/providers/repository_providers.dart';
 import '../../core/theme/app_colors.dart';
@@ -29,10 +27,11 @@ const _steps = [
   _Step('share', '리포트 공유하기', Icons.link),
 ];
 
-/// Home "시작 가이드" checklist. A step counts as done once the app's data
-/// shows it happened (a farm exists, a station is picked, push is on, a
-/// memo or share link exists) or once it was tapped — 구성원 초대 has no
-/// server data yet, so tapping is the only way to check that one off.
+/// Home "시작 가이드" checklist. A step is checked only once the user taps it
+/// (it jumps to the relevant screen). Completion is deliberately not derived
+/// from existing data, so "사용 가이드 다시 보기" always restarts with every box
+/// unchecked — data that already exists may still be something the user needs
+/// to be walked through.
 class OnboardingChecklistCard extends ConsumerWidget {
   const OnboardingChecklistCard({super.key});
 
@@ -59,14 +58,7 @@ class OnboardingChecklistCard extends ConsumerWidget {
     final onboarding = ref.watch(onboardingProvider).valueOrNull;
     if (onboarding == null || onboarding.checklistHidden) return const SizedBox.shrink();
 
-    final doneByData = <String>{
-      if (ref.watch(farmsProvider).valueOrNull?.isNotEmpty ?? false) 'farm',
-      if (ref.watch(selectedOceanStationProvider).valueOrNull != null) 'station',
-      if (ref.watch(pushStatusProvider).valueOrNull?.enabled ?? false) 'notify',
-      if (ref.watch(memosProvider(null)).valueOrNull?.isNotEmpty ?? false) 'memo',
-      if (ref.watch(shareLinksProvider).valueOrNull?.isNotEmpty ?? false) 'share',
-    };
-    bool isDone(_Step s) => onboarding.checklistDone.contains(s.id) || doneByData.contains(s.id);
+    bool isDone(_Step s) => onboarding.checklistDone.contains(s.id);
 
     final isEmployee = ref.watch(authStateProvider).valueOrNull?.member.role == MemberRole.employee;
     final steps = _steps.where((s) => !(isEmployee && s.ownerOnly)).toList();

@@ -23,7 +23,7 @@ abstract class OrgRepository {
 
   Future<Invitation> createInvitation({required MemberRole role, required int expireDays, String note = ''});
 
-  /// Restarts the invite's original duration from now.
+  /// 기한 연장: the invite is valid for 7 more days from now.
   Future<void> extendInvitation(String id);
 
   Future<void> cancelInvitation(String id);

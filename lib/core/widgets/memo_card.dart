@@ -3,22 +3,36 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart' show Share;
 
+import '../../data/models/member.dart';
 import '../../data/models/memo.dart';
+import '../providers/repository_providers.dart';
 import '../providers/data_providers.dart';
 import '../theme/app_colors.dart';
 
-class MemoCard extends StatelessWidget {
+class MemoCard extends ConsumerWidget {
   const MemoCard({super.key, required this.memo, this.showFarmTag = true});
 
   final Memo memo;
   final bool showFarmTag;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final member = ref.watch(authStateProvider).valueOrNull?.member;
+    final isPrivileged = member?.role == MemberRole.owner || member?.role == MemberRole.director;
+    // Institute memos can be deleted by their author ("기관명 · 이름") or by an
+    // owner/director — the same rule the server enforces.
+    final canDelete = memo.authorType == MemoAuthorType.institute &&
+        member != null &&
+        (isPrivileged || memo.authorName.endsWith(' · ${member.name}'));
     final isInstitute = memo.authorType == MemoAuthorType.institute;
     final authorBg = isInstitute ? AppColors.brandTint : AppColors.goodTint;
     final authorFg = isInstitute ? AppColors.brand : AppColors.goodDark;
+    final displayTags = <String>{
+      ...memo.tags,
+      if (memo.content.contains('할일:')) '할일',
+    }.toList();
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -65,12 +79,12 @@ class MemoCard extends StatelessWidget {
               ],
             ),
           ],
-          if (memo.tags.isNotEmpty) ...[
+          if (displayTags.isNotEmpty) ...[
             const SizedBox(height: 8),
             Wrap(
               spacing: 6,
               runSpacing: 4,
-              children: memo.tags
+              children: displayTags
                   .map((t) => _Pill(text: t, bg: AppColors.neutralChip, fg: AppColors.neutralIcon, small: true))
                   .toList(),
             ),
@@ -81,7 +95,19 @@ class MemoCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('댓글 달기', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMuted)),
+              Flexible(
+                child: Wrap(
+                  spacing: 14,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    const Text('댓글 달기', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMuted)),
+                    _FooterAction(label: '공유', onTap: () => _share(context)),
+                    if (canDelete) _FooterAction(label: '삭제', onTap: () => _confirmDelete(context, ref), danger: true),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
               Text(
                 memo.readByFarm ? '읽음' : '나만 읽음',
                 style: const TextStyle(fontSize: 10.5, color: AppColors.textFaint),
@@ -90,6 +116,65 @@ class MemoCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  /// Opens the system share sheet with the memo as text — the user picks
+  /// 카카오톡 and then the farm's chat. (A direct send to the farm would need a
+  /// Kakao business channel; the share sheet needs no key.) Photos aren't
+  /// included.
+  void _share(BuildContext context) {
+    final when = DateFormat('M월 d일 HH:mm').format(memo.createdAt);
+    final text = [
+      '[${memo.farmLabel}] 현장 메모',
+      '',
+      memo.content,
+      '',
+      '${memo.authorName} · $when',
+    ].join('\n');
+    Share.share(text, subject: '${memo.farmLabel} 현장 메모');
+  }
+
+  Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('메모 삭제'),
+        content: Text(memo.photoCount > 0 ? '이 메모와 첨부 사진을 삭제할까요? 되돌릴 수 없어요.' : '이 메모를 삭제할까요? 되돌릴 수 없어요.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('취소')),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('삭제', style: TextStyle(color: AppColors.danger)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ref.read(memoRepositoryProvider).deleteMemo(memo.id);
+      // The farm's risk / 최근 방문 can change when a memo goes away.
+      if (memo.farmId != null) ref.invalidate(farmsProvider);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('삭제하지 못했어요: $e')));
+      }
+    }
+  }
+}
+
+class _FooterAction extends StatelessWidget {
+  const _FooterAction({required this.label, required this.onTap, this.danger = false});
+
+  final String label;
+  final VoidCallback onTap;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: danger ? AppColors.danger : AppColors.brand)),
     );
   }
 }
