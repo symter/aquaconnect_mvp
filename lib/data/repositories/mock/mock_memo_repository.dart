@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import '../../mock/mock_seed.dart';
 import '../../models/memo.dart';
+import '../../models/memo_comment.dart';
 import '../memo_repository.dart';
 
 class MockMemoRepository implements MemoRepository {
@@ -12,6 +13,7 @@ class MockMemoRepository implements MemoRepository {
 
   late List<Memo> _memos;
   final _photos = <String, Uint8List>{};
+  final _comments = <String, List<MemoComment>>{};
   final _controller = StreamController<List<Memo>>.broadcast();
 
   List<Memo> get _sorted => [..._memos]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -59,6 +61,7 @@ class MockMemoRepository implements MemoRepository {
       farmName: farmName,
       authorType: MemoAuthorType.institute,
       authorName: '수산질병관리원 · ${MockSeed.currentMember.name}',
+      authorMemberId: MockSeed.currentMember.id,
       content: content,
       tags: tags,
       createdAt: DateTime.now(),
@@ -94,5 +97,47 @@ class MockMemoRepository implements MemoRepository {
   Future<void> deleteMemo(String id) async {
     _memos = _memos.where((m) => m.id != id).toList();
     _emit();
+  }
+
+  void _replace(String id, Memo Function(Memo) update) {
+    final index = _memos.indexWhere((m) => m.id == id);
+    if (index == -1) return;
+    _memos = [..._memos]..[index] = update(_memos[index]);
+    _emit();
+  }
+
+  @override
+  Future<void> markRead(List<String> memoIds) async {
+    for (final id in memoIds) {
+      _replace(id, (m) => m.copyWith(readByMe: true));
+    }
+  }
+
+  @override
+  Future<List<MemoComment>> listComments(String memoId) async => List.unmodifiable(_comments[memoId] ?? const []);
+
+  @override
+  Future<MemoComment> addComment({required String memoId, required String content}) async {
+    final text = content.trim();
+    if (text.isEmpty) throw Exception('댓글 내용을 입력해주세요.');
+    final comment = MemoComment(
+      id: 'comment-${DateTime.now().microsecondsSinceEpoch}',
+      memoId: memoId,
+      authorMemberId: MockSeed.currentMember.id,
+      authorName: MockSeed.currentMember.name,
+      content: text,
+      createdAt: DateTime.now(),
+    );
+    final list = _comments.putIfAbsent(memoId, () => [])..add(comment);
+    _replace(memoId, (m) => m.copyWith(commentCount: list.length, readByMe: true));
+    return comment;
+  }
+
+  @override
+  Future<void> deleteComment({required String memoId, required String commentId}) async {
+    final list = _comments[memoId];
+    if (list == null) return;
+    list.removeWhere((c) => c.id == commentId);
+    _replace(memoId, (m) => m.copyWith(commentCount: list.length));
   }
 }

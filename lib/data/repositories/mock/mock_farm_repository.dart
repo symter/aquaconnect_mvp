@@ -2,6 +2,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../mock/mock_seed.dart';
 import '../../models/farm.dart';
+import '../../models/org_member.dart';
 import '../../models/risk_level.dart';
 import '../farm_repository.dart';
 
@@ -40,6 +41,7 @@ class MockFarmRepository implements FarmRepository {
       nearestStationName: nearestStationName,
       riskLevel: RiskLevel.good,
       headline: '',
+      assignedMemberId: MockSeed.currentMember.id,
       assignedMemberName: MockSeed.currentMember.name,
       ownerContact: ownerContact,
     );
@@ -56,6 +58,7 @@ class MockFarmRepository implements FarmRepository {
     required String region,
     required String nearestStationCode,
     required String nearestStationName,
+    OrgMember? assignee,
   }) async {
     final index = MockSeed.farms.indexWhere((f) => f.id == farmId);
     if (index == -1) throw Exception('양식장을 찾을 수 없습니다.');
@@ -66,6 +69,9 @@ class MockFarmRepository implements FarmRepository {
       region: region,
       nearestStationCode: nearestStationCode,
       nearestStationName: nearestStationName,
+      assignedMemberId: assignee?.id,
+      assignedMemberName: assignee?.name,
+      assignedMemberPhone: assignee?.phone,
     );
     MockSeed.farms[index] = updated;
     return updated;

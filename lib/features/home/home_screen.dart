@@ -51,6 +51,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget _buildScroll(BuildContext context, AsyncValue<List<Farm>> farmsAsync, String orgName) {
     final prefs = ref.watch(farmListPrefsProvider).valueOrNull ?? const FarmListPrefs();
     final sort = prefs.sort;
+    final myId = ref.watch(authStateProvider).valueOrNull?.member.id;
+    bool isMine(Farm f) => myId != null && f.assignedMemberId == myId;
     return CustomScrollView(
           slivers: [
             SliverToBoxAdapter(
@@ -141,7 +143,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   const SizedBox(height: 10),
                   farmsAsync.when(
                     data: (farms) => _FarmFilterRow(
-                      farms: farms,
+                      farms: _mineOnly ? farms.where(isMine).toList() : farms,
+                      mineCount: farms.where(isMine).length,
+                      allCount: farms.length,
                       mineOnly: _mineOnly,
                       riskFilter: _riskFilter,
                       onMineOnly: () => setState(() {
@@ -160,10 +164,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   const SizedBox(height: 10),
                   farmsAsync.when(
                     data: (farms) {
-                      final filtered = farms.where((f) => _riskFilter == null || f.riskLevel == _riskFilter).toList();
+                      final filtered = farms
+                          .where((f) => !_mineOnly || isMine(f))
+                          .where((f) => _riskFilter == null || f.riskLevel == _riskFilter)
+                          .toList();
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          if (_mineOnly && farms.isNotEmpty && !farms.any(isMine))
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 24),
+                              child: Text(
+                                "내가 담당하는 양식장이 없어요.\n'전체'를 누르거나, 마이페이지 > 등록 양식장 관리에서 담당자를 지정해 주세요.",
+                                textAlign: TextAlign.center,
+                                style: TextStyle(fontSize: 12.5, color: AppColors.textMuted, height: 1.5),
+                              ),
+                            ),
                           for (final section in _sections(filtered, sort, prefs.groups)) ...[
                             if (section.title != null) _SectionHeader(title: section.title!, count: section.farms.length),
                             for (final farm in section.farms) ...[
@@ -259,6 +275,8 @@ class _NotificationBell extends ConsumerWidget {
 class _FarmFilterRow extends StatelessWidget {
   const _FarmFilterRow({
     required this.farms,
+    required this.mineCount,
+    required this.allCount,
     required this.mineOnly,
     required this.riskFilter,
     required this.onMineOnly,
@@ -266,7 +284,10 @@ class _FarmFilterRow extends StatelessWidget {
     required this.onRisk,
   });
 
+  /// The farms in the current scope (내 담당 or 전체) — the risk counts.
   final List<Farm> farms;
+  final int mineCount;
+  final int allCount;
   final bool mineOnly;
   final RiskLevel? riskFilter;
   final VoidCallback onMineOnly;
@@ -282,9 +303,9 @@ class _FarmFilterRow extends StatelessWidget {
       child: ListView(
         scrollDirection: Axis.horizontal,
         children: [
-          FilterPillChip(label: '내 담당 ${farms.length}', selected: mineOnly, onTap: onMineOnly),
+          FilterPillChip(label: '내 담당 $mineCount', selected: mineOnly, onTap: onMineOnly),
           const SizedBox(width: 6),
-          FilterPillChip(label: '전체 ${farms.length}', selected: !mineOnly, onTap: onAll),
+          FilterPillChip(label: '전체 $allCount', selected: !mineOnly, onTap: onAll),
           const SizedBox(width: 6),
           FilterPillChip(
             label: '위험 ${_count(RiskLevel.danger)}',

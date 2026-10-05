@@ -42,6 +42,10 @@ class Memo {
     this.readByFarm = false,
     this.editCount = 0,
     this.edits = const [],
+    this.authorMemberId,
+    this.commentCount = 0,
+    this.readCount = 0,
+    this.readByMe = false,
   });
 
   final String id;
@@ -72,9 +76,19 @@ class Memo {
 
   bool get isEdited => editCount > 0;
 
+  /// The member who wrote it (null for a farm's 문의 and very old memos).
+  final String? authorMemberId;
+  final int commentCount;
+
+  /// Members other than the author who have seen this memo.
+  final int readCount;
+
+  /// Whether the signed-in member has seen it (reported via markRead).
+  final bool readByMe;
+
   String get farmLabel => farmName ?? '미지정';
 
-  Memo copyWith({String? content, List<MemoEdit>? edits}) => Memo(
+  Memo copyWith({String? content, List<MemoEdit>? edits, int? commentCount, bool? readByMe}) => Memo(
         id: id,
         orgId: orgId,
         farmId: farmId,
@@ -89,6 +103,10 @@ class Memo {
         readByFarm: readByFarm,
         editCount: edits?.length ?? editCount,
         edits: edits ?? this.edits,
+        authorMemberId: authorMemberId,
+        commentCount: commentCount ?? this.commentCount,
+        readCount: readCount,
+        readByMe: readByMe ?? this.readByMe,
       );
 
   factory Memo.fromJson(Map<String, dynamic> json) => Memo(
@@ -108,6 +126,10 @@ class Memo {
         edits: (json['edits'] as List<dynamic>? ?? const [])
             .map((e) => MemoEdit.fromJson(e as Map<String, dynamic>))
             .toList(),
+        authorMemberId: json['authorMemberId'] as String?,
+        commentCount: json['commentCount'] as int? ?? 0,
+        readCount: json['readCount'] as int? ?? 0,
+        readByMe: json['readByMe'] as bool? ?? false,
       );
 }
 

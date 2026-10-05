@@ -134,12 +134,14 @@ final authStateProvider = StreamProvider<AuthSession?>((ref) {
   return repo.authStateChanges();
 });
 
-final digestSettingsStoreProvider = Provider<DigestSettingsStore>((ref) => DigestSettingsStore());
+final digestSettingsStoreProvider = Provider<DigestSettingsStore>((ref) {
+  if (Env.useMock) return LocalDigestSettingsStore();
+  return RemoteDigestSettingsStore(apiClient: ref.watch(apiClientProvider));
+});
 
-/// The MyPage-selected "하루 요약 설정" (digest notification prefs), loaded
-/// from local storage on first watch. Read by both the settings screen and
-/// the MyPage list row (for its "오후 4:00" trailing value) so they always
-/// agree.
+/// The signed-in member's "하루 요약 설정" (digest notification prefs). Read by
+/// both the settings screen and the MyPage list row (for its "오후 4:00"
+/// trailing value) so they always agree.
 final digestSettingsProvider = AsyncNotifierProvider<DigestSettingsNotifier, DigestSettings>(DigestSettingsNotifier.new);
 
 class DigestSettingsNotifier extends AsyncNotifier<DigestSettings> {
@@ -152,17 +154,20 @@ class DigestSettingsNotifier extends AsyncNotifier<DigestSettings> {
 
   @override
   Future<DigestSettings> build() {
+    // Settings belong to the member, so reload when someone else signs in.
+    ref.watch(authStateProvider.select((s) => s.valueOrNull?.member.id));
     return ref.watch(digestSettingsStoreProvider).read();
   }
 
+  /// Throws if saving fails (the previous settings stay shown).
   Future<void> _update(DigestSettings Function(DigestSettings) transform) {
     final result = _writeQueue.then((_) async {
       final current = state.valueOrNull ?? await ref.read(digestSettingsStoreProvider).read();
-      final next = transform(current);
-      await ref.read(digestSettingsStoreProvider).write(next);
-      state = AsyncValue.data(next);
+      final saved = await ref.read(digestSettingsStoreProvider).write(transform(current));
+      state = AsyncValue.data(saved);
     });
-    _writeQueue = result;
+    // A failed save must not block every later one.
+    _writeQueue = result.catchError((_) {});
     return result;
   }
 

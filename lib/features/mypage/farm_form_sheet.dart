@@ -6,6 +6,7 @@ import '../../core/providers/repository_providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/models/farm.dart';
 import '../../data/models/ocean_reading.dart';
+import '../../data/models/org_member.dart';
 import '../../data/services/address_geocoder.dart';
 import '../../data/services/address_search_service.dart';
 import '../../data/services/location_service.dart';
@@ -39,6 +40,9 @@ class _FarmFormSheetState extends ConsumerState<FarmFormSheet> {
   bool _pickedManually = false;
   bool _submitting = false;
 
+  /// 담당자 (edit only — a new farm is assigned to whoever registers it).
+  String? _assigneeId;
+
   @override
   void initState() {
     super.initState();
@@ -47,6 +51,7 @@ class _FarmFormSheetState extends ConsumerState<FarmFormSheet> {
     _addressController = TextEditingController(text: existing?.address ?? '');
     _detailAddressController = TextEditingController();
     _phoneController = TextEditingController(text: existing?.ownerContact ?? '');
+    _assigneeId = existing?.assignedMemberId;
   }
 
   @override
@@ -133,6 +138,9 @@ class _FarmFormSheetState extends ConsumerState<FarmFormSheet> {
           nearestStationName: stationName,
         );
       } else {
+        final members = ref.read(orgMembersProvider).valueOrNull ?? const <OrgMember>[];
+        final changed = _assigneeId != widget.existing!.assignedMemberId;
+        final assignee = changed ? members.where((m) => m.id == _assigneeId).firstOrNull : null;
         await repo.updateFarm(
           widget.existing!.id,
           name: _nameController.text.trim(),
@@ -141,6 +149,7 @@ class _FarmFormSheetState extends ConsumerState<FarmFormSheet> {
           region: region,
           nearestStationCode: stationCode,
           nearestStationName: stationName,
+          assignee: assignee,
         );
       }
       ref.invalidate(farmsProvider);
@@ -200,6 +209,29 @@ class _FarmFormSheetState extends ConsumerState<FarmFormSheet> {
       highlighted: true,
       onTap: onTap,
     );
+  }
+
+  Widget _buildAssigneePicker() {
+    return ref.watch(orgMembersProvider).when(
+          data: (members) {
+            final active = members.where((m) => m.status == MemberStatus.active).toList();
+            // Keep showing the current 담당자 even if they're no longer active.
+            final current = members.where((m) => m.id == _assigneeId).firstOrNull;
+            final options = [...active, if (current != null && !active.contains(current)) current];
+            return DropdownButtonFormField<String>(
+              initialValue: options.any((m) => m.id == _assigneeId) ? _assigneeId : null,
+              decoration: _decoration(widget.existing?.assignedMemberName ?? '담당자 선택'),
+              style: const TextStyle(fontSize: 13.5, color: AppColors.textPrimary),
+              items: [
+                for (final m in options)
+                  DropdownMenuItem(value: m.id, child: Text('${m.name} · ${m.role.label}', overflow: TextOverflow.ellipsis)),
+              ],
+              onChanged: (id) => setState(() => _assigneeId = id),
+            );
+          },
+          loading: () => const LinearProgressIndicator(minHeight: 2),
+          error: (e, _) => const Text('구성원 목록을 불러오지 못했습니다.', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+        );
   }
 
   @override
@@ -295,6 +327,12 @@ class _FarmFormSheetState extends ConsumerState<FarmFormSheet> {
                   loading: () => const LinearProgressIndicator(minHeight: 2),
                   error: (e, _) => const Text('관측소 목록을 불러오지 못했습니다.', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
                 ),
+                if (widget.existing != null) ...[
+                  const SizedBox(height: 14),
+                  const _FieldLabel('담당자'),
+                  const SizedBox(height: 6),
+                  _buildAssigneePicker(),
+                ],
                 const SizedBox(height: 20),
                 SizedBox(
                   width: double.infinity,

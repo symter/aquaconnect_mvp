@@ -7,6 +7,8 @@ import 'package:share_plus/share_plus.dart' show Share;
 
 import '../../data/models/member.dart';
 import '../../data/models/memo.dart';
+import '../../data/models/memo_comment.dart';
+import '../providers/memo_read_tracker.dart';
 import '../providers/repository_providers.dart';
 import '../providers/data_providers.dart';
 import '../theme/app_colors.dart';
@@ -21,12 +23,21 @@ class MemoCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final member = ref.watch(authStateProvider).valueOrNull?.member;
     final isPrivileged = member?.role == MemberRole.owner || member?.role == MemberRole.director;
-    // Institute memos can be edited or deleted by their author ("기관명 · 이름")
-    // or by an owner/director — the same rule the server enforces. A farm's
-    // 문의 memo is never editable.
-    final canModify = memo.authorType == MemoAuthorType.institute &&
+    // Memos record their author's member id; older ones are matched by the
+    // "기관명 · 이름" signature — the same rule the server enforces.
+    final isMine = memo.authorType == MemoAuthorType.institute &&
         member != null &&
-        (isPrivileged || memo.authorName.endsWith(' · ${member.name}'));
+        (memo.authorMemberId != null
+            ? memo.authorMemberId == member.id
+            : memo.authorName.endsWith(' · ${member.name}'));
+    // Editable/deletable by the author or an owner/director. A farm's 문의
+    // memo is never editable.
+    final canModify = memo.authorType == MemoAuthorType.institute && member != null && (isPrivileged || isMine);
+    // Being shown on screen counts as read (읽음 표시) — except your own memo.
+    if (member != null && !isMine && !memo.readByMe) {
+      final tracker = ref.read(memoReadTrackerProvider);
+      WidgetsBinding.instance.addPostFrameCallback((_) => tracker.seen(memo.id));
+    }
     final canSeeHistory = isPrivileged && memo.edits.isNotEmpty;
     final isInstitute = memo.authorType == MemoAuthorType.institute;
     final authorBg = isInstitute ? AppColors.brandTint : AppColors.goodTint;
@@ -103,7 +114,10 @@ class MemoCard extends ConsumerWidget {
                   runSpacing: 4,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    const Text('댓글 달기', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMuted)),
+                    _FooterAction(
+                      label: memo.commentCount > 0 ? '댓글 ${memo.commentCount}' : '댓글 달기',
+                      onTap: () => _showComments(context),
+                    ),
                     _FooterAction(label: '공유', onTap: () => _share(context)),
                     if (canModify) _FooterAction(label: '수정', onTap: () => _showEditSheet(context)),
                     if (canSeeHistory)
@@ -114,8 +128,12 @@ class MemoCard extends ConsumerWidget {
               ),
               const SizedBox(width: 8),
               Text(
-                memo.readByFarm ? '읽음' : '나만 읽음',
-                style: const TextStyle(fontSize: 10.5, color: AppColors.textFaint),
+                memo.readCount > 0 ? '읽음 ${memo.readCount}' : '안 읽음',
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: memo.readCount > 0 ? FontWeight.w600 : FontWeight.w400,
+                  color: memo.readCount > 0 ? AppColors.textMuted : AppColors.textFaint,
+                ),
               ),
             ],
           ),
@@ -165,6 +183,16 @@ class MemoCard extends ConsumerWidget {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('삭제하지 못했어요: $e')));
       }
     }
+  }
+
+  void _showComments(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (_) => _MemoCommentsSheet(memo: memo),
+    );
   }
 
   void _showEditSheet(BuildContext context) {
@@ -310,6 +338,212 @@ class _MemoEditSheetState extends ConsumerState<_MemoEditSheet> {
                 : const Text('저장'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 댓글 sheet: the thread, oldest first, with an input at the bottom.
+class _MemoCommentsSheet extends ConsumerStatefulWidget {
+  const _MemoCommentsSheet({required this.memo});
+
+  final Memo memo;
+
+  @override
+  ConsumerState<_MemoCommentsSheet> createState() => _MemoCommentsSheetState();
+}
+
+class _MemoCommentsSheetState extends ConsumerState<_MemoCommentsSheet> {
+  final _controller = TextEditingController();
+  List<MemoComment>? _comments;
+  String? _loadError;
+  String? _sendError;
+  bool _sending = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final comments = await ref.read(memoRepositoryProvider).listComments(widget.memo.id);
+      if (mounted) setState(() => _comments = comments);
+    } catch (e) {
+      if (mounted) setState(() => _loadError = '댓글을 불러오지 못했어요: $e');
+    }
+  }
+
+  Future<void> _send() async {
+    final text = _controller.text.trim();
+    if (text.isEmpty || _sending) return;
+    setState(() {
+      _sending = true;
+      _sendError = null;
+    });
+    try {
+      final comment = await ref.read(memoRepositoryProvider).addComment(memoId: widget.memo.id, content: text);
+      if (!mounted) return;
+      _controller.clear();
+      setState(() {
+        _comments = [...?_comments, comment];
+        _sending = false;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _sending = false;
+          _sendError = '댓글을 남기지 못했어요: $e';
+        });
+      }
+    }
+  }
+
+  Future<void> _delete(MemoComment comment) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('댓글 삭제'),
+        content: const Text('이 댓글을 삭제할까요?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('취소')),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('삭제', style: TextStyle(color: AppColors.danger)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ref.read(memoRepositoryProvider).deleteComment(memoId: widget.memo.id, commentId: comment.id);
+      if (mounted) setState(() => _comments = _comments?.where((c) => c.id != comment.id).toList());
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('삭제하지 못했어요: $e')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final member = ref.watch(authStateProvider).valueOrNull?.member;
+    final isPrivileged = member?.role == MemberRole.owner || member?.role == MemberRole.director;
+    final fmt = DateFormat('M/d HH:mm');
+    final comments = _comments;
+
+    final Widget body;
+    if (_loadError != null) {
+      body = Padding(
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        child: Text(_loadError!, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12.5, color: AppColors.textMuted)),
+      );
+    } else if (comments == null) {
+      body = const Padding(padding: EdgeInsets.symmetric(vertical: 24), child: Center(child: CircularProgressIndicator()));
+    } else if (comments.isEmpty) {
+      body = const Padding(
+        padding: EdgeInsets.symmetric(vertical: 24),
+        child: Text('아직 댓글이 없어요. 첫 댓글을 남겨 보세요.',
+            textAlign: TextAlign.center, style: TextStyle(fontSize: 12.5, color: AppColors.textMuted)),
+      );
+    } else {
+      body = Flexible(
+        child: ListView.separated(
+          shrinkWrap: true,
+          itemCount: comments.length,
+          separatorBuilder: (_, _) => const SizedBox(height: 8),
+          itemBuilder: (_, i) {
+            final c = comments[i];
+            final canDelete = member != null && (isPrivileged || c.authorMemberId == member.id);
+            return Container(
+              padding: const EdgeInsets.fromLTRB(12, 10, 6, 10),
+              decoration: BoxDecoration(color: AppColors.background, borderRadius: BorderRadius.circular(10)),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('${c.authorName} · ${fmt.format(c.createdAt.toLocal())}',
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.brand)),
+                        const SizedBox(height: 3),
+                        Text(c.content, style: const TextStyle(fontSize: 13, color: AppColors.textPrimary, height: 1.45)),
+                      ],
+                    ),
+                  ),
+                  if (canDelete)
+                    IconButton(
+                      tooltip: '댓글 삭제',
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.textMuted),
+                      onPressed: () => _delete(c),
+                    ),
+                ],
+              ),
+            );
+          },
+        ),
+      );
+    }
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 18, 20, 12 + MediaQuery.of(context).viewInsets.bottom),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.75),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text('댓글', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+            const SizedBox(height: 4),
+            Text(widget.memo.content,
+                maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+            const SizedBox(height: 12),
+            body,
+            const SizedBox(height: 12),
+            if (_sendError != null) ...[
+              Text(_sendError!, style: const TextStyle(fontSize: 12, color: AppColors.danger)),
+              const SizedBox(height: 6),
+            ],
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _controller,
+                    enabled: !_sending,
+                    minLines: 1,
+                    maxLines: 4,
+                    maxLength: 1000,
+                    textInputAction: TextInputAction.send,
+                    onSubmitted: (_) => _send(),
+                    decoration: InputDecoration(
+                      hintText: '댓글 남기기',
+                      counterText: '',
+                      isDense: true,
+                      filled: true,
+                      fillColor: AppColors.background,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton.filled(
+                  tooltip: '보내기',
+                  onPressed: _sending ? null : _send,
+                  icon: _sending
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.send, size: 18),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

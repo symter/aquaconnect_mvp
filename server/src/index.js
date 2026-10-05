@@ -8,6 +8,7 @@ import { diseaseInfoRouter } from './routes/diseaseInfo.js';
 import { farmsRouter } from './routes/farms.js';
 import { invitationsRouter, publicInvitationsRouter } from './routes/invitations.js';
 import { scheduleAuditPurge } from './lib/audit.js';
+import { scheduleDigests } from './lib/digest.js';
 import { membersRouter } from './routes/members.js';
 import { memosRouter } from './routes/memos.js';
 import { notificationsRouter } from './routes/notifications.js';
@@ -49,3 +50,4 @@ app.use((err, req, res, next) => {
 const port = process.env.PORT || 8080;
 app.listen(port, () => console.log(`AquaConnect API listening on :${port}`));
 scheduleAuditPurge();
+scheduleDigests();

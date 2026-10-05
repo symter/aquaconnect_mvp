@@ -1,4 +1,5 @@
 import '../models/farm.dart';
+import '../models/org_member.dart';
 
 abstract class FarmRepository {
   Future<List<Farm>> listFarms({String? orgId});
@@ -17,6 +18,7 @@ abstract class FarmRepository {
     required String nearestStationName,
   });
 
+  /// [assignee] changes the 담당자; null keeps the current one.
   Future<Farm> updateFarm(
     String farmId, {
     required String name,
@@ -25,6 +27,7 @@ abstract class FarmRepository {
     required String region,
     required String nearestStationCode,
     required String nearestStationName,
+    OrgMember? assignee,
   });
 
   Future<void> deleteFarm(String farmId);

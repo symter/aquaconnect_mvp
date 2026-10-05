@@ -2,6 +2,7 @@ import { Router } from 'express';
 
 import { requireAuth } from '../auth.js';
 import { query } from '../db.js';
+import { DAILY_TIME_RE, DIGEST_DEFAULTS, kstNow } from '../lib/digest.js';
 import { notifyMembers, toNotificationJson, vapidKeys } from '../lib/notify.js';
 
 export const notificationsRouter = Router();
@@ -57,6 +58,45 @@ notificationsRouter.put('/settings', async (req, res) => {
     [req.memberId, riskAlerts, memoAlerts],
   );
   res.json(toSettingsJson(rows[0]));
+});
+
+// 하루 요약 설정 (sent by lib/digest.js).
+function toDigestJson(row) {
+  return {
+    dailyEnabled: row?.daily_enabled ?? DIGEST_DEFAULTS.dailyEnabled,
+    dailyTime: row?.daily_time ?? DIGEST_DEFAULTS.dailyTime,
+    weeklyEnabled: row?.weekly_enabled ?? DIGEST_DEFAULTS.weeklyEnabled,
+  };
+}
+
+notificationsRouter.get('/digest', async (req, res) => {
+  const { rows } = await query('select * from digest_settings where member_id = $1', [req.memberId]);
+  res.json(toDigestJson(rows[0]));
+});
+
+notificationsRouter.put('/digest', async (req, res) => {
+  const { dailyEnabled, dailyTime, weeklyEnabled } = req.body ?? {};
+  if (typeof dailyEnabled !== 'boolean' || typeof weeklyEnabled !== 'boolean' || !DAILY_TIME_RE.test(dailyTime ?? '')) {
+    return res.status(400).json({ error: '하루 요약 설정 값이 올바르지 않습니다.' });
+  }
+  // Moving the time to one that has already passed today starts tomorrow,
+  // instead of firing the moment the setting is saved.
+  const now = kstNow();
+  const { rows } = await query(
+    `insert into digest_settings (member_id, daily_enabled, daily_time, weekly_enabled, last_daily_on)
+     values ($1, $2, $3, $4, case when $3 <= $5 then $6::date end)
+     on conflict (member_id) do update set
+       daily_enabled = excluded.daily_enabled,
+       daily_time = excluded.daily_time,
+       weekly_enabled = excluded.weekly_enabled,
+       last_daily_on = case
+         when excluded.daily_time <= $5 and coalesce(digest_settings.last_daily_on, '-infinity') < $6::date then $6::date
+         else digest_settings.last_daily_on
+       end
+     returning *`,
+    [req.memberId, dailyEnabled, dailyTime, weeklyEnabled, now.time, now.date],
+  );
+  res.json(toDigestJson(rows[0]));
 });
 
 notificationsRouter.get('/push/public-key', async (req, res) => {

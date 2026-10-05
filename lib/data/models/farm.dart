@@ -13,6 +13,7 @@ class Farm {
     required this.headline,
     this.waterTemp,
     this.lastVisitDays,
+    this.assignedMemberId,
     this.assignedMemberName,
     this.assignedMemberPhone,
     this.ownerContact,
@@ -37,6 +38,9 @@ class Farm {
   /// Days since the most recent institute memo on this farm. Null when no
   /// visit has been recorded yet.
   final int? lastVisitDays;
+
+  /// The 담당자 — Home's "내 담당" filter compares it to the signed-in member.
+  final String? assignedMemberId;
   final String? assignedMemberName;
 
   /// The assigned staff member's phone — the 문의 contact on the farm's
@@ -56,6 +60,7 @@ class Farm {
         headline: json['headline'] as String,
         waterTemp: (json['waterTemp'] as num?)?.toDouble(),
         lastVisitDays: (json['lastVisitDays'] as num?)?.toInt(),
+        assignedMemberId: json['assignedMemberId'] as String?,
         assignedMemberName: json['assignedMemberName'] as String?,
         assignedMemberPhone: json['assignedMemberPhone'] as String?,
         ownerContact: json['ownerContact'] as String?,
@@ -73,6 +78,7 @@ class Farm {
         'headline': headline,
         'waterTemp': waterTemp,
         'lastVisitDays': lastVisitDays,
+        'assignedMemberId': assignedMemberId,
         'assignedMemberName': assignedMemberName,
         'assignedMemberPhone': assignedMemberPhone,
         'ownerContact': ownerContact,
@@ -85,6 +91,9 @@ class Farm {
     String? nearestStationCode,
     String? nearestStationName,
     String? ownerContact,
+    String? assignedMemberId,
+    String? assignedMemberName,
+    String? assignedMemberPhone,
   }) {
     return Farm(
       id: id,
@@ -98,8 +107,9 @@ class Farm {
       headline: headline,
       waterTemp: waterTemp,
       lastVisitDays: lastVisitDays,
-      assignedMemberName: assignedMemberName,
-      assignedMemberPhone: assignedMemberPhone,
+      assignedMemberId: assignedMemberId ?? this.assignedMemberId,
+      assignedMemberName: assignedMemberName ?? this.assignedMemberName,
+      assignedMemberPhone: assignedMemberPhone ?? this.assignedMemberPhone,
       ownerContact: ownerContact ?? this.ownerContact,
     );
   }

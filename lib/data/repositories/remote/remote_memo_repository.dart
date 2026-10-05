@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import '../../models/memo.dart';
+import '../../models/memo_comment.dart';
 import '../../services/api_client.dart';
 import '../memo_repository.dart';
 
@@ -99,4 +100,30 @@ class RemoteMemoRepository implements MemoRepository {
 
   @override
   Future<Uint8List> loadPhoto(String photoId) => _api.getBytes('/api/memos/photos/$photoId');
+
+  @override
+  Future<void> markRead(List<String> memoIds) async {
+    if (memoIds.isEmpty) return;
+    await _api.post('/api/memos/read', body: {'ids': memoIds});
+    _refresh.add(null);
+  }
+
+  @override
+  Future<List<MemoComment>> listComments(String memoId) async {
+    final json = await _api.get('/api/memos/$memoId/comments') as List<dynamic>;
+    return json.map((e) => MemoComment.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  @override
+  Future<MemoComment> addComment({required String memoId, required String content}) async {
+    final json = await _api.post('/api/memos/$memoId/comments', body: {'content': content}) as Map<String, dynamic>;
+    _refresh.add(null);
+    return MemoComment.fromJson(json);
+  }
+
+  @override
+  Future<void> deleteComment({required String memoId, required String commentId}) async {
+    await _api.delete('/api/memos/$memoId/comments/$commentId');
+    _refresh.add(null);
+  }
 }

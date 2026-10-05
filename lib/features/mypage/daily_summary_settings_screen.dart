@@ -20,10 +20,20 @@ String formatKoreanTime(TimeOfDay time) {
 class DailySummarySettingsScreen extends ConsumerWidget {
   const DailySummarySettingsScreen({super.key});
 
+  Future<void> _save(BuildContext context, Future<void> saving) async {
+    try {
+      await saving;
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('설정을 저장하지 못했어요: $e')));
+      }
+    }
+  }
+
   Future<void> _pickTime(BuildContext context, WidgetRef ref, TimeOfDay current) async {
     final picked = await showTimePicker(context: context, initialTime: current);
     if (picked != null) {
-      await ref.read(digestSettingsProvider.notifier).setDailyTime(picked);
+      if (context.mounted) await _save(context, ref.read(digestSettingsProvider.notifier).setDailyTime(picked));
     }
   }
 
@@ -51,7 +61,7 @@ class DailySummarySettingsScreen extends ConsumerWidget {
                     icon: Icons.summarize_outlined,
                     label: '하루 요약 받기',
                     value: settings.dailyEnabled,
-                    onChanged: (v) => ref.read(digestSettingsProvider.notifier).setDailyEnabled(v),
+                    onChanged: (v) => _save(context, ref.read(digestSettingsProvider.notifier).setDailyEnabled(v)),
                   ),
                   const Divider(height: 1, indent: 16, endIndent: 16),
                   _TimeRow(
@@ -69,13 +79,14 @@ class DailySummarySettingsScreen extends ConsumerWidget {
                 icon: Icons.calendar_view_week_outlined,
                 label: '주간 요약 받기',
                 value: settings.weeklyEnabled,
-                onChanged: (v) => ref.read(digestSettingsProvider.notifier).setWeeklyEnabled(v),
+                onChanged: (v) => _save(context, ref.read(digestSettingsProvider.notifier).setWeeklyEnabled(v)),
               ),
             ),
             const SizedBox(height: 8),
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 4),
-              child: Text('매주 월요일 아침에 발송돼요', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+              child: Text('매주 월요일 오전 8시에 지난 7일 요약이 알림으로 와요. 하루 요약은 정한 시각에 그날의 위험·주의 양식장과 메모 수를 알려 드려요.',
+                  style: TextStyle(fontSize: 11, color: AppColors.textMuted, height: 1.5)),
             ),
           ],
         ),

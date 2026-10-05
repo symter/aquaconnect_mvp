@@ -13,6 +13,7 @@ const FARM_FIELDS = [
   ['owner_contact', '어가 연락처'],
   ['region', '지역'],
   ['nearest_station_name', '관측소'],
+  ['assigned_member_name', '담당자'],
 ];
 
 export const farmsRouter = Router();
@@ -46,6 +47,7 @@ export function toFarmJson(row) {
     headline: row.headline,
     waterTemp: row.water_temp == null ? null : Number(row.water_temp),
     lastVisitDays: daysSince(row.last_visit_at),
+    assignedMemberId: row.assigned_member_id ?? null,
     assignedMemberName: row.assigned_member_name,
     assignedMemberPhone: row.assigned_member_phone ?? null,
     ownerContact: row.owner_contact,
@@ -99,25 +101,35 @@ farmsRouter.put('/:id', async (req, res) => {
   if (error) return res.status(400).json({ error });
 
   const { name, address, ownerContact, region = '', nearestStationCode = '', nearestStationName = '' } = req.body;
-  const { rows: before } = await query('select * from farms where org_id = $1 and id = $2', [
-    orgId,
-    req.params.id,
-  ]);
-  if (!before[0]) return res.status(404).json({ error: '양식장을 찾을 수 없습니다.' });
+  const [before] = await loadFarmRows('f.org_id = $1 and f.id = $2', [orgId, req.params.id]);
+  if (!before) return res.status(404).json({ error: '양식장을 찾을 수 없습니다.' });
+
+  // 담당자: optional — left out, the current one stays. Must be an active
+  // member of the same org.
+  let assignedMemberId = before.assigned_member_id;
+  if (req.body.assignedMemberId !== undefined) {
+    const { rows: memberRows } = await query(
+      "select id from members where id::text = $1 and org_id = $2 and status = 'active'",
+      [String(req.body.assignedMemberId), orgId],
+    );
+    if (!memberRows[0]) return res.status(400).json({ error: '담당자를 찾을 수 없습니다.' });
+    assignedMemberId = memberRows[0].id;
+  }
 
   await query(
     `update farms
-     set name = $3, address = $4, owner_contact = $5, region = $6, nearest_station_code = $7, nearest_station_name = $8
+     set name = $3, address = $4, owner_contact = $5, region = $6, nearest_station_code = $7, nearest_station_name = $8,
+         assigned_member_id = $9
      where org_id = $1 and id = $2`,
-    [orgId, req.params.id, name.trim(), address.trim(), ownerContact.trim(), region, nearestStationCode, nearestStationName],
+    [orgId, req.params.id, name.trim(), address.trim(), ownerContact.trim(), region, nearestStationCode, nearestStationName, assignedMemberId],
   );
   // A different station means the stored 수온 belongs to the old one.
-  if (before[0].nearest_station_code !== nearestStationCode) {
+  if (before.nearest_station_code !== nearestStationCode) {
     await query('update farms set water_temp = null where id = $1', [req.params.id]);
     await refreshReportQuietly(req.params.id);
   }
   const [farm] = await loadFarmRows('f.id = $1', [req.params.id]);
-  const changes = diffFields(before[0], farm, FARM_FIELDS);
+  const changes = diffFields(before, farm, FARM_FIELDS);
   if (changes.length) {
     await recordAudit({ orgId, actorId: req.memberId, entityType: 'farm', entityId: farm.id, entityName: farm.name, action: 'update', changes });
   }

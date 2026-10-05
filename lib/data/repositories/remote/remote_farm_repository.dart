@@ -1,4 +1,5 @@
 import '../../models/farm.dart';
+import '../../models/org_member.dart';
 import '../../services/api_client.dart';
 import '../farm_repository.dart';
 
@@ -53,8 +54,10 @@ class RemoteFarmRepository implements FarmRepository {
     required String region,
     required String nearestStationCode,
     required String nearestStationName,
+    OrgMember? assignee,
   }) async {
     final json = await _api.put('/api/farms/$farmId', body: {
+      if (assignee != null) 'assignedMemberId': assignee.id,
       'name': name,
       'address': address,
       'ownerContact': ownerContact,

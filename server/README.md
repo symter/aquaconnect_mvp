@@ -71,11 +71,14 @@ Postgres가 로컬에 없다면 `npm run smoke-test`로 (pg-mem 기반 인메모
 | GET | `/api/auth/me` | 현재 세션 복원 |
 | GET | `/api/farms`, `/api/farms/:id` | 담당 양식장 목록/상세 |
 | POST | `/api/farms` | 양식장 등록 (양식장명/위치/전화번호 필수) |
-| PUT | `/api/farms/:id` | 양식장 정보 수정 |
+| PUT | `/api/farms/:id` | 양식장 정보 수정 (`assignedMemberId`로 담당자 변경, 생략하면 유지) |
 | DELETE | `/api/farms/:id` | 양식장 삭제 |
 | GET/POST | `/api/memos` | 메모 조회(`?farmId=`)/작성 |
 | PATCH | `/api/memos/:id` | 메모 수정 `{content}` — 기관 메모만, 작성자 또는 소유자·원장. 수정 전 내용은 `memo_edits`에 남고, 이력 내용은 소유자·원장에게만 응답 (다른 구성원은 `editCount`만) |
 | DELETE | `/api/memos/:id` | 메모 삭제 (작성자 또는 소유자·원장) |
+| POST | `/api/memos/read` | 읽음 표시 `{ids:[...]}` — 응답의 `readCount`는 작성자를 뺀 읽은 사람 수, `readByMe`는 내가 읽었는지 |
+| GET/POST | `/api/memos/:id/comments` | 댓글 목록/작성 `{content}` (1000자 이내). 메모 작성자와 이미 댓글을 단 사람에게 `comment` 알림 |
+| DELETE | `/api/memos/:id/comments/:commentId` | 댓글 삭제 (댓글 작성자 또는 소유자·원장) |
 | GET | `/api/disease-info` | 수산질병 정보 |
 | GET | `/api/reports/:farmId` | 최신 리포트(없으면 즉시 생성) |
 | GET | `/api/reports?farmIds=a,b` | 여러 양식장 최신 리포트 일괄 조회 |
@@ -98,7 +101,8 @@ Postgres가 로컬에 없다면 `npm run smoke-test`로 (pg-mem 기반 인메모
 - 알림이 생기는 경우: 양식장 위험도가 올라갈 때(양호→주의/위험, 주의→위험 — 조직 전체), 다른 구성원이
   메모를 남길 때(작성자 제외). 각 구성원이 마이페이지 > 알림 설정에서 종류별로 끌 수 있고, 끈 종류는 알림함에도 쌓이지 않습니다.
 - `GET /api/notifications` 알림함, `POST /api/notifications/:id/read`, `POST /api/notifications/read-all`,
-  `GET|PUT /api/notifications/settings`, `GET /api/notifications/push/public-key`,
+  `GET|PUT /api/notifications/settings`, `GET|PUT /api/notifications/digest` (하루 요약 설정 `{dailyEnabled, dailyTime:"HH:MM", weeklyEnabled}`),
+  `GET /api/notifications/push/public-key`,
   `POST|DELETE /api/notifications/push/subscriptions`, `POST /api/notifications/test`.
 - 기기 쪽은 `web/push_sw.js` 서비스워커가 받습니다. 안드로이드 Chrome·PC 브라우저는 바로 되고,
   아이폰(iOS 16.4+)은 Safari에서 "홈 화면에 추가"로 설치한 앱에서만 알림을 켤 수 있습니다.
@@ -153,3 +157,11 @@ Postgres가 로컬에 없다면 `npm run smoke-test`로 (pg-mem 기반 인메모
   초대 역할로 계정을 만들고 로그인 토큰 반환. 초대 소진은 같은 트랜잭션의 조건부 update라 동시에 눌러도 1명만 성공합니다.
   가입 횟수 제한(IP당 1시간 10건)은 회원가입과 공유합니다.
 - 앱 링크는 `<웹 주소>/#/invite/<code>`. 초대 생성·취소·합류는 변경 이력에 남습니다.
+
+### 하루 요약 / 주간 요약
+
+서버가 1분마다 확인해서 (`src/lib/digest.js`, 한국 시간 기준) 알림함 + 휴대폰 푸시로 보냅니다.
+- 하루 요약: 각자 정한 시각(기본 16:00)에 위험·주의 양식장 수와 그날 메모·어가 문의 수.
+- 주간 요약: 매주 월요일 08:00에 지난 7일 메모·문의 수와 현재 위험·주의 양식장 수.
+- 보낸 날짜를 `digest_settings.last_daily_on/last_weekly_on`에 기록하므로 재시작해도 같은 요약을 두 번 보내지 않습니다.
+  이미 지난 시각으로 바꾸면 그날은 건너뛰고 다음 날부터 보냅니다.
