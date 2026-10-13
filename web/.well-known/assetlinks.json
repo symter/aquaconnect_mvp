@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "kr.haegang.aquaconnect",
+        "sha256_cert_fingerprints": ["9F:C6:CE:31:18:2B:E7:D3:BD:E1:63:F9:73:1F:48:82:77:6B:E2:B8:A2:8C:C8:31:2D:BF:55:03:99:5B:44:64"]
+      }
+    }]
