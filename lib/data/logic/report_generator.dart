@@ -25,16 +25,13 @@ class ReportGenerator {
     final sevenDaysAgo = now.subtract(const Duration(days: 7));
     final recentMemos = farmMemos.where((m) => m.createdAt.isAfter(sevenDaysAgo)).toList();
 
-    final dayLabels = (ocean != null && ocean.sevenDayLabels.length == 7)
-        ? ocean.sevenDayLabels
-        : _lastSevenDayLabels(now);
-    // No reading at all (NIFS down / station without data, and no earlier
-    // reading stored on the farm) leaves the trend empty rather than
+    final dayLabels = _lastSevenDayLabels(now);
+    // NIFS exposes no temperature history, so the trend is the current
+    // reading repeated. No reading at all (NIFS down / station without data,
+    // and no earlier reading stored on the farm) leaves it empty rather than
     // inventing a temperature.
     final currentTemp = ocean?.waterTemp ?? farm.waterTemp;
-    final List<double> tempTrend = (ocean != null && ocean.sevenDayTemps.length == 7)
-        ? ocean.sevenDayTemps
-        : (currentTemp == null ? const [] : List.filled(7, currentTemp));
+    final List<double> tempTrend = currentTemp == null ? const [] : List.filled(7, currentTemp);
     final mortalityTrend = _mortalityByDay(recentMemos, now);
 
     final weeklyMortality = mortalityTrend.fold<int>(0, (sum, v) => sum + v.round());

@@ -96,43 +96,118 @@ String? oceanLayerDisplayLabel(String? layer) {
   }
 }
 
-/// Aggregated environment snapshot used to render the 4-stat grid + 7-day
-/// sparkline shown on Info / AllReport / ReportDetail.
+/// One NIFS 어장환경 survey (`femoSeaList`, via `GET /api/ocean/quality`)
+/// at the survey point nearest to a station. Unlike the realtime water
+/// temperature this is a periodic field survey (roughly quarterly), so
+/// [observedAt] can be months old — the UI always shows it.
+class WaterQuality {
+  const WaterQuality({
+    required this.pointName,
+    required this.distanceKm,
+    required this.observedAt,
+    required this.surface,
+    required this.bottom,
+    this.depthM,
+    this.transparencyM,
+  });
+
+  /// e.g. "부산 연안 1정점".
+  final String pointName;
+  final double distanceKm;
+  final DateTime observedAt;
+  final double? depthM;
+  final double? transparencyM;
+
+  /// Keyed by the server's field names: salinity, ph, dissolvedOxygen,
+  /// cod, ammonia, nitrate, nitrite, din, totalNitrogen, dip,
+  /// totalPhosphorus, silicate, chlorophyll, suspendedSolids, temp.
+  final Map<String, double?> surface;
+  final Map<String, double?> bottom;
+
+  /// Farmed fish live below the surface, so the bottom-layer value wins
+  /// when the survey has one (same reasoning as the water-temp layer pick).
+  double? value(String key) => bottom[key] ?? surface[key];
+
+  factory WaterQuality.fromJson(Map<String, dynamic> json) {
+    Map<String, double?> layer(Object? raw) => {
+          for (final e in (raw as Map<String, dynamic>? ?? const {}).entries) e.key: OceanObservation._toDouble(e.value),
+        };
+    return WaterQuality(
+      pointName: '${json['fishery']} ${json['kind']} ${json['point']}정점',
+      distanceKm: OceanObservation._toDouble(json['distanceKm']) ?? 0,
+      observedAt: DateTime.parse(json['observedAt'] as String).toLocal(),
+      depthM: OceanObservation._toDouble(json['depthM']),
+      transparencyM: OceanObservation._toDouble(json['transparencyM']),
+      surface: layer(json['surface']),
+      bottom: layer(json['bottom']),
+    );
+  }
+}
+
+/// Parses a `risaList` observation's date ('2026-10-12' or '20261012') and
+/// time ('10:30:00' / '10:30') into a local DateTime, or null if malformed.
+DateTime? parseObservationTime(String date, String time) {
+  final d = date.replaceAll('-', '');
+  if (d.length != 8) return null;
+  final t = time.split(':');
+  return DateTime.tryParse(
+    '${d.substring(0, 4)}-${d.substring(4, 6)}-${d.substring(6, 8)} '
+    '${t[0].padLeft(2, '0')}:${(t.length > 1 ? t[1] : '00').padLeft(2, '0')}:00',
+  );
+}
+
+/// Whether [OceanSnapshot.salinity] / [OceanSnapshot.dissolvedOxygen]
+/// could be filled from a nearby NIFS 어장환경 survey point.
+enum WaterQualityStatus {
+  available,
+
+  /// The lookup worked but no survey point lies within 50km.
+  noneNearby,
+
+  /// The lookup failed or the station has no known coordinates.
+  unavailable,
+}
+
+/// Aggregated environment snapshot used to render the stat grid shown on
+/// Info / AllReport / ReportDetail.
 ///
-/// [salinity], [dissolvedOxygen] and [redTideStatus] are nullable because
-/// the NIFS `risaList` feed only publishes real-time water temperature —
-/// those fields stay null (rendered as "정보 없음") until a richer source
-/// is wired in. [sevenDayTemps] may hold fewer than 7 points in that same
-/// live mode since NIFS exposes no history endpoint; [hasTrendHistory]
-/// tells the UI whether the series is real history or just the live point.
+/// Water temperature comes from the realtime NIFS `risaList` feed (current
+/// value only — NIFS exposes no history); [salinity], [dissolvedOxygen] and
+/// the rest of [waterQuality] come from the nearest NIFS 어장환경 survey
+/// point, and stay null unless [waterQualityStatus] is available.
 class OceanSnapshot {
   const OceanSnapshot({
     required this.region,
     required this.stationName,
     required this.waterTemp,
-    required this.sevenDayTemps,
-    required this.sevenDayLabels,
     required this.source,
-    required this.hasTrendHistory,
     this.salinity,
-    this.redTideStatus,
     this.dissolvedOxygen,
+    this.waterQualityStatus = WaterQualityStatus.unavailable,
     this.layer,
+    this.observedAt,
+    this.waterQuality,
+    this.fetchedAt,
   });
 
   final String region;
   final String stationName;
   final double waterTemp;
   final double? salinity;
-  final String? redTideStatus;
   final double? dissolvedOxygen;
-  final List<double> sevenDayTemps;
-  final List<String> sevenDayLabels;
+  final WaterQualityStatus waterQualityStatus;
   final String source;
-  final bool hasTrendHistory;
 
   /// Which depth [waterTemp] was measured at ('표층'/'중층'/'저층'), when
   /// known. Null only for aggregate/synthetic snapshots (e.g. the
   /// multi-farm average on AllReport) that don't correspond to one reading.
   final String? layer;
+
+  /// When the station measured [waterTemp].
+  final DateTime? observedAt;
+
+  final WaterQuality? waterQuality;
+
+  /// When the app fetched this snapshot.
+  final DateTime? fetchedAt;
 }

@@ -48,7 +48,7 @@ function normalizeItem(item) {
     observedTime: item.obs_tim ?? '-',
     layer: LAYER_NAMES[item.obs_lay] ?? item.obs_lay ?? '-',
     waterTempC: item.wtr_tmp === '' || item.wtr_tmp == null ? null : Number(item.wtr_tmp),
-    status: STATUS_NAMES[item.repaire_gbn] ?? item.repaire_gbn ?? '-',
+    status: STATUS_NAMES[item.repair_gbn ?? item.repaire_gbn] ?? item.repair_gbn ?? item.repaire_gbn ?? '-',
   };
 }
 

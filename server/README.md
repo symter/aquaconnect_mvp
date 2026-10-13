@@ -14,6 +14,7 @@ for Flutter Web).
 3. 서비스 환경변수에 다음을 추가합니다:
    - `JWT_SECRET` — 임의의 긴 랜덤 문자열 (`node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`)
    - `NIFS_API_KEY` — (선택) 발급받은 키. 비워두면 `D:\202609`와 동일한 기본 데모 키로 동작.
+   - `NIFS_FEMO_API_KEY` — (선택) 어장환경관측(`femoSeaList`) 키. 비워두면 코드에 저장된 기본 키로 동작.
    - `SEED_DEMO_PASSWORD` — (선택) `npm run seed`가 만드는 소유자 계정 비밀번호. 기본값 `demo1234`.
    - `SEED_ORG_NAME` / `SEED_OWNER_NAME` / `SEED_OWNER_EMAIL` / `SEED_OWNER_PHONE` — (선택) 시드할 관리원명·소유자
      이름·로그인 이메일·전화번호. 기본값 해강수산질병관리원 / 이동길 / `leedonggil@haegang.kr` / 없음.
@@ -86,6 +87,7 @@ Postgres가 로컬에 없다면 `npm run smoke-test`로 (pg-mem 기반 인메모
 | POST/GET | `/api/share-links` | 공유링크 발급/목록 |
 | GET | `/api/public/reports/:token` | **공개** — 공유링크로 리포트 조회 |
 | GET | `/api/ocean/realtime?station=` | **공개** — NIFS 실시간 수온 프록시 |
+| GET | `/api/ocean/quality?lat=&lon=[&refresh=1]` | **공개** — 가장 가까운(50km 이내) NIFS 어장환경 조사 정점의 최신 수질(염분·DO·pH·영양염 등). 없으면 `null` |
 
 ## 알아둘 점
 
@@ -95,6 +97,10 @@ Postgres가 로컬에 없다면 `npm run smoke-test`로 (pg-mem 기반 인메모
 - NIFS `risaList` API는 실시간 수온만 제공하고 7일 이력/염도/용존산소/적조는
   주지 않습니다 — `oceanSnapshotForFarm()`은 그 사실을 숨기지 않고 그대로
   단일 값만 리포트 생성에 반영합니다.
+- 염분·용존산소·pH 등은 NIFS 어장환경관측(`femoSeaList`, `src/lib/femo.js`,
+  `D:\py\croll\main.py` 이식)에서 가져옵니다. 실시간 센서가 아니라 연 4회
+  내외의 정기 현장조사라 관측일이 수개월 전일 수 있고, 서버는 작년+올해
+  자료를 메모리에 6시간 캐시합니다 (`refresh=1`은 1분에 한 번까지만 재조회).
 
 ## 알림 (Web Push)
 

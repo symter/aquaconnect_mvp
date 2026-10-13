@@ -9,6 +9,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/widgets/ai_insight_card.dart';
 import '../../core/widgets/buttons.dart';
 import '../../core/widgets/charts.dart';
+import '../../core/widgets/stat_grid.dart';
 import '../../core/widgets/memo_card.dart';
 import '../../core/widgets/risk_badge.dart';
 import '../../data/models/farm.dart';
@@ -178,36 +179,9 @@ class _Body extends ConsumerWidget {
               const SizedBox(height: 4),
               const Text('이 양식장에서 가장 가까운 관측소 기준 (바다누리·NIFS)', style: TextStyle(fontSize: 9.5, color: AppColors.textMuted)),
               const SizedBox(height: 10),
-              if (ocean != null) ...[
-                Text('일별 수온 (℃) · 최근 ${ocean!.sevenDayTemps.length}일', style: const TextStyle(fontSize: 11, color: AppColors.textTertiary)),
-                const SizedBox(height: 4),
-                TempSparkline(values: ocean!.sevenDayTemps, height: 56),
-                const SizedBox(height: 2),
-                ChartDayLabels(labels: ocean!.sevenDayLabels),
-                const Divider(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('용존산소', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
-                    Row(
-                      children: [
-                        Text(
-                          ocean!.dissolvedOxygen == null ? '정보 없음' : '${ocean!.dissolvedOxygen!.toStringAsFixed(1)} mg/L',
-                          style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
-                        ),
-                        if (ocean!.dissolvedOxygen != null) ...[
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(color: AppColors.goodTint, borderRadius: BorderRadius.circular(20)),
-                            child: const Text('정상', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: AppColors.good)),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ],
-                ),
-              ] else
+              if (ocean != null)
+                OceanStatGrid(snapshot: ocean!)
+              else
                 const Text('해양환경 데이터를 불러오지 못했습니다.', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
             ],
           ),

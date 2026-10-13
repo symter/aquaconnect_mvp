@@ -9,10 +9,11 @@ import 'ocean_service.dart';
 /// `risaList` OpenAPI so Flutter Web never hits it (and its CORS policy)
 /// directly.
 ///
-/// That upstream API only reports the current water temperature per
-/// station — no salinity, dissolved oxygen, red tide status, or history —
-/// so [fetchSnapshot] leaves those fields null/short rather than inventing
-/// numbers. See `server/README.md` for the API contract.
+/// `risaList` only reports the current water temperature per station, so
+/// [fetchSnapshot] also asks `/api/ocean/quality` for the nearest NIFS
+/// 어장환경 survey (salinity, DO, pH, nutrients, ...). Red tide status and
+/// temperature history have no source and stay null/short rather than
+/// inventing numbers. See `server/README.md` for the API contract.
 class RailwayOceanService implements OceanService {
   RailwayOceanService({required String baseUrl, http.Client? client})
       : _baseUrl = baseUrl.endsWith('/') ? baseUrl.substring(0, baseUrl.length - 1) : baseUrl,
@@ -55,7 +56,9 @@ class RailwayOceanService implements OceanService {
     required String stationCode,
     required String stationName,
     required String region,
+    bool refresh = false,
   }) async {
+    final qualityFuture = resolveWaterQuality(fetchWaterQuality(stationCode, refresh: refresh));
     final observations = await fetchRealtime(station: stationCode);
     final picked = _pickPreferred(observations);
 
@@ -63,16 +66,37 @@ class RailwayOceanService implements OceanService {
       throw Exception('$stationName 관측소의 수온 데이터를 찾을 수 없습니다.');
     }
 
+    final (quality, qualityStatus) = await qualityFuture;
     return OceanSnapshot(
       region: region,
       stationName: picked.stationName,
       waterTemp: picked.waterTempC!,
       layer: picked.layer,
-      sevenDayTemps: [picked.waterTempC!],
-      sevenDayLabels: const ['오늘'],
-      source: 'NIFS RISA (실시간, 이력 데이터 미제공)',
-      hasTrendHistory: false,
+      observedAt: parseObservationTime(picked.observedDate, picked.observedTime),
+      salinity: quality?.value('salinity'),
+      dissolvedOxygen: quality?.value('dissolvedOxygen'),
+      waterQuality: quality,
+      waterQualityStatus: qualityStatus,
+      fetchedAt: DateTime.now(),
+      source: quality == null ? 'NIFS RISA (실시간 수온)' : 'NIFS RISA (실시간 수온) · NIFS 어장환경관측 (수질)',
     );
+  }
+
+  @override
+  Future<WaterQuality?> fetchWaterQuality(String stationCode, {bool refresh = false}) async {
+    final info = oceanStationCatalog[stationCode];
+    if (info == null) throw Exception('$stationCode 관측소의 좌표를 알 수 없습니다.');
+    final uri = Uri.parse('$_baseUrl/api/ocean/quality').replace(queryParameters: {
+      'lat': '${info.latitude}',
+      'lon': '${info.longitude}',
+      if (refresh) 'refresh': '1',
+    });
+    final response = await _client.get(uri, headers: const {'Accept': 'application/json'});
+    if (response.statusCode != 200) {
+      throw Exception('수질 조회 실패 (HTTP ${response.statusCode})');
+    }
+    final body = jsonDecode(response.body);
+    return body is Map<String, dynamic> ? WaterQuality.fromJson(body) : null;
   }
 
   @override

@@ -75,6 +75,7 @@ class MockOceanService implements OceanService {
     required String stationCode,
     required String stationName,
     required String region,
+    bool refresh = false,
   }) async {
     await Future<void>.delayed(const Duration(milliseconds: 200));
     final info = oceanStationCatalog[stationCode];
@@ -82,15 +83,19 @@ class MockOceanService implements OceanService {
       final temps = _layerTemps(info);
       final layer = ['저층', '중층', '표층'].firstWhere(temps.containsKey);
       final temp = temps[layer]!;
+      final (quality, qualityStatus) = await resolveWaterQuality(fetchWaterQuality(stationCode));
       return OceanSnapshot(
         region: region,
         stationName: info.name,
         waterTemp: temp,
         layer: layer,
-        sevenDayTemps: [temp],
-        sevenDayLabels: const ['오늘'],
-        source: 'NIFS RISA (mock, 실시간 값만 제공)',
-        hasTrendHistory: false,
+        observedAt: _todayNoon(),
+        salinity: quality?.value('salinity'),
+        dissolvedOxygen: quality?.value('dissolvedOxygen'),
+        waterQuality: quality,
+        waterQualityStatus: qualityStatus,
+        fetchedAt: DateTime.now(),
+        source: 'NIFS RISA (실시간 수온) · NIFS 어장환경관측 (수질, mock)',
       );
     }
 
@@ -102,12 +107,23 @@ class MockOceanService implements OceanService {
       layer: _legacyLayer,
       salinity: _salinity[stationCode] ?? _salinity['001'],
       dissolvedOxygen: _dissolvedOxygen[stationCode] ?? _dissolvedOxygen['001'],
-      redTideStatus: '없음',
-      sevenDayTemps: series,
-      sevenDayLabels: _lastSevenDayLabels(),
+      waterQualityStatus: WaterQualityStatus.available,
+      observedAt: _todayNoon(),
+      fetchedAt: DateTime.now(),
       source: '바다누리 해양정보 · NIFS RISA (mock)',
-      hasTrendHistory: true,
     );
+  }
+
+  /// Like the live feed, stations with no survey point within 50km (here:
+  /// 백령도) report none nearby.
+  static const _noNearbySurvey = {'fbn69'};
+
+  @override
+  Future<WaterQuality?> fetchWaterQuality(String stationCode, {bool refresh = false}) async {
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    final info = oceanStationCatalog[stationCode];
+    if (info == null) throw Exception('$stationCode 관측소의 좌표를 알 수 없습니다.');
+    return _noNearbySurvey.contains(stationCode) ? null : _mockQuality(info);
   }
 
   @override
@@ -152,12 +168,34 @@ class MockOceanService implements OceanService {
       ..sort((a, b) => a.name.compareTo(b.name));
   }
 
-  static List<String> _lastSevenDayLabels() {
+  /// Plausible 어장환경 survey values, shaped like a real `femoSeaList`
+  /// record (a late-October survey) and nudged per station so switching
+  /// stations visibly changes them.
+  static WaterQuality _mockQuality(OceanStationInfo info) {
+    final k = info.code.codeUnits.fold<int>(0, (a, b) => a + b) % 10 / 10;
+    double r(double v, [int digits = 2]) => double.parse(v.toStringAsFixed(digits));
+    return WaterQuality(
+      pointName: '${info.name} 연안 1정점',
+      distanceKm: r(1.5 + k * 8, 1),
+      observedAt: DateTime(DateTime.now().year - 1, 10, 27, 15, 20),
+      depthM: 30,
+      transparencyM: r(3 + k * 3, 1),
+      surface: {
+        'salinity': r(32.4 + k), 'ph': r(8.04 + k / 10), 'dissolvedOxygen': r(6.7 + k),
+        'cod': r(1.1 + k / 2), 'ammonia': r(0.008 + k / 100, 3), 'din': r(0.086 + k / 20, 3),
+        'dip': r(0.011 + k / 100, 3), 'chlorophyll': r(0.42 + k), 'suspendedSolids': r(4.2 + k * 3),
+      },
+      bottom: {
+        'salinity': r(33.0 + k), 'ph': r(7.99 + k / 10), 'dissolvedOxygen': r(6.2 + k),
+        'cod': r(0.88 + k / 2), 'ammonia': r(0.006 + k / 100, 3), 'din': r(0.125 + k / 20, 3),
+        'dip': r(0.02 + k / 100, 3), 'chlorophyll': r(0.12 + k), 'suspendedSolids': r(9.7 + k * 3),
+      },
+    );
+  }
+
+  static DateTime _todayNoon() {
     final now = DateTime.now();
-    return List.generate(7, (i) {
-      final d = now.subtract(Duration(days: 6 - i));
-      return '${d.month}/${d.day}';
-    });
+    return DateTime(now.year, now.month, now.day, 12);
   }
 
   static String _today() {

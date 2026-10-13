@@ -5,8 +5,8 @@ import 'package:intl/intl.dart';
 import '../../core/providers/data_providers.dart';
 import '../../core/providers/repository_providers.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/widgets/charts.dart';
 import '../../core/widgets/memo_composer_bar.dart';
+import '../../core/widgets/ocean_data_times_dialog.dart';
 import '../../core/widgets/stat_grid.dart';
 import '../../data/models/disease_info.dart';
 import '../../data/models/ocean_reading.dart';
@@ -172,7 +172,7 @@ class _InfoScreenState extends ConsumerState<InfoScreen> {
   }
 }
 
-class _OceanSection extends StatelessWidget {
+class _OceanSection extends StatefulWidget {
   const _OceanSection({
     required this.stationsAsync,
     required this.stationCode,
@@ -188,8 +188,45 @@ class _OceanSection extends StatelessWidget {
   final ValueChanged<OceanStation> onSelectStation;
 
   @override
+  State<_OceanSection> createState() => _OceanSectionState();
+}
+
+class _OceanSectionState extends State<_OceanSection> {
+  Future<OceanSnapshot>? _future;
+  String? _futureStationCode;
+
+  /// The last snapshot loaded for the current station, kept for the ⓘ
+  /// button while a refresh is in flight.
+  OceanSnapshot? _latest;
+
+  /// Created once per station (and on refresh) instead of on every build,
+  /// so rebuilds don't refetch.
+  Future<OceanSnapshot>? _snapshotFuture() {
+    if (widget.stationCode == null || widget.stationName == null) return null;
+    if (_future == null || _futureStationCode != widget.stationCode) {
+      _latest = null;
+      _load(refresh: false);
+    }
+    return _future;
+  }
+
+  void _load({required bool refresh}) {
+    final code = widget.stationCode!;
+    final name = widget.stationName!;
+    _futureStationCode = code;
+    _future = widget.oceanService
+        .fetchSnapshot(stationCode: code, stationName: name, region: name, refresh: refresh)
+        .then((snapshot) {
+      if (mounted && _futureStationCode == code) setState(() => _latest = snapshot);
+      return snapshot;
+    });
+  }
+
+  void _refresh() => setState(() => _load(refresh: true));
+
+  @override
   Widget build(BuildContext context) {
-    return stationsAsync.when(
+    return widget.stationsAsync.when(
       loading: () => const Padding(
         padding: EdgeInsets.symmetric(vertical: 32),
         child: Center(child: CircularProgressIndicator()),
@@ -200,7 +237,8 @@ class _OceanSection extends StatelessWidget {
         child: Text('관측소 목록을 불러오지 못했습니다.\n$e', style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
       ),
       data: (stations) {
-        if (stations.isEmpty || stationCode == null || stationName == null) {
+        final future = _snapshotFuture();
+        if (stations.isEmpty || future == null) {
           return Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(color: AppColors.surface, border: Border.all(color: AppColors.border), borderRadius: BorderRadius.circular(14)),
@@ -211,13 +249,19 @@ class _OceanSection extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text('해양환경 데이터',
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+                _HeaderIconButton(icon: Icons.refresh, tooltip: '새로고침', onPressed: _refresh),
+                _HeaderIconButton(
+                  icon: Icons.info_outline,
+                  tooltip: '최근 관측 시각',
+                  onPressed: _latest == null ? null : () => showOceanDataTimesDialog(context, _latest!),
+                ),
+                const Spacer(),
                 PopupMenuButton<String>(
-                  initialValue: stationCode,
-                  onSelected: (code) => onSelectStation(stations.firstWhere((s) => s.code == code)),
+                  initialValue: widget.stationCode,
+                  onSelected: (code) => widget.onSelectStation(stations.firstWhere((s) => s.code == code)),
                   itemBuilder: (context) =>
                       stations.map((s) => PopupMenuItem(value: s.code, child: Text(s.name))).toList(),
                   child: Container(
@@ -226,7 +270,7 @@ class _OceanSection extends StatelessWidget {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(stationName!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.brand)),
+                        Text(widget.stationName!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.brand)),
                         const Icon(Icons.expand_more, size: 14, color: AppColors.brand),
                       ],
                     ),
@@ -239,8 +283,7 @@ class _OceanSection extends StatelessWidget {
                 style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
             const SizedBox(height: 10),
             FutureBuilder<OceanSnapshot>(
-              key: ValueKey(stationCode),
-              future: oceanService.fetchSnapshot(stationCode: stationCode!, stationName: stationName!, region: stationName!),
+              future: future,
               builder: (context, snapshot) {
                 if (snapshot.connectionState != ConnectionState.done) {
                   return const Padding(
@@ -257,6 +300,7 @@ class _OceanSection extends StatelessWidget {
                   );
                 }
                 final ocean = snapshot.data!;
+                final quality = ocean.waterQuality;
                 return Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                   decoration: BoxDecoration(color: AppColors.surface, border: Border.all(color: AppColors.border), borderRadius: BorderRadius.circular(14)),
@@ -264,18 +308,18 @@ class _OceanSection extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       OceanStatGrid(snapshot: ocean),
-                      const SizedBox(height: 12),
-                      Text('일별 수온 (℃) · 최근 ${ocean.sevenDayTemps.length}일',
-                          style: const TextStyle(fontSize: 11, color: AppColors.textTertiary)),
-                      const SizedBox(height: 4),
-                      TempSparkline(values: ocean.sevenDayTemps),
-                      const SizedBox(height: 2),
-                      ChartDayLabels(labels: ocean.sevenDayLabels),
+                      if (quality != null) ...[
+                        const SizedBox(height: 12),
+                        Text('수질 상세 · ${quality.pointName} (${DateFormat('yyyy.M.d').format(quality.observedAt)} 조사)',
+                            style: const TextStyle(fontSize: 11, color: AppColors.textTertiary)),
+                        const SizedBox(height: 6),
+                        WaterQualityGrid(quality: quality),
+                        const SizedBox(height: 4),
+                        const Text('저층 기준 · 염도 psu, 용존산소·COD·질소·인·부유물질 mg/L, 클로로필a µg/L',
+                            style: TextStyle(fontSize: 9.5, color: AppColors.textMuted)),
+                      ],
                       const SizedBox(height: 10),
-                      Text(
-                        ocean.hasTrendHistory ? '출처 · ${ocean.source}' : '출처 · ${ocean.source} · 실시간 값만 제공',
-                        style: const TextStyle(fontSize: 9.5, color: Color(0xFF8FA0B5)),
-                      ),
+                      Text('출처 · ${ocean.source}', style: const TextStyle(fontSize: 9.5, color: Color(0xFF8FA0B5))),
                     ],
                   ),
                 );
@@ -284,6 +328,27 @@ class _OceanSection extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+class _HeaderIconButton extends StatelessWidget {
+  const _HeaderIconButton({required this.icon, required this.tooltip, required this.onPressed});
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      icon: Icon(icon, size: 18),
+      tooltip: tooltip,
+      color: AppColors.textTertiary,
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+      onPressed: onPressed,
     );
   }
 }

@@ -7,10 +7,10 @@ import '../../data/models/farm_monthly_report.dart';
 /// [FarmMonthlyReport] → A4 세로 여러 쪽짜리 HTML (`양식장_관리리포트` 양식).
 ///
 /// 화면 폭에 맞춰 페이지를 축소해 보여 주고, 인쇄하면 A4 한 장에 한 쪽씩
-/// 나와 그대로 PDF로 저장된다. 데이터가 없는 구역(해양환경·수조·기록 표)은
-/// 빠지고, 두 번째 쪽은 해양환경·수조 데이터가 모두 없으면 생략된다.
+/// 나와 그대로 PDF로 저장된다. 데이터가 없는 구역(수조·기록 표)은 빠지고,
+/// 두 번째 쪽은 수조 데이터가 없으면 생략된다.
 String buildFarmReportHtml(FarmMonthlyReport r) {
-  final pages = <String>[_page1(r), if (r.seaTemps.isNotEmpty || r.tanks.isNotEmpty) _page2(r), _page3(r)];
+  final pages = <String>[_page1(r), if (r.tanks.isNotEmpty) _page2(r), _page3(r)];
   final footLeft = r.isMonthly
       ? '${_e(r.orgName)} · ${_e(r.farmName)} · ${r.year}년 ${r.month}월 관리 리포트'
       : '${_e(r.orgName)} · ${_e(r.farmName)} · 관리 리포트';
@@ -104,38 +104,14 @@ ${nextItems.isEmpty ? '' : '<section><h2>$next월 예정</h2><div class="next">$
 ''';
 }
 
-// ───────────────────────── 2쪽: 해양환경·수조 DO·pH ─────────────────────────
+// ───────────────────────── 2쪽: 수조 DO·pH ─────────────────────────
 
-const _ramp = ['#86b6ef', '#5598e7', '#2a78d6', '#1c5cab', '#0d366b'];
 const _tankColors = ['#2a78d6', '#eb6834', '#1baf7a', '#8a4fd0'];
 const _doMin = 5.0, _phMin = 7.5, _phMax = 8.5;
 
 String _page2(FarmMonthlyReport r) {
   final m = r.month;
   final sections = <String>[];
-
-  if (r.seaTemps.isNotEmpty) {
-    final ramp = _ramp.sublist(math.max(0, _ramp.length - r.seaWeeks.length));
-    final legend = [
-      for (var k = 0; k < r.seaWeeks.length; k++)
-        '<span class="lg" style="margin-left:6px"><i style="background:${ramp[k % ramp.length]}"></i>$m/${r.seaWeeks[k]}</span>',
-    ].join();
-    final alerts = r.alerts.map((a) => '<div>${_e(a.label)} <span class="${a.ok ? 'ok' : 'bad'}">${_e(a.value)}</span></div>').join();
-    sections.add('''
-<section>
-  <h2>해양환경 데이터 <small>${_e(r.farmName)}에서 가장 가까운 관측소 · $m월 주간 값</small>
-    <span style="margin-left:auto">$legend</span></h2>
-  <div class="charts">
-    <div><h3>수온 <span class="muted" style="font-weight:400">°C</span></h3>${_bars(r.seaTemps, r.seaWeeks, m, ramp, '수온')}</div>
-    <div><h3>염도 <span class="muted" style="font-weight:400">psu</span></h3>${_bars(r.seaSalinities, r.seaWeeks, m, ramp, '염도')}</div>
-  </div>
-  ${alerts.isEmpty ? '' : '<div class="alerts">$alerts</div>'}
-  <div class="srcline">
-    <span class="sub">${_md(r.seaSummary)}</span>
-    <span class="source">출처: 해양수산 공공서비스 관측값</span>
-  </div>
-</section>''');
-  }
 
   if (r.tanks.isNotEmpty) {
     final legend = [
@@ -168,35 +144,6 @@ String _page2(FarmMonthlyReport r) {
 
 String _waterRow(String name, List<double> values, bool Function(double) out) =>
     '<tr><td><b>${_e(name)}</b></td>${values.map((v) => out(v) ? '<td class="out">${_n(v)}</td>' : '<td>${_n(v)}</td>').join()}</tr>';
-
-/// 주간 막대 그래프 (수온·염도). 막대 위에 값, 마지막 주는 굵게.
-String _bars(List<double> vals, List<int> weeks, int month, List<String> ramp, String unit) {
-  const w = 330.0, h = 190.0, l = 30.0, rr = 6.0, t = 16.0, b = 24.0;
-  const pw = w - l - rr, ph = h - t - b;
-  final top = (vals.reduce(math.max) / 10).ceil() * 10.0;
-  double y(double v) => t + ph - v / top * ph;
-  final n = vals.length;
-  final bw = math.min(38.0, pw / n * 0.6), gap = (pw - n * bw) / n;
-
-  final s = StringBuffer('<svg viewBox="0 0 $w $h" role="img" aria-label="$month월 주간 $unit">');
-  for (var v = 0.0; v <= top; v += 10) {
-    s.write('<line x1="$l" x2="${w - rr}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/>'
-        '<text x="${l - 5}" y="${y(v) + 3.5}" text-anchor="end" font-size="9.5" fill="var(--mut)">${v.round()}</text>');
-  }
-  for (var i = 0; i < n; i++) {
-    final x = l + gap / 2 + i * (bw + gap), yy = y(vals[i]);
-    const r = 3.0;
-    s.write('<path d="M$x,${t + ph} V${yy + r} Q$x,$yy ${x + r},$yy H${x + bw - r} Q${x + bw},$yy ${x + bw},${yy + r} V${t + ph} Z" '
-        'fill="${ramp[i % ramp.length]}"/>');
-    s.write('<text x="${x + bw / 2}" y="${yy - 4}" text-anchor="middle" font-size="10" fill="var(--ink)" '
-        'font-weight="${i == n - 1 ? 700 : 400}">${_n(vals[i])}</text>');
-    if (i < weeks.length) {
-      s.write('<text x="${x + bw / 2}" y="${h - 7}" text-anchor="middle" font-size="10" fill="var(--sec)">$month/${weeks[i]}</text>');
-    }
-  }
-  s.write('<line x1="$l" x2="${w - rr}" y1="${t + ph}" y2="${t + ph}" stroke="#b9c3c6"/></svg>');
-  return s.toString();
-}
 
 /// 수조별 DO 꺾은선. 기준(5 mg/L) 위는 옅은 초록, 기준선은 점선.
 String _doChart(List<ReportTankSeries> tanks, int month) {
@@ -377,14 +324,7 @@ section{margin-top:22px}
 .next{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
 .next div{border:1px solid var(--line);border-radius:8px;padding:10px 12px}
 .next b{display:block;font-size:14px}
-.charts{display:grid;grid-template-columns:1fr 1fr;gap:18px}
 svg{width:100%;height:auto;display:block}
-.srcline{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;margin-top:4px}
-.source{font-size:9.5px;color:var(--mut);text-align:right;margin-left:auto;flex:none}
-.alerts{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:12px}
-.alerts div{border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:11.5px;display:flex;justify-content:space-between;gap:6px}
-.alerts span.ok{color:var(--ok);font-weight:700}
-.alerts span.bad{color:var(--crit);font-weight:700}
 table{border-collapse:collapse;width:100%}
 th{background:var(--head);text-align:left;font-size:11px;padding:6px 8px;white-space:nowrap;font-weight:700}
 td{padding:6px 8px;border-top:1px solid var(--grid);font-size:11.5px;vertical-align:top}

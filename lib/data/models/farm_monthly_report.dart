@@ -53,14 +53,6 @@ class ReportNextItem {
   final String note;
 }
 
-class ReportAlert {
-  const ReportAlert(this.label, this.value, {this.ok = true});
-
-  final String label;
-  final String value;
-  final bool ok;
-}
-
 class ReportTankSeries {
   const ReportTankSeries({required this.name, required this.days, required this.doValues, required this.phValues});
 
@@ -123,11 +115,6 @@ class FarmMonthlyReport {
     required this.nextItems,
     required this.managerPhone,
     required this.orgContact,
-    this.seaWeeks = const [],
-    this.seaTemps = const [],
-    this.seaSalinities = const [],
-    this.seaSummary = '',
-    this.alerts = const [],
     this.tanks = const [],
     this.waterSummary = '',
     this.logs = const [],
@@ -153,11 +140,6 @@ class FarmMonthlyReport {
   final List<ReportRecommendation> recommendations;
   final List<ReportNextItem> nextItems;
 
-  final List<int> seaWeeks;
-  final List<double> seaTemps;
-  final List<double> seaSalinities;
-  final String seaSummary;
-  final List<ReportAlert> alerts;
 
   final List<ReportTankSeries> tanks;
   final String waterSummary;

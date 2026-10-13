@@ -5,7 +5,7 @@ import '../models/risk_level.dart';
 
 /// Builds the farm-facing 관리 리포트 ([FarmMonthlyReport]) from what the app
 /// actually records: the latest rule-based [Report] plus the farm row. There
-/// is no data yet for sea salinity, tank DO·pH, exam or delivery logs, so
+/// is no data yet for tank DO·pH, exam or delivery logs, so
 /// those sections stay empty and `buildFarmReportHtml` leaves them out.
 class FarmMonthlyReportBuilder {
   FarmMonthlyReportBuilder._();
