@@ -41,7 +41,7 @@ class AuditLogEntry {
   final String entityName;
 
   /// create · update · delete · role_change · deactivate · reactivate ·
-  /// owner_transfer.
+  /// owner_transfer · password_reset (관리자 대시보드).
   final String action;
   final List<AuditChange> changes;
   final DateTime createdAt;
@@ -56,6 +56,7 @@ class AuditLogEntry {
         (_, 'role_change') => '역할 변경',
         (_, 'deactivate') => '구성원 비활성화',
         (_, 'reactivate') => '구성원 재활성화',
+        (_, 'password_reset') => '비밀번호 재설정',
         (_, 'owner_transfer') => '소유자 양도',
         (_, 'invite') => '구성원 초대',
         (_, 'invite_cancel') => '초대 취소',

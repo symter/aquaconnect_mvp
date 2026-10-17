@@ -13,6 +13,8 @@ for Flutter Web).
    `DATABASE_URL` 환경변수를 주입합니다. 직접 설정할 필요 없음.
 3. 서비스 환경변수에 다음을 추가합니다:
    - `JWT_SECRET` — 임의의 긴 랜덤 문자열 (`node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`)
+   - `ADMIN_API_KEY` — (선택) 관리자 대시보드(`admin/`)가 `/api/admin/*`를 부를 때 쓰는 공유 비밀값.
+     비워두면 관리자 API 전체가 꺼집니다(503). `admin/`의 같은 이름 환경변수와 값을 맞추세요.
    - `NIFS_API_KEY` — (선택) 발급받은 키. 비워두면 `D:\202609`와 동일한 기본 데모 키로 동작.
    - `NIFS_FEMO_API_KEY` — (선택) 어장환경관측(`femoSeaList`) 키. 비워두면 코드에 저장된 기본 키로 동작.
    - `SEED_DEMO_PASSWORD` — (선택) `npm run seed`가 만드는 소유자 계정 비밀번호. 기본값 `demo1234`.

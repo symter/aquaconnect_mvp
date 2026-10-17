@@ -15,13 +15,14 @@ export function diffFields(before, after, fields) {
 
 // Records one 변경 이력 entry. Never throws — a failed log must not fail
 // the change it describes.
-export async function recordAudit({ orgId, actorId, entityType, entityId = null, entityName = '', action, changes = [] }) {
+// [actorName] stands in for a non-member actor (the admin dashboard).
+export async function recordAudit({ orgId, actorId, actorName, entityType, entityId = null, entityName = '', action, changes = [] }) {
   try {
     const { rows } = actorId ? await query('select name from members where id = $1', [actorId]) : { rows: [] };
     await query(
       `insert into audit_logs (org_id, actor_member_id, actor_name, entity_type, entity_id, entity_name, action, changes)
        values ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [orgId, actorId ?? null, rows[0]?.name ?? '', entityType, entityId, entityName, action, JSON.stringify(changes)],
+      [orgId, actorId ?? null, rows[0]?.name ?? actorName ?? '', entityType, entityId, entityName, action, JSON.stringify(changes)],
     );
   } catch (err) {
     console.error('recordAudit failed', err);

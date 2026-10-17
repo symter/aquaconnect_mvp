@@ -3,6 +3,7 @@ import cors from 'cors';
 import express from 'express';
 import 'express-async-errors';
 
+import { adminRouter } from './routes/admin.js';
 import { authRouter } from './routes/auth.js';
 import { diseaseInfoRouter } from './routes/diseaseInfo.js';
 import { farmsRouter } from './routes/farms.js';
@@ -39,6 +40,7 @@ app.use('/api/reports', reportsRouter);
 app.use('/api/share-links', shareLinksRouter);
 app.use('/api/ocean', oceanRouter);
 app.use('/api/public', publicRouter);
+app.use('/api/admin', adminRouter);
 
 // Keep this last: anything that throws inside a route (including a rejected
 // promise from Express 4's own async wrapping) lands here instead of
