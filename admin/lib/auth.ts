@@ -1,8 +1,12 @@
 export const COOKIE_NAME = "aquaconnect_admin_session";
 
-const SECRET = process.env.ADMIN_SESSION_SECRET ?? "aquaconnect-admin-secret-2026";
-const ADMIN_ID = process.env.ADMIN_ID ?? "root";
-const ADMIN_PW = process.env.ADMIN_PW ?? "1234";
+// Blank or whitespace-padded env values (easy to paste into the Vercel UI)
+// fall back to / are compared without the padding.
+const env = (name: string, fallback: string) => process.env[name]?.trim() || fallback;
+
+const SECRET = env("ADMIN_SESSION_SECRET", "aquaconnect-admin-secret-2026");
+const ADMIN_ID = env("ADMIN_ID", "root");
+const ADMIN_PW = env("ADMIN_PW", "1234");
 const PAYLOAD = "auth";
 
 async function hmacSign(data: string): Promise<string> {
@@ -36,5 +40,5 @@ export async function verifySessionToken(token: string): Promise<boolean> {
 }
 
 export async function validateCredentials(id: string, pw: string): Promise<boolean> {
-  return id === ADMIN_ID && pw === ADMIN_PW;
+  return id.trim() === ADMIN_ID && pw === ADMIN_PW;
 }
