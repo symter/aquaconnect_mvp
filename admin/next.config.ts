@@ -1,10 +1,9 @@
 import type { NextConfig } from "next";
 
-// The repo root has its own package-lock.json; pin the workspace root to this
-// folder so Next.js doesn't trace files from the parent.
-const nextConfig: NextConfig = {
-  outputFileTracingRoot: __dirname,
-  turbopack: { root: __dirname },
-};
+// Don't set outputFileTracingRoot / turbopack.root here: on Vercel (Root
+// Directory = admin) it makes the builder resolve traced files against the
+// repo root and fail with "ENOENT ... /vercel/path0/.next/package.json".
+// The local "multiple lockfiles" warning it would silence is harmless.
+const nextConfig: NextConfig = {};
 
 export default nextConfig;
