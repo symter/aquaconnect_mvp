@@ -5,13 +5,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart' show Share;
 
-import '../../data/models/member.dart';
 import '../../data/models/memo.dart';
 import '../../data/models/memo_comment.dart';
+import '../../data/models/org_member.dart';
+import '../../data/services/file_transfer.dart';
+import '../../data/services/photo_capture.dart';
 import '../providers/memo_read_tracker.dart';
 import '../providers/repository_providers.dart';
 import '../providers/data_providers.dart';
 import '../theme/app_colors.dart';
+import 'camera_capture_screen.dart';
 
 class MemoCard extends ConsumerWidget {
   const MemoCard({super.key, required this.memo, this.showFarmTag = true});
@@ -64,6 +67,7 @@ class MemoCard extends ConsumerWidget {
             children: [
               if (showFarmTag) _Pill(text: memo.farmLabel, bg: AppColors.neutralChipStrong, fg: AppColors.textSecondary),
               _Pill(text: memo.authorName, bg: authorBg, fg: authorFg, bold: true),
+              if (memo.mentionedMe) const _Pill(text: '@나 호출됨', bg: AppColors.warning, fg: Colors.white, bold: true),
             ],
           ),
           const SizedBox(height: 6),
@@ -344,7 +348,9 @@ class _MemoEditSheetState extends ConsumerState<_MemoEditSheet> {
   }
 }
 
-/// 댓글 sheet: the thread, oldest first, with an input at the bottom.
+/// 댓글 sheet: the thread, oldest first, with an input at the bottom. A
+/// comment can carry photos/files (첨부) and call members in (호출 / '@'),
+/// so a job can be handed over in the thread itself.
 class _MemoCommentsSheet extends ConsumerStatefulWidget {
   const _MemoCommentsSheet({required this.memo});
 
@@ -355,11 +361,17 @@ class _MemoCommentsSheet extends ConsumerStatefulWidget {
 }
 
 class _MemoCommentsSheetState extends ConsumerState<_MemoCommentsSheet> {
+  static const _maxAttachments = 5;
+  static const _maxFileBytes = 10 * 1024 * 1024;
+  static const _maxTotalBytes = 20 * 1024 * 1024;
+
   final _controller = TextEditingController();
   List<MemoComment>? _comments;
   String? _loadError;
   String? _sendError;
   bool _sending = false;
+  final List<CommentAttachmentUpload> _attachments = [];
+  final List<CommentMention> _mentions = [];
 
   @override
   void initState() {
@@ -382,19 +394,29 @@ class _MemoCommentsSheetState extends ConsumerState<_MemoCommentsSheet> {
     }
   }
 
+  bool get _canSend =>
+      !_sending && (_controller.text.trim().isNotEmpty || _attachments.isNotEmpty || _mentions.isNotEmpty);
+
   Future<void> _send() async {
+    if (!_canSend) return;
     final text = _controller.text.trim();
-    if (text.isEmpty || _sending) return;
     setState(() {
       _sending = true;
       _sendError = null;
     });
     try {
-      final comment = await ref.read(memoRepositoryProvider).addComment(memoId: widget.memo.id, content: text);
+      final comment = await ref.read(memoRepositoryProvider).addComment(
+            memoId: widget.memo.id,
+            content: text,
+            mentions: List.of(_mentions),
+            attachments: List.of(_attachments),
+          );
       if (!mounted) return;
       _controller.clear();
       setState(() {
         _comments = [...?_comments, comment];
+        _attachments.clear();
+        _mentions.clear();
         _sending = false;
       });
     } catch (e) {
@@ -407,12 +429,125 @@ class _MemoCommentsSheetState extends ConsumerState<_MemoCommentsSheet> {
     }
   }
 
+  void _snack(String message) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+
+  /// Adds [items] if they fit the per-comment limits; reports what didn't.
+  void _addAttachments(List<CommentAttachmentUpload> items) {
+    var total = _attachments.fold<int>(0, (sum, a) => sum + a.bytes.length);
+    for (final item in items) {
+      if (_attachments.length >= _maxAttachments) {
+        _snack('첨부는 최대 $_maxAttachments개까지 가능해요.');
+        break;
+      }
+      if (!item.isPhoto && item.bytes.length > _maxFileBytes) {
+        _snack("'${item.fileName}'은(는) 10MB를 넘어 첨부할 수 없어요.");
+        continue;
+      }
+      if (total + item.bytes.length > _maxTotalBytes) {
+        _snack('첨부 파일은 합쳐서 20MB 이하여야 해요.');
+        break;
+      }
+      total += item.bytes.length;
+      setState(() => _attachments.add(item));
+    }
+  }
+
+  CommentAttachmentUpload _photoUpload(MemoPhotoUpload photo) => CommentAttachmentUpload(
+        kind: CommentAttachmentKind.photo,
+        fileName: '사진_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.jpg',
+        contentType: photo.contentType,
+        bytes: photo.bytes,
+      );
+
+  Future<void> _openAttachMenu() async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined, color: AppColors.brand),
+              title: const Text('사진 촬영'),
+              onTap: () => Navigator.of(sheetContext).pop('camera'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined, color: AppColors.brand),
+              title: const Text('앨범에서 사진 선택'),
+              onTap: () => Navigator.of(sheetContext).pop('album'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.attach_file, color: AppColors.brand),
+              title: const Text('파일 첨부'),
+              subtitle: const Text('문서·엑셀·PDF 등 (파일당 10MB 이하)'),
+              onTap: () => Navigator.of(sheetContext).pop('file'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null || !mounted) return;
+    try {
+      switch (choice) {
+        case 'camera':
+          final photo = await CameraCaptureScreen.open(context);
+          if (photo != null && mounted) _addAttachments([_photoUpload(photo)]);
+        case 'album':
+          final photo = await pickPhotoFromAlbum();
+          if (photo != null && mounted) _addAttachments([_photoUpload(photo)]);
+        case 'file':
+          final files = await pickFiles();
+          if (mounted) {
+            _addAttachments([
+              for (final f in files)
+                CommentAttachmentUpload(
+                  kind: CommentAttachmentKind.file,
+                  fileName: f.name,
+                  contentType: f.contentType,
+                  bytes: f.bytes,
+                ),
+            ]);
+          }
+      }
+    } catch (e) {
+      if (mounted) _snack('첨부하지 못했어요: $e');
+    }
+  }
+
+  /// 호출: pick members to call in. Typing '@' opens this too.
+  Future<void> _openMentionPicker() async {
+    final picked = await showModalBottomSheet<List<CommentMention>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (_) => _MentionPickerSheet(initial: _mentions),
+    );
+    if (picked != null && mounted) {
+      setState(() => _mentions
+        ..clear()
+        ..addAll(picked));
+    }
+  }
+
+  void _onTextChanged(String text) {
+    // A freshly typed trailing '@' opens the 호출 picker and is dropped.
+    if (text.endsWith('@') && _controller.selection.baseOffset == text.length) {
+      _controller.text = text.substring(0, text.length - 1);
+      _controller.selection = TextSelection.collapsed(offset: _controller.text.length);
+      _openMentionPicker();
+    }
+    setState(() {});
+  }
+
   Future<void> _delete(MemoComment comment) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('댓글 삭제'),
-        content: const Text('이 댓글을 삭제할까요?'),
+        content: Text(comment.attachments.isEmpty ? '이 댓글을 삭제할까요?' : '이 댓글과 첨부 파일을 삭제할까요?'),
         actions: [
           TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('취소')),
           TextButton(
@@ -427,7 +562,7 @@ class _MemoCommentsSheetState extends ConsumerState<_MemoCommentsSheet> {
       await ref.read(memoRepositoryProvider).deleteComment(memoId: widget.memo.id, commentId: comment.id);
       if (mounted) setState(() => _comments = _comments?.where((c) => c.id != comment.id).toList());
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('삭제하지 못했어요: $e')));
+      if (mounted) _snack('삭제하지 못했어요: $e');
     }
   }
 
@@ -449,8 +584,8 @@ class _MemoCommentsSheetState extends ConsumerState<_MemoCommentsSheet> {
     } else if (comments.isEmpty) {
       body = const Padding(
         padding: EdgeInsets.symmetric(vertical: 24),
-        child: Text('아직 댓글이 없어요. 첫 댓글을 남겨 보세요.',
-            textAlign: TextAlign.center, style: TextStyle(fontSize: 12.5, color: AppColors.textMuted)),
+        child: Text('아직 댓글이 없어요. 첫 댓글을 남겨 보세요.\n사진·파일을 첨부하거나 @로 담당자를 호출할 수 있어요.',
+            textAlign: TextAlign.center, style: TextStyle(fontSize: 12.5, color: AppColors.textMuted, height: 1.5)),
       );
     } else {
       body = Flexible(
@@ -461,9 +596,14 @@ class _MemoCommentsSheetState extends ConsumerState<_MemoCommentsSheet> {
           itemBuilder: (_, i) {
             final c = comments[i];
             final canDelete = member != null && (isPrivileged || c.authorMemberId == member.id);
+            final callsMe = member != null && c.mentions.any((m) => m.memberId == member.id);
             return Container(
               padding: const EdgeInsets.fromLTRB(12, 10, 6, 10),
-              decoration: BoxDecoration(color: AppColors.background, borderRadius: BorderRadius.circular(10)),
+              decoration: BoxDecoration(
+                color: callsMe ? AppColors.warningTint : AppColors.background,
+                borderRadius: BorderRadius.circular(10),
+                border: callsMe ? Border.all(color: AppColors.warning) : null,
+              ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -473,8 +613,31 @@ class _MemoCommentsSheetState extends ConsumerState<_MemoCommentsSheet> {
                       children: [
                         Text('${c.authorName} · ${fmt.format(c.createdAt.toLocal())}',
                             style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.brand)),
-                        const SizedBox(height: 3),
-                        Text(c.content, style: const TextStyle(fontSize: 13, color: AppColors.textPrimary, height: 1.45)),
+                        if (c.mentions.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Wrap(
+                            spacing: 4,
+                            runSpacing: 4,
+                            children: [
+                              for (final m in c.mentions)
+                                _MentionChip(name: m.name, highlight: m.memberId == member?.id),
+                            ],
+                          ),
+                        ],
+                        if (c.content.isNotEmpty) ...[
+                          const SizedBox(height: 3),
+                          Text(c.content, style: const TextStyle(fontSize: 13, color: AppColors.textPrimary, height: 1.45)),
+                        ],
+                        if (c.attachments.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [for (final a in c.attachments) if (a.isPhoto) _CommentPhotoThumb(attachment: a)],
+                          ),
+                          for (final a in c.attachments)
+                            if (!a.isPhoto) ...[const SizedBox(height: 6), _CommentFileTile(attachment: a)],
+                        ],
                       ],
                     ),
                   ),
@@ -496,7 +659,7 @@ class _MemoCommentsSheetState extends ConsumerState<_MemoCommentsSheet> {
     return Padding(
       padding: EdgeInsets.fromLTRB(20, 18, 20, 12 + MediaQuery.of(context).viewInsets.bottom),
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.75),
+        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.8),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -512,8 +675,40 @@ class _MemoCommentsSheetState extends ConsumerState<_MemoCommentsSheet> {
               Text(_sendError!, style: const TextStyle(fontSize: 12, color: AppColors.danger)),
               const SizedBox(height: 6),
             ],
+            if (_mentions.isNotEmpty || _attachments.isNotEmpty) ...[
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  for (final m in _mentions)
+                    _MentionChip(
+                      name: m.name,
+                      onRemove: _sending ? null : () => setState(() => _mentions.remove(m)),
+                    ),
+                  for (final a in _attachments)
+                    _PendingAttachment(
+                      attachment: a,
+                      onRemove: _sending ? null : () => setState(() => _attachments.remove(a)),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+            ],
             Row(
               children: [
+                IconButton(
+                  tooltip: '사진·파일 첨부',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: _sending ? null : _openAttachMenu,
+                  icon: const Icon(Icons.attach_file, size: 20, color: AppColors.brand),
+                ),
+                IconButton(
+                  tooltip: '담당자 호출',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: _sending ? null : _openMentionPicker,
+                  icon: const Icon(Icons.alternate_email, size: 20, color: AppColors.brand),
+                ),
                 Expanded(
                   child: TextField(
                     controller: _controller,
@@ -522,9 +717,10 @@ class _MemoCommentsSheetState extends ConsumerState<_MemoCommentsSheet> {
                     maxLines: 4,
                     maxLength: 1000,
                     textInputAction: TextInputAction.send,
+                    onChanged: _onTextChanged,
                     onSubmitted: (_) => _send(),
                     decoration: InputDecoration(
-                      hintText: '댓글 남기기',
+                      hintText: '댓글 남기기 (@ 호출)',
                       counterText: '',
                       isDense: true,
                       filled: true,
@@ -536,7 +732,7 @@ class _MemoCommentsSheetState extends ConsumerState<_MemoCommentsSheet> {
                 const SizedBox(width: 8),
                 IconButton.filled(
                   tooltip: '보내기',
-                  onPressed: _sending ? null : _send,
+                  onPressed: _canSend ? _send : null,
                   icon: _sending
                       ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
                       : const Icon(Icons.send, size: 18),
@@ -544,6 +740,273 @@ class _MemoCommentsSheetState extends ConsumerState<_MemoCommentsSheet> {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Multi-select list of active members (not yourself) to call in a 댓글.
+class _MentionPickerSheet extends ConsumerStatefulWidget {
+  const _MentionPickerSheet({required this.initial});
+
+  final List<CommentMention> initial;
+
+  @override
+  ConsumerState<_MentionPickerSheet> createState() => _MentionPickerSheetState();
+}
+
+class _MentionPickerSheetState extends ConsumerState<_MentionPickerSheet> {
+  late final Map<String, CommentMention> _selected = {for (final m in widget.initial) m.memberId: m};
+
+  @override
+  Widget build(BuildContext context) {
+    final membersAsync = ref.watch(orgMembersProvider);
+    return SafeArea(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.7),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('담당자 호출', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+              const SizedBox(height: 4),
+              const Text('호출한 사람에게 바로 알림이 가고, 알림을 누르면 이 댓글로 이동해요.',
+                  style: TextStyle(fontSize: 11.5, color: AppColors.textMuted)),
+              const SizedBox(height: 8),
+              Flexible(
+                child: membersAsync.when(
+                  loading: () => const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                  error: (e, _) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 24),
+                    child: Text('구성원을 불러오지 못했어요: $e',
+                        textAlign: TextAlign.center, style: const TextStyle(fontSize: 12.5, color: AppColors.textMuted)),
+                  ),
+                  data: (members) {
+                    final candidates = members.where((m) => m.status == MemberStatus.active && !m.isMe).toList();
+                    if (candidates.isEmpty) {
+                      return const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 24),
+                        child: Text('호출할 수 있는 구성원이 없어요.',
+                            textAlign: TextAlign.center, style: TextStyle(fontSize: 12.5, color: AppColors.textMuted)),
+                      );
+                    }
+                    return ListView(
+                      shrinkWrap: true,
+                      children: [
+                        for (final m in candidates)
+                          CheckboxListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            value: _selected.containsKey(m.id),
+                            title: Text(m.name, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
+                            subtitle: Text(m.role.label, style: const TextStyle(fontSize: 11.5)),
+                            onChanged: (checked) => setState(() {
+                              checked == true
+                                  ? _selected[m.id] = CommentMention(memberId: m.id, name: m.name)
+                                  : _selected.remove(m.id);
+                            }),
+                          ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 8),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(_selected.values.toList()),
+                child: Text(_selected.isEmpty ? '호출 안 함' : '${_selected.length}명 호출'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MentionChip extends StatelessWidget {
+  const _MentionChip({required this.name, this.highlight = false, this.onRemove});
+
+  final String name;
+
+  /// The chip names the signed-in member.
+  final bool highlight;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.fromLTRB(8, 2, onRemove == null ? 8 : 2, 2),
+      decoration: BoxDecoration(
+        color: highlight ? AppColors.warning : AppColors.brandTint,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('@$name${highlight ? ' (나)' : ''}',
+              style: TextStyle(
+                  fontSize: 11, fontWeight: FontWeight.w700, color: highlight ? Colors.white : AppColors.brand)),
+          if (onRemove != null)
+            InkWell(
+              onTap: onRemove,
+              child: const Padding(
+                padding: EdgeInsets.only(left: 2),
+                child: Icon(Icons.close, size: 14, color: AppColors.brand),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A picked-but-unsent attachment above the 댓글 input.
+class _PendingAttachment extends StatelessWidget {
+  const _PendingAttachment({required this.attachment, this.onRemove});
+
+  final CommentAttachmentUpload attachment;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final remove = onRemove == null
+        ? const SizedBox.shrink()
+        : InkWell(onTap: onRemove, child: const Icon(Icons.close, size: 14, color: AppColors.textSecondary));
+    if (attachment.isPhoto) {
+      return Stack(
+        clipBehavior: Clip.none,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.memory(attachment.bytes, width: 44, height: 44, fit: BoxFit.cover),
+          ),
+          Positioned(
+            top: -4,
+            right: -4,
+            child: Container(
+              decoration: const BoxDecoration(color: AppColors.surface, shape: BoxShape.circle),
+              padding: const EdgeInsets.all(1),
+              child: remove,
+            ),
+          ),
+        ],
+      );
+    }
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 200),
+      padding: const EdgeInsets.fromLTRB(8, 4, 6, 4),
+      decoration: BoxDecoration(color: AppColors.neutralChip, borderRadius: BorderRadius.circular(8)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.insert_drive_file_outlined, size: 14, color: AppColors.neutralIcon),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text('${attachment.fileName} · ${formatFileSize(attachment.bytes.length)}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+          ),
+          const SizedBox(width: 4),
+          remove,
+        ],
+      ),
+    );
+  }
+}
+
+class _CommentPhotoThumb extends ConsumerWidget {
+  const _CommentPhotoThumb({required this.attachment});
+
+  final CommentAttachment attachment;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return ref.watch(commentAttachmentProvider(attachment.id)).when(
+          data: (bytes) => GestureDetector(
+            onTap: () => _openPhotoViewer(context, bytes, onSave: () => saveFile(bytes, attachment.fileName, attachment.contentType)),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.memory(bytes, width: 64, height: 64, fit: BoxFit.cover),
+            ),
+          ),
+          loading: () => const _PhotoPlaceholder(
+            child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+          ),
+          error: (_, _) => const _PhotoPlaceholder(
+            child: Icon(Icons.broken_image_outlined, size: 20, color: AppColors.textMuted),
+          ),
+        );
+  }
+}
+
+/// A 댓글's attached file; tap downloads it.
+class _CommentFileTile extends ConsumerStatefulWidget {
+  const _CommentFileTile({required this.attachment});
+
+  final CommentAttachment attachment;
+
+  @override
+  ConsumerState<_CommentFileTile> createState() => _CommentFileTileState();
+}
+
+class _CommentFileTileState extends ConsumerState<_CommentFileTile> {
+  bool _downloading = false;
+
+  Future<void> _download() async {
+    if (_downloading) return;
+    setState(() => _downloading = true);
+    final a = widget.attachment;
+    try {
+      final bytes = await ref.read(memoRepositoryProvider).loadCommentAttachment(a.id);
+      saveFile(bytes, a.fileName, a.contentType);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('내려받지 못했어요: $e')));
+    } finally {
+      if (mounted) setState(() => _downloading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final a = widget.attachment;
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: _download,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(border: Border.all(color: AppColors.border), borderRadius: BorderRadius.circular(8)),
+          child: Row(
+            children: [
+              const Icon(Icons.insert_drive_file_outlined, size: 20, color: AppColors.brand),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(a.fileName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                    Text(formatFileSize(a.size), style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
+                  ],
+                ),
+              ),
+              _downloading
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.download, size: 18, color: AppColors.textMuted),
+            ],
+          ),
         ),
       ),
     );
@@ -592,7 +1055,7 @@ class _MemoPhotoThumb extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return ref.watch(memoPhotoProvider(photoId)).when(
           data: (bytes) => GestureDetector(
-            onTap: () => _openViewer(context, bytes),
+            onTap: () => _openPhotoViewer(context, bytes),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: Image.memory(bytes, width: 56, height: 56, fit: BoxFit.cover),
@@ -606,29 +1069,40 @@ class _MemoPhotoThumb extends ConsumerWidget {
           ),
         );
   }
+}
 
-  void _openViewer(BuildContext context, Uint8List bytes) {
-    showDialog<void>(
-      context: context,
-      barrierColor: Colors.black87,
-      builder: (dialogContext) => GestureDetector(
-        onTap: () => Navigator.of(dialogContext).pop(),
-        child: Stack(
-          children: [
-            Center(child: InteractiveViewer(child: Image.memory(bytes))),
-            Positioned(
-              top: 12,
-              right: 12,
-              child: IconButton(
-                icon: const Icon(Icons.close, color: Colors.white),
-                onPressed: () => Navigator.of(dialogContext).pop(),
-              ),
+/// Full-screen photo viewer; [onSave] adds a 저장 button.
+void _openPhotoViewer(BuildContext context, Uint8List bytes, {VoidCallback? onSave}) {
+  showDialog<void>(
+    context: context,
+    barrierColor: Colors.black87,
+    builder: (dialogContext) => GestureDetector(
+      onTap: () => Navigator.of(dialogContext).pop(),
+      child: Stack(
+        children: [
+          Center(child: InteractiveViewer(child: Image.memory(bytes))),
+          Positioned(
+            top: 12,
+            right: 12,
+            child: Row(
+              children: [
+                if (onSave != null)
+                  IconButton(
+                    tooltip: '저장',
+                    icon: const Icon(Icons.download, color: Colors.white),
+                    onPressed: onSave,
+                  ),
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white),
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
-    );
-  }
+    ),
+  );
 }
 
 class _Pill extends StatelessWidget {

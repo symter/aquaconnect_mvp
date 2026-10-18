@@ -122,6 +122,7 @@ class _NotificationTile extends StatelessWidget {
       'memo' => (Icons.edit_note, AppColors.brand),
       'inquiry' => (Icons.chat_bubble_outline, AppColors.good),
       'comment' => (Icons.mode_comment_outlined, AppColors.brand),
+      'mention' => (Icons.alternate_email, AppColors.warning),
       'digest' => (Icons.summarize_outlined, AppColors.brand),
       _ => (Icons.notifications_outlined, AppColors.textSecondary),
     };

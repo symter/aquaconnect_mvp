@@ -35,6 +35,11 @@ final memoPhotoProvider = FutureProvider.family<Uint8List, String>((ref, photoId
   return ref.watch(memoRepositoryProvider).loadPhoto(photoId);
 });
 
+/// Bytes of a 댓글 첨부 photo (cached per attachment).
+final commentAttachmentProvider = FutureProvider.family<Uint8List, String>((ref, attachmentId) {
+  return ref.watch(memoRepositoryProvider).loadCommentAttachment(attachmentId);
+});
+
 final diseaseInfoProvider = FutureProvider<List<DiseaseInfo>>((ref) {
   return ref.watch(diseaseInfoRepositoryProvider).listDiseaseInfo();
 });

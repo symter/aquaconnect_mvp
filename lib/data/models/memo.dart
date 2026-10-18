@@ -46,6 +46,7 @@ class Memo {
     this.commentCount = 0,
     this.readCount = 0,
     this.readByMe = false,
+    this.mentionedMe = false,
   });
 
   final String id;
@@ -86,6 +87,9 @@ class Memo {
   /// Whether the signed-in member has seen it (reported via markRead).
   final bool readByMe;
 
+  /// A 댓글 on it calls (호출) the signed-in member.
+  final bool mentionedMe;
+
   String get farmLabel => farmName ?? '미지정';
 
   Memo copyWith({String? content, List<MemoEdit>? edits, int? commentCount, bool? readByMe}) => Memo(
@@ -107,6 +111,7 @@ class Memo {
         commentCount: commentCount ?? this.commentCount,
         readCount: readCount,
         readByMe: readByMe ?? this.readByMe,
+        mentionedMe: mentionedMe,
       );
 
   factory Memo.fromJson(Map<String, dynamic> json) => Memo(
@@ -130,6 +135,7 @@ class Memo {
         commentCount: json['commentCount'] as int? ?? 0,
         readCount: json['readCount'] as int? ?? 0,
         readByMe: json['readByMe'] as bool? ?? false,
+        mentionedMe: json['mentionedMe'] as bool? ?? false,
       );
 }
 

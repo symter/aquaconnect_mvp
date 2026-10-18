@@ -115,11 +115,24 @@ class RemoteMemoRepository implements MemoRepository {
   }
 
   @override
-  Future<MemoComment> addComment({required String memoId, required String content}) async {
-    final json = await _api.post('/api/memos/$memoId/comments', body: {'content': content}) as Map<String, dynamic>;
+  Future<MemoComment> addComment({
+    required String memoId,
+    required String content,
+    List<CommentMention> mentions = const [],
+    List<CommentAttachmentUpload> attachments = const [],
+  }) async {
+    final json = await _api.post('/api/memos/$memoId/comments', body: {
+      'content': content,
+      'mentionMemberIds': [for (final m in mentions) m.memberId],
+      'attachments': [for (final a in attachments) a.toJson(base64Encode)],
+    }) as Map<String, dynamic>;
     _refresh.add(null);
     return MemoComment.fromJson(json);
   }
+
+  @override
+  Future<Uint8List> loadCommentAttachment(String attachmentId) =>
+      _api.getBytes('/api/memos/comment-attachments/$attachmentId');
 
   @override
   Future<void> deleteComment({required String memoId, required String commentId}) async {
