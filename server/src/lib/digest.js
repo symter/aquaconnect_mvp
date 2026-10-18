@@ -1,13 +1,15 @@
 import { query } from '../db.js';
 import { notifyMembers } from './notify.js';
 
-// 하루 요약 / 주간 요약 notifications. Times are Korean time (KST, UTC+9) —
-// the server itself runs in UTC.
+// 오늘의 업무 notification: once a day at each member's chosen time (default
+// 08:00), their open work — 할일 assigned to / written by them and memos
+// that call (@) them — plus the org's 위험·주의 farms. It replaced the old
+// 하루 요약 / 주간 요약 (weekly_enabled is kept but no longer sends).
+// Times are Korean time (KST, UTC+9) — the server itself runs in UTC.
 const CHECK_EVERY_MS = 60 * 1000;
-const WEEKLY_TIME = '08:00'; // 매주 월요일 아침
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
-export const DIGEST_DEFAULTS = { dailyEnabled: true, dailyTime: '16:00', weeklyEnabled: true };
+export const DIGEST_DEFAULTS = { dailyEnabled: true, dailyTime: '08:00', weeklyEnabled: true };
 export const DAILY_TIME_RE = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
 
 /** Current KST date ("2026-10-06"), time ("16:00") and weekday (0 = Sunday). */
@@ -18,28 +20,49 @@ export function kstNow(now = new Date()) {
 
 const label = (date) => `${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}`;
 
-async function orgSummary(orgId, sinceKstDate, days) {
-  const { rows: riskRows } = await query(
+async function orgRisk(orgId) {
+  const { rows } = await query(
     'select risk_level, count(*)::int as c from farms where org_id = $1 group by risk_level',
     [orgId],
   );
-  const risk = Object.fromEntries(riskRows.map((r) => [r.risk_level, r.c]));
-  const farmCount = riskRows.reduce((sum, r) => sum + r.c, 0);
-  const { rows: memoRows } = await query(
-    `select count(*) filter (where author_type = 'institute')::int as memos,
-            count(*) filter (where author_type = 'farm')::int as inquiries
-     from memos
-     where org_id = $1 and created_at >= (($2::date - ($3::int - 1)) + time '00:00') at time zone 'Asia/Seoul'`,
-    [orgId, sinceKstDate, days],
-  );
-  return { farmCount, danger: risk.danger ?? 0, warning: risk.warning ?? 0, ...memoRows[0] };
+  const risk = Object.fromEntries(rows.map((r) => [r.risk_level, r.c]));
+  return { farmCount: rows.reduce((sum, r) => sum + r.c, 0), danger: risk.danger ?? 0, warning: risk.warning ?? 0 };
 }
 
-function summaryBody(s, period) {
+// A member's open 업무 — must match Memo.isOpenTaskFor in the app
+// (lib/data/models/memo.dart): not done, and either it calls them (@), it
+// is assigned to them ('담당:<이름>' tag), or it is an unassigned task
+// (할일 tag / '할일:' in the text) they wrote.
+export async function memberOpenTasks(memberId) {
+  const { rows } = await query(
+    `with t as (
+       select
+         exists (select 1 from memo_comment_mentions x join memo_comments c on c.id = x.comment_id
+                 where c.memo_id = mm.id and x.member_id = me.id) as mentioned,
+         ('담당:' || me.name) = any(mm.tags) as assigned_to_me,
+         exists (select 1 from unnest(mm.tags) t where t like '담당:%') as assigned,
+         ('할일' = any(mm.tags) or mm.content like '%할일:%') as todo,
+         mm.author_member_id = me.id as mine
+       from memos mm join members me on me.id = $1
+       where mm.org_id = me.org_id and mm.done_at is null
+     )
+     select count(*) filter (where mentioned or assigned_to_me or (todo and not assigned and mine))::int as open,
+            count(*) filter (where mentioned)::int as mentioned
+     from t`,
+    [memberId],
+  );
+  return rows[0];
+}
+
+function tasksBody(tasks, risk) {
   const parts = [];
-  parts.push(s.farmCount ? `위험 ${s.danger}곳 · 주의 ${s.warning}곳` : '등록된 양식장 없음');
-  parts.push(`${period} 메모 ${s.memos}건`);
-  if (s.inquiries) parts.push(`어가 문의 ${s.inquiries}건`);
+  if (tasks.open) {
+    parts.push(`남은 업무 ${tasks.open}건`);
+    if (tasks.mentioned) parts.push(`나를 호출 ${tasks.mentioned}건`);
+  } else {
+    parts.push('남은 업무가 없어요');
+  }
+  if (risk.farmCount) parts.push(`위험 ${risk.danger}곳 · 주의 ${risk.warning}곳`);
   return parts.join(' · ');
 }
 
@@ -58,31 +81,17 @@ async function claimDaily(now) {
   return rows;
 }
 
-async function claimWeekly(now) {
-  if (now.weekday !== 1 || now.time < WEEKLY_TIME) return [];
-  const { rows } = await query(
-    `update digest_settings d set last_weekly_on = $1::date
-     from members m
-     where m.id = d.member_id and m.status = 'active'
-       and d.weekly_enabled
-       and (d.last_weekly_on is null or d.last_weekly_on < $1::date)
-     returning d.member_id, m.org_id`,
-    [now.date],
-  );
-  return rows;
-}
-
-async function send(claimed, { days, title, period }, now) {
-  const summaries = new Map();
+async function sendDailyTasks(claimed, now) {
+  const risks = new Map();
   for (const { member_id: memberId, org_id: orgId } of claimed) {
-    if (!summaries.has(orgId)) summaries.set(orgId, await orgSummary(orgId, now.date, days));
+    if (!risks.has(orgId)) risks.set(orgId, await orgRisk(orgId));
     await notifyMembers({
       orgId,
       memberIds: [memberId],
       type: 'digest',
-      title,
-      body: summaryBody(summaries.get(orgId), period),
-      link: '/',
+      title: `오늘의 업무 (${label(now.date)})`,
+      body: tasksBody(await memberOpenTasks(memberId), risks.get(orgId)),
+      link: '/memo?view=today',
     });
   }
 }
@@ -96,8 +105,7 @@ export async function runDigests(at = new Date()) {
     const now = kstNow(at);
     // Members without a row get the defaults; the row is where last-sent is kept.
     await query('insert into digest_settings (member_id) select id from members on conflict do nothing');
-    await send(await claimDaily(now), { days: 1, title: `오늘의 요약 (${label(now.date)})`, period: '오늘' }, now);
-    await send(await claimWeekly(now), { days: 7, title: `주간 요약 (${label(now.date)})`, period: '지난 7일' }, now);
+    await sendDailyTasks(await claimDaily(now), now);
   } catch (err) {
     console.error('digest run failed', err);
   } finally {

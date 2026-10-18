@@ -3,7 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api_client.dart';
 
-/// "하루 요약 설정" — the member's digest notification preferences, chosen in
+/// "오늘의 업무 알림" — the member's daily-tasks notification preferences, chosen in
 /// MyPage. The server sends the summaries (server/src/lib/digest.js), so in
 /// the real app they live on the server ([RemoteDigestSettingsStore]); mock
 /// mode keeps them on the device ([LocalDigestSettingsStore]).
@@ -16,7 +16,7 @@ class DigestSettings {
 
   static const defaults = DigestSettings(
     dailyEnabled: true,
-    dailyTime: TimeOfDay(hour: 16, minute: 0),
+    dailyTime: TimeOfDay(hour: 8, minute: 0),
     weeklyEnabled: true,
   );
 
@@ -25,8 +25,8 @@ class DigestSettings {
   /// Korean time.
   final TimeOfDay dailyTime;
 
-  /// Day/time are fixed (Monday 08:00), so there's no picker for it, just
-  /// the toggle.
+  /// The old 주간 요약 flag. The server no longer sends a weekly summary;
+  /// kept so the settings round-trip unchanged.
   final bool weeklyEnabled;
 
   DigestSettings copyWith({bool? dailyEnabled, TimeOfDay? dailyTime, bool? weeklyEnabled}) {
@@ -42,10 +42,10 @@ class DigestSettings {
       '${dailyTime.hour.toString().padLeft(2, '0')}:${dailyTime.minute.toString().padLeft(2, '0')}';
 
   factory DigestSettings.fromJson(Map<String, dynamic> json) {
-    final parts = (json['dailyTime'] as String? ?? '16:00').split(':');
+    final parts = (json['dailyTime'] as String? ?? '08:00').split(':');
     return DigestSettings(
       dailyEnabled: json['dailyEnabled'] as bool? ?? defaults.dailyEnabled,
-      dailyTime: TimeOfDay(hour: int.tryParse(parts[0]) ?? 16, minute: int.tryParse(parts.elementAtOrNull(1) ?? '') ?? 0),
+      dailyTime: TimeOfDay(hour: int.tryParse(parts[0]) ?? 8, minute: int.tryParse(parts.elementAtOrNull(1) ?? '') ?? 0),
       weeklyEnabled: json['weeklyEnabled'] as bool? ?? defaults.weeklyEnabled,
     );
   }

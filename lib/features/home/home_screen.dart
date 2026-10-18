@@ -15,6 +15,7 @@ import '../../data/models/farm_group.dart';
 import '../../data/models/risk_level.dart';
 import '../../data/services/farm_group_store.dart';
 import '../notifications/notification_permission_sheet.dart';
+import 'ocean_environment_section.dart';
 import 'onboarding_checklist_card.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -87,37 +88,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.brand),
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    InkWell(
-                      onTap: () => context.push('/memo'),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            farmsAsync.when(
-                              data: (farms) => Row(
-                                children: [
-                                  Text('${farms.length}',
-                                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.brand)),
-                                  const SizedBox(width: 6),
-                                  const Text('담당 어가 · 메모 보러가기',
-                                      style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
-                                ],
-                              ),
-                              loading: () => const SizedBox.shrink(),
-                              error: (_, _) => const SizedBox.shrink(),
-                            ),
-                            Container(
-                              width: 24,
-                              height: 24,
-                              decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                              child: const Icon(Icons.chevron_right, size: 14, color: AppColors.brand),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
                   ],
                 ),
               ),
@@ -128,6 +98,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 delegate: SliverChildListDelegate([
                   const OnboardingChecklistCard(),
                   _ReportStatusCard(),
+                  const SizedBox(height: 20),
+                  const OceanEnvironmentSection(),
                   const SizedBox(height: 20),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,

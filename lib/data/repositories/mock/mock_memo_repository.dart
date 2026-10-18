@@ -115,6 +115,13 @@ class MockMemoRepository implements MemoRepository {
   }
 
   @override
+  Future<Memo> setMemoDone({required String id, required bool done}) async {
+    final me = MockSeed.currentMember;
+    _replace(id, (m) => m.withDone(done ? (m.doneAt ?? DateTime.now()) : null, byId: me.id, byName: me.name));
+    return _memos.firstWhere((m) => m.id == id);
+  }
+
+  @override
   Future<void> markRead(List<String> memoIds) async {
     for (final id in memoIds) {
       _replace(id, (m) => m.copyWith(readByMe: true));

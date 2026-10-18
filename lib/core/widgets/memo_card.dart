@@ -67,7 +67,16 @@ class MemoCard extends ConsumerWidget {
             children: [
               if (showFarmTag) _Pill(text: memo.farmLabel, bg: AppColors.neutralChipStrong, fg: AppColors.textSecondary),
               _Pill(text: memo.authorName, bg: authorBg, fg: authorFg, bold: true),
-              if (memo.mentionedMe) const _Pill(text: '@나 호출됨', bg: AppColors.warning, fg: Colors.white, bold: true),
+              if (memo.mentionedMe && !memo.isDone)
+                const _Pill(text: '@나 호출됨', bg: AppColors.warning, fg: Colors.white, bold: true),
+              if (memo.isDone)
+                _Pill(
+                  text: '✓ 완료${memo.doneByName == null || memo.doneByName!.isEmpty ? '' : ' · ${memo.doneByName}'}'
+                      ' ${DateFormat('M/d HH:mm').format(memo.doneAt!.toLocal())}',
+                  bg: AppColors.goodTint,
+                  fg: AppColors.goodDark,
+                  bold: true,
+                ),
             ],
           ),
           const SizedBox(height: 6),
@@ -76,7 +85,13 @@ class MemoCard extends ConsumerWidget {
               Expanded(
                 child: Text(
                   memo.content,
-                  style: const TextStyle(fontSize: 13, color: AppColors.textPrimary, height: 1.55),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: memo.isDone ? AppColors.textMuted : AppColors.textPrimary,
+                    height: 1.55,
+                    decoration: memo.isDone ? TextDecoration.lineThrough : null,
+                    decorationColor: AppColors.textMuted,
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
@@ -118,6 +133,12 @@ class MemoCard extends ConsumerWidget {
                   runSpacing: 4,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
+                    if (memo.isTask || memo.mentionedMe || memo.isDone)
+                      _FooterAction(
+                        label: memo.isDone ? '완료 취소' : '✓ 완료',
+                        color: memo.isDone ? AppColors.textMuted : AppColors.good,
+                        onTap: () => _toggleDone(context, ref),
+                      ),
                     _FooterAction(
                       label: memo.commentCount > 0 ? '댓글 ${memo.commentCount}' : '댓글 달기',
                       onTap: () => showComments(context),
@@ -160,6 +181,26 @@ class MemoCard extends ConsumerWidget {
       '${memo.authorName} · $when',
     ].join('\n');
     Share.share(text, subject: '${memo.farmLabel} 현장 메모');
+  }
+
+  Future<void> _toggleDone(BuildContext context, WidgetRef ref) async {
+    final done = !memo.isDone;
+    try {
+      await ref.read(memoRepositoryProvider).setMemoDone(id: memo.id, done: done);
+      if (done && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: const Text('완료했어요'),
+          action: SnackBarAction(
+            label: '되돌리기',
+            onPressed: () => ref.read(memoRepositoryProvider).setMemoDone(id: memo.id, done: false),
+          ),
+        ));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('완료 처리하지 못했어요: $e')));
+      }
+    }
   }
 
   Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
@@ -1014,17 +1055,19 @@ class _CommentFileTileState extends ConsumerState<_CommentFileTile> {
 }
 
 class _FooterAction extends StatelessWidget {
-  const _FooterAction({required this.label, required this.onTap, this.danger = false});
+  const _FooterAction({required this.label, required this.onTap, this.danger = false, this.color});
 
   final String label;
   final VoidCallback onTap;
   final bool danger;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      child: Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: danger ? AppColors.danger : AppColors.brand)),
+      child: Text(label,
+          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color ?? (danger ? AppColors.danger : AppColors.brand))),
     );
   }
 }

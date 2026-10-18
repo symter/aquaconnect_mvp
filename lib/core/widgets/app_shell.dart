@@ -22,10 +22,10 @@ class AppShell extends ConsumerWidget {
   /// One-time intro shown the first time each tab is opened (after the
   /// welcome card). Same order as [_tabs].
   static const _intros = [
-    (id: 'home', title: '홈', body: '담당 양식장을 위험도순으로 확인하고, 아래 입력창에서 바로 메모를 남길 수 있어요. 오른쪽 위 종 모양에서 알림을 확인해요.'),
-    (id: 'memo', title: '메모', body: '양식장별 메모를 모아 보고, 돋보기로 내용·태그·양식장·작성자를 검색할 수 있어요.'),
-    (id: 'info', title: '정보', body: '수산질병 정보와 바다 수온을 확인해요. 필터는 여러 개를 함께 선택할 수 있어요.'),
-    (id: 'mypage', title: '마이페이지', body: '양식장·구성원 관리, 바다 위치, 알림·하루 요약 설정은 여기에서 해요.'),
+    (id: 'home', title: '홈', body: '담당 양식장을 위험도순으로 확인하고, 바다 수온·수질도 여기서 바로 볼 수 있어요. 아래 입력창에서 메모를 남기고, 오른쪽 위 종 모양에서 알림을 확인해요.'),
+    (id: 'memo', title: '메모', body: '맨 위 오늘의 업무에서 내가 할 일을 확인하고, 끝난 일은 ✓ 완료로 지워 나가요. 양식장은 오른쪽 위 선택 버튼으로 골라 봐요.'),
+    (id: 'info', title: '정보', body: '수산질병 정보를 확인해요. 필터는 여러 개를 함께 선택할 수 있어요.'),
+    (id: 'mypage', title: '마이페이지', body: '양식장·구성원 관리, 바다 위치, 알림·오늘의 업무 알림 설정은 여기에서 해요.'),
   ];
 
   @override

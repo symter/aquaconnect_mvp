@@ -71,9 +71,19 @@ final routerProvider = Provider<GoRouter>((ref) {
       final isAuthPage = path == '/login' || path == '/signup';
       // /invite/<code> stays reachable when signed in, to say so on the page.
       final isPublic = isAuthPage || path.startsWith('/r/') || path.startsWith('/invite/');
-      if (!loggedIn && !isPublic) return '/login';
+      // Keep where we were headed (e.g. a push notification's link opened
+      // while the app was closed — the session is still being restored) so
+      // signing in lands there instead of on Home.
+      if (!loggedIn && !isPublic) {
+        final target = state.uri.toString();
+        return target == '/' ? '/login' : '/login?from=${Uri.encodeComponent(target)}';
+      }
       // Covers finishing signup too: the new account is signed in, so Home.
-      if (loggedIn && isAuthPage) return '/';
+      if (loggedIn && isAuthPage) {
+        final from = state.uri.queryParameters['from'];
+        final safe = from != null && from.startsWith('/') && !from.startsWith('//') && !from.startsWith('/login');
+        return safe ? from : '/';
+      }
       return null;
     },
     routes: [
@@ -141,10 +151,12 @@ final routerProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(routes: [GoRoute(path: '/', builder: (context, state) => const HomeScreen())]),
           StatefulShellBranch(routes: [GoRoute(
             path: '/memo',
-            // ?memo=<id>[&comments=1]: opened from a memo/comment notification.
+            // ?memo=<id>[&comments=1]: opened from a memo/comment notification;
+            // ?view=today: from the 오늘의 업무 notification.
             builder: (context, state) => MemoScreen(
               focusMemoId: state.uri.queryParameters['memo'],
               openComments: state.uri.queryParameters['comments'] == '1',
+              view: state.uri.queryParameters['view'],
             ),
           )]),
           StatefulShellBranch(routes: [GoRoute(path: '/info', builder: (context, state) => const InfoScreen())]),

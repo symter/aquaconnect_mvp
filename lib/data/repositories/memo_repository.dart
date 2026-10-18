@@ -20,6 +20,9 @@ abstract class MemoRepository {
   /// edit by the signed-in member. Only its author or an owner/director may.
   Future<Memo> updateMemo({required String id, required String content});
 
+  /// 완료 / 완료 취소 — any member may.
+  Future<Memo> setMemoDone({required String id, required bool done});
+
   /// Deletes a memo (and its photos).
   Future<void> deleteMemo(String id);
 

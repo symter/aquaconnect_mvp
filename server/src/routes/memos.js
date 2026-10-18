@@ -37,6 +37,10 @@ function toMemoJson(row, { withEdits = false } = {}) {
     readByMe: row.read_by_me ?? false,
     // A 댓글 on it calls (@) the requesting member.
     mentionedMe: row.mentioned_me ?? false,
+    // 완료: set when someone marks the task memo done.
+    doneAt: row.done_at ?? null,
+    doneByMemberId: row.done_by_member_id ?? null,
+    doneByName: row.done_by_name ?? null,
   };
 }
 
@@ -252,6 +256,41 @@ memosRouter.patch('/:id', async (req, res) => {
     if (memo.farm_id) await refreshReportQuietly(memo.farm_id);
   }
 
+  res.json(await loadMemoJson(memo.id, me));
+});
+
+// 메모 완료 / 완료 취소: any member of the org (a handed-over job is finished
+// by whoever took it). Body: { done: boolean }. The author hears about it.
+memosRouter.put('/:id/done', async (req, res) => {
+  if (!UUID_RE.test(req.params.id)) return res.status(404).json({ error: '메모를 찾을 수 없습니다.' });
+  const done = req.body?.done;
+  if (typeof done !== 'boolean') return res.status(400).json({ error: '완료 여부가 올바르지 않습니다.' });
+  const orgId = await orgIdForMember(req.memberId);
+  const me = await currentMember(req.memberId);
+  const { rows } = await query(
+    `update memos mm set
+       done_at = case when $3 then coalesce(mm.done_at, now()) end,
+       done_by_member_id = case when $3 then coalesce(mm.done_by_member_id, $4) end,
+       done_by_name = case when $3 then coalesce(mm.done_by_name, $5) end
+     from memos old
+     where mm.id = $1 and mm.org_id = $2 and old.id = mm.id
+     returning mm.id, mm.content, mm.author_member_id, old.done_at as was_done_at,
+       (select name from farms f where f.id = mm.farm_id) as farm_name`,
+    [req.params.id, orgId, done, req.memberId, me?.name ?? ''],
+  );
+  const memo = rows[0];
+  if (!memo) return res.status(404).json({ error: '메모를 찾을 수 없습니다.' });
+
+  if (done && !memo.was_done_at && memo.author_member_id && memo.author_member_id !== req.memberId) {
+    const flat = memo.content.trim().replace(/\s+/g, ' ');
+    await notifyMembers({
+      memberIds: [memo.author_member_id],
+      type: 'comment',
+      title: `업무 완료 · ${memo.farm_name ?? '미지정'}`,
+      body: `${me?.name ?? ''}님이 완료했어요: ${flat.length > 60 ? `${flat.slice(0, 60)}…` : flat}`,
+      link: `/memo?memo=${memo.id}`,
+    });
+  }
   res.json(await loadMemoJson(memo.id, me));
 });
 

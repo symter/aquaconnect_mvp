@@ -93,6 +93,13 @@ class RemoteMemoRepository implements MemoRepository {
   }
 
   @override
+  Future<Memo> setMemoDone({required String id, required bool done}) async {
+    final json = await _api.put('/api/memos/$id/done', body: {'done': done}) as Map<String, dynamic>;
+    _refresh.add(null);
+    return Memo.fromJson(json);
+  }
+
+  @override
   Future<void> deleteMemo(String id) async {
     await _api.delete('/api/memos/$id');
     _refresh.add(null);

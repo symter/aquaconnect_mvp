@@ -60,7 +60,8 @@ notificationsRouter.put('/settings', async (req, res) => {
   res.json(toSettingsJson(rows[0]));
 });
 
-// 하루 요약 설정 (sent by lib/digest.js).
+// 오늘의 업무 알림 설정 (sent by lib/digest.js). weeklyEnabled is still
+// accepted for older app builds but no longer sends anything.
 function toDigestJson(row) {
   return {
     dailyEnabled: row?.daily_enabled ?? DIGEST_DEFAULTS.dailyEnabled,
@@ -77,7 +78,7 @@ notificationsRouter.get('/digest', async (req, res) => {
 notificationsRouter.put('/digest', async (req, res) => {
   const { dailyEnabled, dailyTime, weeklyEnabled } = req.body ?? {};
   if (typeof dailyEnabled !== 'boolean' || typeof weeklyEnabled !== 'boolean' || !DAILY_TIME_RE.test(dailyTime ?? '')) {
-    return res.status(400).json({ error: '하루 요약 설정 값이 올바르지 않습니다.' });
+    return res.status(400).json({ error: '오늘의 업무 알림 설정 값이 올바르지 않습니다.' });
   }
   // Moving the time to one that has already passed today starts tomorrow,
   // instead of firing the moment the setting is saved.

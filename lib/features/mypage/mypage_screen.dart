@@ -143,8 +143,8 @@ class MyPageScreen extends ConsumerWidget {
                       onTap: () => showOceanStationPickerSheet(context),
                     ),
                     _MenuItem(
-                      icon: Icons.summarize_outlined,
-                      label: '하루 요약 설정',
+                      icon: Icons.checklist_rtl,
+                      label: '오늘의 업무 알림',
                       trailing: digestSettings == null
                           ? ''
                           : (digestSettings.dailyEnabled ? formatKoreanTime(digestSettings.dailyTime) : '꺼짐'),
