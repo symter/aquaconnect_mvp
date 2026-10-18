@@ -276,6 +276,106 @@ adminRouter.delete('/comments/:id', async (req, res) => {
   res.status(204).end();
 });
 
+// ── 글 로그 CSV 내보내기 ─────────────────────────────────────────────
+// One row per 메모 or 댓글, oldest first, with the same filters as /memos
+// (orgId, authorId, q — matched against each row's own text/author/farm/org)
+// plus from/to (KST dates, inclusive). Opens in Excel: UTF-8 BOM, CRLF.
+
+const EXPORT_MAX_ROWS = 50000;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// RFC 4180 quoting, plus a leading ' on cells a spreadsheet would run as a
+// formula (=, +, -, @, tab, CR) — the text is user-written.
+function csvCell(value) {
+  let s = value == null ? '' : String(value);
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+const kstStamp = (date) => {
+  const k = new Date(new Date(date).getTime() + 9 * 60 * 60 * 1000).toISOString();
+  return `${k.slice(0, 10)} ${k.slice(11, 19)}`;
+};
+
+const EXPORT_COLUMNS = [
+  '작성일시(KST)', '유형', '관리원', '양식장', '작성자', '작성자 구분', '내용', '태그', '호출',
+  '사진', '파일', '댓글 수', '수정 횟수', '완료', '완료자', '메모 ID', '글 ID',
+];
+
+adminRouter.get('/export/posts.csv', async (req, res) => {
+  const from = DATE_RE.test(String(req.query.from ?? '')) ? req.query.from : null;
+  const to = DATE_RE.test(String(req.query.to ?? '')) ? req.query.to : null;
+  const q = String(req.query.q ?? '').trim();
+  const { rows } = await query(
+    `with posts as (
+       select mm.created_at, 'memo' as kind, mm.id as post_id, mm.id as memo_id, mm.org_id, mm.farm_id,
+              mm.author_type, mm.author_name, mm.author_member_id, mm.content, mm.tags,
+              (select count(*)::int from memo_photos p where p.memo_id = mm.id) as photos,
+              0 as files,
+              (select count(*)::int from memo_comments c where c.memo_id = mm.id) as comments,
+              (select count(*)::int from memo_edits e where e.memo_id = mm.id) as edits,
+              mm.done_at, mm.done_by_name, null::text as mentions
+       from memos mm
+       union all
+       select c.created_at, 'comment', c.id, c.memo_id, mm.org_id, mm.farm_id,
+              'institute', c.author_name, c.author_member_id, c.content, '{}'::text[],
+              (select count(*)::int from memo_comment_attachments a where a.comment_id = c.id and a.kind = 'photo'),
+              (select count(*)::int from memo_comment_attachments a where a.comment_id = c.id and a.kind = 'file'),
+              null, null, null, null,
+              (select string_agg(m.name, ', ' order by m.name) from memo_comment_mentions x
+                 join members m on m.id = x.member_id where x.comment_id = c.id)
+       from memo_comments c join memos mm on mm.id = c.memo_id
+     )
+     select p.*, o.name as org_name, f.name as farm_name
+     from posts p
+     join organizations o on o.id = p.org_id
+     left join farms f on f.id = p.farm_id
+     where ($1::uuid is null or p.org_id = $1)
+       and ($2::uuid is null or p.author_member_id = $2)
+       and ($3 = '' or p.content ilike '%' || $3 || '%' or p.author_name ilike '%' || $3 || '%'
+            or coalesce(f.name, '') ilike '%' || $3 || '%' or o.name ilike '%' || $3 || '%')
+       and ($4::date is null or p.created_at >= ($4::date)::timestamp at time zone 'Asia/Seoul')
+       and ($5::date is null or p.created_at < ($5::date + 1)::timestamp at time zone 'Asia/Seoul')
+     order by p.created_at, p.kind desc
+     limit ${EXPORT_MAX_ROWS + 1}`,
+    [optionalUuid(req.query.orgId), optionalUuid(req.query.authorId), q, from, to],
+  );
+  const truncated = rows.length > EXPORT_MAX_ROWS;
+
+  const lines = [EXPORT_COLUMNS.map(csvCell).join(',')];
+  for (const r of rows.slice(0, EXPORT_MAX_ROWS)) {
+    const isMemo = r.kind === 'memo';
+    lines.push([
+      kstStamp(r.created_at),
+      isMemo ? '메모' : '댓글',
+      r.org_name,
+      r.farm_name ?? '미지정',
+      r.author_name,
+      r.author_type === 'farm' ? '어가' : '관리원',
+      r.content,
+      (r.tags ?? []).join(' '),
+      r.mentions ?? '',
+      r.photos,
+      r.files,
+      isMemo ? r.comments : '',
+      isMemo ? r.edits : '',
+      isMemo ? (r.done_at ? kstStamp(r.done_at) : '') : '',
+      isMemo ? (r.done_by_name ?? '') : '',
+      r.memo_id,
+      r.post_id,
+    ].map(csvCell).join(','));
+  }
+
+  const stamp = kstStamp(new Date()).slice(0, 10).replace(/-/g, '');
+  const name = `aquaconnect_posts_${from ?? 'all'}_${to ?? stamp}.csv`;
+  res.set('Content-Type', 'text/csv; charset=utf-8');
+  res.set('Content-Disposition', `attachment; filename="${name}"`);
+  res.set('Cache-Control', 'no-store');
+  res.set('X-Export-Rows', String(Math.min(rows.length, EXPORT_MAX_ROWS)));
+  res.set('X-Export-Truncated', truncated ? '1' : '0');
+  res.send(`﻿${lines.join('\r\n')}\r\n`);
+});
+
 adminRouter.get('/photos/:id', async (req, res) => {
   if (!UUID_RE.test(req.params.id)) return notFound(res, '사진');
   const { rows } = await query('select content_type, data from memo_photos where id = $1', [req.params.id]);
