@@ -116,7 +116,7 @@ class MemoCard extends ConsumerWidget {
                   children: [
                     _FooterAction(
                       label: memo.commentCount > 0 ? '댓글 ${memo.commentCount}' : '댓글 달기',
-                      onTap: () => _showComments(context),
+                      onTap: () => showComments(context),
                     ),
                     _FooterAction(label: '공유', onTap: () => _share(context)),
                     if (canModify) _FooterAction(label: '수정', onTap: () => _showEditSheet(context)),
@@ -185,7 +185,8 @@ class MemoCard extends ConsumerWidget {
     }
   }
 
-  void _showComments(BuildContext context) {
+  /// Opens this memo's 댓글 sheet (also used when a comment notification is tapped).
+  void showComments(BuildContext context) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,

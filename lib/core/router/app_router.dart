@@ -42,6 +42,20 @@ class GoRouterRefreshStream extends ChangeNotifier {
   }
 }
 
+/// Bottom-tab (StatefulShellRoute branch) locations.
+const _tabPaths = {'/', '/memo', '/info', '/mypage'};
+
+/// Opens an in-app link from a notification. Tab locations are `go`ne to:
+/// `push`ing one from a full-screen page (the 알림함) lands it inside the
+/// shell *underneath* that page, so nothing would seem to happen.
+void openAppLink(GoRouter router, String link) {
+  if (_tabPaths.contains(Uri.parse(link).path)) {
+    router.go(link);
+  } else {
+    router.push(link);
+  }
+}
+
 final routerProvider = Provider<GoRouter>((ref) {
   final authRepository = ref.watch(authRepositoryProvider);
   final refreshStream = GoRouterRefreshStream(authRepository.authStateChanges());
@@ -125,7 +139,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state, navigationShell) => AppShell(navigationShell: navigationShell),
         branches: [
           StatefulShellBranch(routes: [GoRoute(path: '/', builder: (context, state) => const HomeScreen())]),
-          StatefulShellBranch(routes: [GoRoute(path: '/memo', builder: (context, state) => const MemoScreen())]),
+          StatefulShellBranch(routes: [GoRoute(
+            path: '/memo',
+            // ?memo=<id>[&comments=1]: opened from a memo/comment notification.
+            builder: (context, state) => MemoScreen(
+              focusMemoId: state.uri.queryParameters['memo'],
+              openComments: state.uri.queryParameters['comments'] == '1',
+            ),
+          )]),
           StatefulShellBranch(routes: [GoRoute(path: '/info', builder: (context, state) => const InfoScreen())]),
           StatefulShellBranch(routes: [GoRoute(path: '/mypage', builder: (context, state) => const MyPageScreen())]),
         ],

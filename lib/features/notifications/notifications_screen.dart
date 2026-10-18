@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/providers/notification_providers.dart';
 import '../../core/providers/repository_providers.dart';
+import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/models/app_notification.dart';
 import 'push_status_card.dart';
@@ -21,7 +22,7 @@ class NotificationsScreen extends ConsumerWidget {
       ref.invalidate(notificationFeedProvider);
     }
     final link = n.link;
-    if (link != null && link != '/notifications' && context.mounted) context.push(link);
+    if (link != null && link != '/notifications' && context.mounted) openAppLink(GoRouter.of(context), link);
   }
 
   Future<void> _markAllRead(BuildContext context, WidgetRef ref) async {

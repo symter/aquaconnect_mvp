@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/providers/data_providers.dart';
@@ -10,7 +11,13 @@ import '../../core/widgets/memo_composer_bar.dart';
 import '../../data/models/memo.dart';
 
 class MemoScreen extends ConsumerStatefulWidget {
-  const MemoScreen({super.key});
+  const MemoScreen({super.key, this.focusMemoId, this.openComments = false});
+
+  /// Memo to pin at the top, from a tapped memo/comment notification.
+  final String? focusMemoId;
+
+  /// Also open [focusMemoId]'s 댓글 sheet (a comment notification).
+  final bool openComments;
 
   @override
   ConsumerState<MemoScreen> createState() => _MemoScreenState();
@@ -22,6 +29,46 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
   String _query = '';
   final _searchController = TextEditingController();
   final _searchFocus = FocusNode();
+
+  String? _focusId;
+  bool _commentsPending = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _takeFocus();
+  }
+
+  @override
+  void didUpdateWidget(MemoScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.focusMemoId != oldWidget.focusMemoId) _takeFocus();
+  }
+
+  /// Picks up `?memo=` from the route, then clears it from the location so
+  /// the same notification tapped again (or the 메모 tab restoring its last
+  /// location) is seen as a fresh request.
+  void _takeFocus() {
+    final id = widget.focusMemoId;
+    if (id == null) return;
+    _focusId = id;
+    _commentsPending = widget.openComments;
+    _filter = '전체';
+    _searching = false;
+    _query = '';
+    _searchController.clear();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.go('/memo');
+    });
+  }
+
+  /// Opens the pending 댓글 sheet once the focused memo is in the list.
+  void _openPendingComments(Memo memo) {
+    _commentsPending = false;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) MemoCard(memo: memo).showComments(context);
+    });
+  }
 
   @override
   void dispose() {
@@ -113,9 +160,12 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
             Expanded(
               child: memosAsync.when(
                 data: (memos) {
-                  final filtered = _applyFilter(memos);
+                  // Not found (yet, or deleted): just the normal list.
+                  final focused = memos.where((m) => m.id == _focusId).firstOrNull;
+                  if (focused != null && _commentsPending) _openPendingComments(focused);
+                  final filtered = _applyFilter(memos).where((m) => m.id != focused?.id).toList();
                   final groups = _groupByDay(filtered);
-                  if (filtered.isEmpty) {
+                  if (filtered.isEmpty && focused == null) {
                     return Center(
                       child: Text(
                         _query.trim().isEmpty ? '아직 메모가 없습니다.' : "'${_query.trim()}'에 해당하는 메모가 없습니다.",
@@ -126,6 +176,34 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
                   return ListView(
                     padding: const EdgeInsets.fromLTRB(20, 14, 20, 16),
                     children: [
+                      if (focused != null) ...[
+                        Row(
+                          children: [
+                            const Icon(Icons.notifications_active_outlined, size: 14, color: AppColors.brand),
+                            const SizedBox(width: 4),
+                            const Expanded(
+                              child: Text('알림에서 연 메모',
+                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.brand)),
+                            ),
+                            IconButton(
+                              tooltip: '닫기',
+                              onPressed: () => setState(() => _focusId = null),
+                              icon: const Icon(Icons.close, size: 16, color: AppColors.textMuted),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        DecoratedBox(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: AppColors.brandTintBorder, width: 2),
+                          ),
+                          child: MemoCard(memo: focused),
+                        ),
+                        const SizedBox(height: 10),
+                      ],
                       if (_query.trim().isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.fromLTRB(2, 0, 2, 4),

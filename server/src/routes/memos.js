@@ -201,7 +201,7 @@ memosRouter.post('/', async (req, res) => {
     type: 'memo',
     title: `새 메모 · ${farmName ?? '미지정'}`,
     body: `${memberRows[0]?.name ?? ''}: ${preview.length > 80 ? `${preview.slice(0, 80)}…` : preview}`,
-    link: '/memo',
+    link: `/memo?memo=${memoRow.id}`,
   });
 
   res.status(201).json(toMemoJson({ ...memoRow, farm_name: farmName, photo_ids: photoIds }));
@@ -339,7 +339,7 @@ memosRouter.post('/:id/comments', async (req, res) => {
       type: 'comment',
       title: `새 댓글 · ${memo.farm_name ?? '미지정'}`,
       body: `${me?.name ?? ''}: ${preview.length > 80 ? `${preview.slice(0, 80)}…` : preview}`,
-      link: '/memo',
+      link: `/memo?memo=${memo.id}&comments=1`,
     });
   }
   res.status(201).json(toCommentJson(rows[0]));
