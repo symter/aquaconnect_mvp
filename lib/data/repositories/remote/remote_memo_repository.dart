@@ -33,15 +33,20 @@ class RemoteMemoRepository implements MemoRepository {
     late final StreamController<List<Memo>> controller;
     Timer? timer;
     StreamSubscription<void>? refreshSub;
+    var hasData = false;
 
     Future<void> tick() async {
       try {
         final memos = await _fetchAll();
         if (!controller.isClosed) {
+          hasData = true;
           controller.add(farmId == null ? memos : memos.where((m) => m.farmId == farmId).toList());
         }
       } catch (e) {
-        if (!controller.isClosed) controller.addError(e);
+        // Once a list has loaded, a failed poll (app resumed from background,
+        // network switch, server restarting on deploy) keeps showing it and
+        // waits for the next tick — only a failed first load is an error.
+        if (!controller.isClosed && !hasData) controller.addError(e);
       }
     }
 
