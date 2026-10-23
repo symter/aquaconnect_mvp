@@ -6,7 +6,9 @@ import 'package:intl/intl.dart';
 import '../../core/providers/data_providers.dart';
 import '../../core/providers/repository_providers.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/korean_search.dart';
 import '../../core/widgets/chips.dart';
+import '../../core/widgets/farm_search_field.dart';
 import '../../core/widgets/memo_card.dart';
 import '../../core/widgets/memo_composer_bar.dart';
 import '../../data/models/farm.dart';
@@ -483,45 +485,76 @@ class _FarmPickerButton extends StatelessWidget {
   }
 
   Future<void> _open(BuildContext context) async {
-    final options = [(_allFarms, '양식장 전체'), (_noFarm, '미지정'), for (final f in farms) (f.id, f.name)];
+    var query = '';
     final picked = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
       backgroundColor: AppColors.surface,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (sheetContext) => SafeArea(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: MediaQuery.of(sheetContext).size.height * 0.6),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(20, 18, 20, 8),
-                child: Text('양식장 선택', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
-              ),
-              Flexible(
-                child: ListView(
-                  shrinkWrap: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) {
+          final searching = query.trim().isNotEmpty;
+          final options = [
+            if (!searching) ...[(_allFarms, '양식장 전체', null), (_noFarm, '미지정', null)],
+            for (final f in searchFarms(farms, query)) (f.id, f.name, f.address),
+          ];
+          return Padding(
+            // Keep the list above the on-screen keyboard while typing.
+            padding: EdgeInsets.only(bottom: MediaQuery.of(sheetContext).viewInsets.bottom),
+            child: SafeArea(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: MediaQuery.of(sheetContext).size.height * 0.7),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    for (final (value, label) in options)
-                      ListTile(
-                        dense: true,
-                        title: Text(label,
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: value == selected ? FontWeight.w800 : FontWeight.w500,
-                              color: value == selected ? AppColors.brand : AppColors.textPrimary,
-                            )),
-                        trailing: value == selected ? const Icon(Icons.check, size: 18, color: AppColors.brand) : null,
-                        onTap: () => Navigator.of(sheetContext).pop(value),
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(20, 18, 20, 8),
+                      child: Text('양식장 선택', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+                      child: FarmSearchField(
+                        fillColor: AppColors.background,
+                        onChanged: (q) => setSheetState(() => query = q),
                       ),
+                    ),
+                    if (searching && options.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(20, 16, 20, 24),
+                        child: Text('맞는 양식장이 없어요', style: TextStyle(fontSize: 13, color: AppColors.textMuted)),
+                      ),
+                    Flexible(
+                      child: ListView(
+                        shrinkWrap: true,
+                        children: [
+                          for (final (value, label, address) in options)
+                            ListTile(
+                              dense: true,
+                              subtitle: address == null || address.isEmpty
+                                  ? null
+                                  : Text(address,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted)),
+                              title: Text(label,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: value == selected ? FontWeight.w800 : FontWeight.w500,
+                                    color: value == selected ? AppColors.brand : AppColors.textPrimary,
+                                  )),
+                              trailing: value == selected ? const Icon(Icons.check, size: 18, color: AppColors.brand) : null,
+                              onTap: () => Navigator.of(sheetContext).pop(value),
+                            ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
     if (picked != null) onSelected(picked);

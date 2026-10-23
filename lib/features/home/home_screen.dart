@@ -7,7 +7,9 @@ import '../../core/providers/farm_group_provider.dart';
 import '../../core/providers/notification_providers.dart';
 import '../../core/providers/repository_providers.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/korean_search.dart';
 import '../../core/widgets/chips.dart';
+import '../../core/widgets/farm_search_field.dart';
 import '../../core/widgets/farm_card.dart';
 import '../../core/widgets/memo_composer_bar.dart';
 import '../../data/models/farm.dart';
@@ -29,6 +31,7 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   RiskLevel? _riskFilter;
   bool _mineOnly = true;
+  String _farmQuery = '';
 
   @override
   Widget build(BuildContext context) {
@@ -115,8 +118,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ],
                   ),
                   const SizedBox(height: 10),
+                  FarmSearchField(onChanged: (q) => setState(() => _farmQuery = q)),
+                  const SizedBox(height: 10),
                   farmsAsync.when(
-                    data: (farms) => _FarmFilterRow(
+                    // The chips don't apply to a search, so they step aside.
+                    data: (farms) => _farmQuery.trim().isNotEmpty
+                        ? const SizedBox.shrink()
+                        : _FarmFilterRow(
                       farms: _mineOnly ? farms.where(isMine).toList() : farms,
                       mineCount: farms.where(isMine).length,
                       allCount: farms.length,
@@ -138,6 +146,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   const SizedBox(height: 10),
                   farmsAsync.when(
                     data: (farms) {
+                      // Searching looks through every farm, whatever the
+                      // 내 담당 / 위험도 chips say.
+                      if (_farmQuery.trim().isNotEmpty) {
+                        final hits = searchFarms(farms, _farmQuery);
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(2, 0, 2, 8),
+                              child: Text(
+                                hits.isEmpty ? "'${_farmQuery.trim()}'에 맞는 양식장이 없어요" : '검색 결과 ${hits.length}곳',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: hits.isEmpty ? AppColors.textMuted : AppColors.brand,
+                                ),
+                              ),
+                            ),
+                            for (final farm in hits) ...[
+                              FarmCard(farm: farm, onTap: () => context.push('/reports/${farm.id}')),
+                              const SizedBox(height: 10),
+                            ],
+                          ],
+                        );
+                      }
                       final filtered = farms
                           .where((f) => !_mineOnly || isMine(f))
                           .where((f) => _riskFilter == null || f.riskLevel == _riskFilter)

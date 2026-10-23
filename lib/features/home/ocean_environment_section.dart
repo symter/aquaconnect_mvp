@@ -8,11 +8,11 @@ import '../../core/widgets/ocean_data_times_dialog.dart';
 import '../../core/widgets/red_tide_card.dart';
 import '../../core/widgets/stat_grid.dart';
 import '../../data/models/ocean_reading.dart';
-import '../../data/services/ocean_station_preference_store.dart';
 
 /// 해양환경 데이터 (실시간 수온 + 적조 정보) for one station, shown on Home under 전체
-/// 리포트 보기. The station chip starts on the MyPage 바다 위치 and switching
-/// it here saves the choice there too.
+/// 리포트 보기. It always opens on the MyPage 바다 위치 (and follows it when
+/// that changes); picking another station from the chip only browses it —
+/// '내 위치로' goes back, and the MyPage setting is left alone.
 class OceanEnvironmentSection extends ConsumerStatefulWidget {
   const OceanEnvironmentSection({super.key});
 
@@ -37,9 +37,6 @@ class _OceanEnvironmentSectionState extends ConsumerState<OceanEnvironmentSectio
       _stationCode = station.code;
       _stationName = station.name;
     });
-    ref.read(selectedOceanStationProvider.notifier).select(
-          OceanStationSelection(code: station.code, name: station.name),
-        );
   }
 
   /// Created once per station (and on refresh) instead of on every build,
@@ -75,21 +72,26 @@ class _OceanEnvironmentSectionState extends ConsumerState<OceanEnvironmentSectio
   Widget build(BuildContext context) {
     final stationsAsync = ref.watch(oceanStationsProvider);
     final stations = stationsAsync.valueOrNull;
-    if (stations != null && stations.isNotEmpty && !_initializedFromPreference) {
-      final preferred = ref.read(selectedOceanStationProvider).valueOrNull;
-      var initial = stations.first;
-      if (preferred != null) {
-        for (final s in stations) {
-          if (s.code == preferred.code) {
-            initial = s;
-            break;
-          }
-        }
+    // Wait for the saved 바다 위치 too: starting before it loads is what used
+    // to drop Home onto the alphabetically-first station.
+    final preferenceAsync = ref.watch(selectedOceanStationProvider);
+    final preferred = preferenceAsync.valueOrNull;
+    // A new MyPage 바다 위치 moves Home along with it.
+    ref.listen(selectedOceanStationProvider, (previous, next) {
+      final selection = next.valueOrNull;
+      if (selection != null && selection.code != previous?.valueOrNull?.code) {
+        final match = ref.read(oceanStationsProvider).valueOrNull?.where((s) => s.code == selection.code).firstOrNull;
+        if (match != null) _selectStation(match);
       }
+    });
+    if (stations != null && stations.isNotEmpty && !_initializedFromPreference && !preferenceAsync.isLoading) {
+      final initial = stations.where((s) => s.code == preferred?.code).firstOrNull ?? stations.first;
       _stationCode = initial.code;
       _stationName = initial.name;
       _initializedFromPreference = true;
     }
+    final myStation = preferred == null ? null : stations?.where((s) => s.code == preferred.code).firstOrNull;
+    final browsingOther = myStation != null && _stationCode != myStation.code;
 
     return stationsAsync.when(
       loading: () => const Padding(
@@ -102,6 +104,12 @@ class _OceanEnvironmentSectionState extends ConsumerState<OceanEnvironmentSectio
         child: Text('관측소 목록을 불러오지 못했습니다.\n$e', style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
       ),
       data: (stations) {
+        if (!_initializedFromPreference) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 32),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
         final future = _snapshotFuture();
         if (stations.isEmpty || future == null) {
           return Container(
@@ -128,9 +136,32 @@ class _OceanEnvironmentSectionState extends ConsumerState<OceanEnvironmentSectio
                 const Spacer(),
                 PopupMenuButton<String>(
                   initialValue: _stationCode,
+                  tooltip: '다른 지역 보기',
+                  constraints: const BoxConstraints(maxHeight: 420),
                   onSelected: (code) => _selectStation(stations.firstWhere((s) => s.code == code)),
-                  itemBuilder: (context) =>
-                      stations.map((s) => PopupMenuItem(value: s.code, child: Text(s.name))).toList(),
+                  itemBuilder: (context) => [
+                    if (myStation != null) ...[
+                      PopupMenuItem(
+                        value: myStation.code,
+                        child: Row(
+                          children: [
+                            const Icon(Icons.home_outlined, size: 16, color: AppColors.brand),
+                            const SizedBox(width: 6),
+                            Text(myStation.name, style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.brand)),
+                            const SizedBox(width: 6),
+                            const Text('내 바다 위치', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuDivider(),
+                    ],
+                    for (final s in stations)
+                      if (s.code != myStation?.code)
+                        PopupMenuItem(
+                          value: s.code,
+                          child: Text(s.sea == null ? s.name : '${s.name}  ·  ${s.sea}'),
+                        ),
+                  ],
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(color: AppColors.brandTint, borderRadius: BorderRadius.circular(20)),
@@ -146,8 +177,31 @@ class _OceanEnvironmentSectionState extends ConsumerState<OceanEnvironmentSectio
               ],
             ),
             const SizedBox(height: 4),
-            const Text('여러 해역의 중층·저층 수온을 확인할 수 있어요 — 위 칩을 눌러 전환 (마이페이지에서도 선택 가능)',
-                style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    myStation == null
+                        ? '마이페이지 > 바다 위치를 정하면 여기에 기본으로 보여요 · 오른쪽 칩을 눌러 다른 지역도 볼 수 있어요'
+                        : browsingOther
+                            ? '다른 지역을 보는 중이에요 (내 바다 위치: ${myStation.name})'
+                            : '내 바다 위치(마이페이지 설정) 기준 · 오른쪽 칩을 눌러 다른 지역도 볼 수 있어요',
+                    style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
+                  ),
+                ),
+                if (browsingOther)
+                  TextButton.icon(
+                    onPressed: () => _selectStation(myStation),
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      minimumSize: const Size(0, 28),
+                    ),
+                    icon: const Icon(Icons.my_location, size: 14),
+                    label: const Text('내 위치로', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700)),
+                  ),
+              ],
+            ),
             const SizedBox(height: 10),
             FutureBuilder<OceanSnapshot>(
               future: future,
