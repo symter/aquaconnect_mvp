@@ -29,6 +29,25 @@ final memosProvider = StreamProvider.family<List<Memo>, String?>((ref, farmId) {
   return ref.watch(memoRepositoryProvider).watchMemos(farmId: farmId);
 });
 
+/// The signed-in member's 오늘의 업무: open memos that are theirs
+/// ([Memo.isOpenTaskFor]) plus how many they finished today. Drives the Home
+/// card and the 메모 tab badge; null until memos and the session load.
+final myTodayTasksProvider = Provider<({List<Memo> open, int doneToday})?>((ref) {
+  final memos = ref.watch(memosProvider(null)).valueOrNull;
+  final me = ref.watch(authStateProvider).valueOrNull?.member;
+  if (memos == null || me == null) return null;
+  final now = DateTime.now();
+  bool today(DateTime at) {
+    final l = at.toLocal();
+    return l.year == now.year && l.month == now.month && l.day == now.day;
+  }
+
+  return (
+    open: memos.where((m) => m.isOpenTaskFor(memberId: me.id, memberName: me.name)).toList(),
+    doneToday: memos.where((m) => m.isDone && m.doneByMemberId == me.id && today(m.doneAt!)).length,
+  );
+});
+
 /// Bytes for one memo photo. Kept (not autoDispose) so scrolling back to a
 /// memo doesn't re-download its thumbnails.
 final memoPhotoProvider = FutureProvider.family<Uint8List, String>((ref, photoId) {
