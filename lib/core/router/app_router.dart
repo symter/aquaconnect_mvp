@@ -6,8 +6,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/auth/login_screen.dart';
 import '../../features/auth/signup_screen.dart';
+import '../../features/calendar/calendar_screen.dart';
 import '../../features/home/home_screen.dart';
-import '../../features/info/info_screen.dart';
 import '../../features/memo/memo_screen.dart';
 import '../../features/mypage/change_history_screen.dart';
 import '../../features/mypage/daily_summary_settings_screen.dart';
@@ -43,7 +43,7 @@ class GoRouterRefreshStream extends ChangeNotifier {
 }
 
 /// Bottom-tab (StatefulShellRoute branch) locations.
-const _tabPaths = {'/', '/memo', '/info', '/mypage'};
+const _tabPaths = {'/', '/memo', '/calendar', '/mypage'};
 
 /// Opens an in-app link from a notification. Tab locations are `go`ne to:
 /// `push`ing one from a full-screen page (the 알림함) lands it inside the
@@ -159,7 +159,9 @@ final routerProvider = Provider<GoRouter>((ref) {
               view: state.uri.queryParameters['view'],
             ),
           )]),
-          StatefulShellBranch(routes: [GoRoute(path: '/info', builder: (context, state) => const InfoScreen())]),
+          // The 정보 tab (features/info) gave way to 캘린더; it's kept for a
+          // later 정보/AquaInfo tab.
+          StatefulShellBranch(routes: [GoRoute(path: '/calendar', builder: (context, state) => const CalendarScreen())]),
           StatefulShellBranch(routes: [GoRoute(path: '/mypage', builder: (context, state) => const MyPageScreen())]),
         ],
       ),

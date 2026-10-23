@@ -12,10 +12,12 @@ class AppShell extends ConsumerWidget {
 
   final StatefulNavigationShell navigationShell;
 
+  static const _calendarTab = 2;
+
   static const _tabs = [
     (icon: Icons.home_outlined, activeIcon: Icons.home, label: '홈'),
     (icon: Icons.edit_note_outlined, activeIcon: Icons.edit_note, label: '메모'),
-    (icon: Icons.info_outline, activeIcon: Icons.info, label: '정보'),
+    (icon: Icons.calendar_month_outlined, activeIcon: Icons.calendar_month, label: '캘린더'),
     (icon: Icons.person_outline, activeIcon: Icons.person, label: '마이페이지'),
   ];
 
@@ -24,7 +26,7 @@ class AppShell extends ConsumerWidget {
   static const _intros = [
     (id: 'home', title: '홈', body: '담당 양식장을 위험도순으로 확인하고, 바다 수온·수질도 여기서 바로 볼 수 있어요. 아래 입력창에서 메모를 남기고, 오른쪽 위 종 모양에서 알림을 확인해요.'),
     (id: 'memo', title: '메모', body: '맨 위 오늘의 업무에서 내가 할 일을 확인하고, 끝난 일은 ✓ 완료로 지워 나가요. 양식장은 오른쪽 위 선택 버튼으로 골라 봐요.'),
-    (id: 'info', title: '정보', body: '수산질병 정보를 확인해요. 필터는 여러 개를 함께 선택할 수 있어요.'),
+    (id: 'calendar', title: '캘린더', body: '메모가 날짜별로 모여 있어요. 완료한 일은 완료한 날, 아직인 일은 등록한 날에 보여요. 두 손가락으로 벌리거나 −/+ 버튼으로 확대·축소해요.'),
     (id: 'mypage', title: '마이페이지', body: '양식장·구성원 관리, 바다 위치, 알림·오늘의 업무 알림 설정은 여기에서 해요.'),
   ];
 
@@ -63,7 +65,10 @@ class AppShell extends ConsumerWidget {
       );
     }
 
+    // The calendar tab may use a wide window; the other tabs keep the
+    // mobile-width column.
     return ResponsiveMobileFrame(
+      maxWidth: navigationShell.currentIndex == _calendarTab ? 1280 : 480,
       child: Scaffold(
         body: Stack(children: [navigationShell, ?overlay]),
         bottomNavigationBar: DecoratedBox(
