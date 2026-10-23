@@ -6,10 +6,10 @@ import '../../data/models/disease_info.dart';
 import '../../data/models/farm.dart';
 import '../../data/models/memo.dart';
 import '../../data/models/ocean_reading.dart';
+import '../../data/models/red_tide.dart';
 import '../../data/models/org_member.dart';
 import '../../data/models/report.dart';
 import '../../data/models/share_link.dart';
-import '../../data/services/ocean_service.dart';
 import 'repository_providers.dart';
 
 /// Org roster, used by the memo composer's '/' assignee menu.
@@ -94,25 +94,7 @@ final selectedStationReadingsProvider = FutureProvider<List<OceanObservation>>((
   return [for (final layer in order) withTemp.firstWhere((o) => o.layer == layer)];
 });
 
-/// 염도·용존산소 averaged over the nearest 어장환경 survey of every station
-/// the org's farms are linked to, for the AllReport stat grid. The status is
-/// noneNearby only when every station lacks a survey point within 50km.
-final fleetWaterQualityProvider =
-    FutureProvider<({double? salinity, double? dissolvedOxygen, WaterQualityStatus status})>((ref) async {
-  final farms = await ref.watch(farmsProvider.future);
-  final service = ref.watch(oceanServiceProvider);
-  final codes = {for (final f in farms) if (f.nearestStationCode.isNotEmpty) f.nearestStationCode};
-  final results = await Future.wait(codes.map((code) => resolveWaterQuality(service.fetchWaterQuality(code))));
-
-  double? average(String key) {
-    final values = [for (final (q, _) in results) ?q?.value(key)];
-    return values.isEmpty ? null : values.reduce((a, b) => a + b) / values.length;
-  }
-
-  final status = results.any((r) => r.$2 == WaterQualityStatus.available)
-      ? WaterQualityStatus.available
-      : results.isNotEmpty && results.every((r) => r.$2 == WaterQualityStatus.noneNearby)
-          ? WaterQualityStatus.noneNearby
-          : WaterQualityStatus.unavailable;
-  return (salinity: average('salinity'), dissolvedOxygen: average('dissolvedOxygen'), status: status);
+/// The newest NIFS 적조 속보 and the recent ones (Home, AllReport).
+final redTideProvider = FutureProvider<RedTideInfo>((ref) {
+  return ref.watch(oceanServiceProvider).fetchRedTide();
 });

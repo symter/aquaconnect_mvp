@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import '../../core/providers/data_providers.dart';
 import '../../core/providers/repository_providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/ocean_data_times_dialog.dart';
+import '../../core/widgets/red_tide_card.dart';
 import '../../core/widgets/stat_grid.dart';
 import '../../data/models/ocean_reading.dart';
 import '../../data/services/ocean_station_preference_store.dart';
 
-/// 해양환경 데이터 (수온·수질) for one station, shown on Home under 전체
+/// 해양환경 데이터 (실시간 수온 + 적조 정보) for one station, shown on Home under 전체
 /// 리포트 보기. The station chip starts on the MyPage 바다 위치 and switching
 /// it here saves the choice there too.
 class OceanEnvironmentSection extends ConsumerStatefulWidget {
@@ -66,7 +66,10 @@ class _OceanEnvironmentSectionState extends ConsumerState<OceanEnvironmentSectio
     });
   }
 
-  void _refresh() => setState(() => _load(refresh: true));
+  void _refresh() {
+    setState(() => _load(refresh: true));
+    ref.read(oceanServiceProvider).fetchRedTide(refresh: true).whenComplete(() => ref.invalidate(redTideProvider));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -118,7 +121,9 @@ class _OceanEnvironmentSectionState extends ConsumerState<OceanEnvironmentSectio
                 _HeaderIconButton(
                   icon: Icons.info_outline,
                   tooltip: '최근 관측 시각',
-                  onPressed: _latest == null ? null : () => showOceanDataTimesDialog(context, _latest!),
+                  onPressed: _latest == null
+                      ? null
+                      : () => showOceanDataTimesDialog(context, _latest!, redTide: ref.read(redTideProvider).valueOrNull),
                 ),
                 const Spacer(),
                 PopupMenuButton<String>(
@@ -162,7 +167,6 @@ class _OceanEnvironmentSectionState extends ConsumerState<OceanEnvironmentSectio
                   );
                 }
                 final ocean = snapshot.data!;
-                final quality = ocean.waterQuality;
                 return Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                   decoration: BoxDecoration(color: AppColors.surface, border: Border.all(color: AppColors.border), borderRadius: BorderRadius.circular(14)),
@@ -170,16 +174,6 @@ class _OceanEnvironmentSectionState extends ConsumerState<OceanEnvironmentSectio
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       OceanStatGrid(snapshot: ocean),
-                      if (quality != null) ...[
-                        const SizedBox(height: 12),
-                        Text('수질 상세 · ${quality.pointName} (${DateFormat('yyyy.M.d').format(quality.observedAt)} 조사)',
-                            style: const TextStyle(fontSize: 11, color: AppColors.textTertiary)),
-                        const SizedBox(height: 6),
-                        WaterQualityGrid(quality: quality),
-                        const SizedBox(height: 4),
-                        const Text('저층 기준 · 염도 psu, 용존산소·COD·질소·인·부유물질 mg/L, 클로로필a µg/L',
-                            style: TextStyle(fontSize: 9.5, color: AppColors.textMuted)),
-                      ],
                       const SizedBox(height: 10),
                       Text('출처 · ${ocean.source}', style: const TextStyle(fontSize: 9.5, color: Color(0xFF8FA0B5))),
                     ],
@@ -187,6 +181,8 @@ class _OceanEnvironmentSectionState extends ConsumerState<OceanEnvironmentSectio
                 );
               },
             ),
+            const SizedBox(height: 10),
+            const RedTideCard(),
           ],
         );
       },

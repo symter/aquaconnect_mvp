@@ -16,7 +16,7 @@ for Flutter Web).
    - `ADMIN_API_KEY` — (선택) 관리자 대시보드(`admin/`)가 `/api/admin/*`를 부를 때 쓰는 공유 비밀값.
      비워두면 관리자 API 전체가 꺼집니다(503). `admin/`의 같은 이름 환경변수와 값을 맞추세요.
    - `NIFS_API_KEY` — (선택) 발급받은 키. 비워두면 `D:\202609`와 동일한 기본 데모 키로 동작.
-   - `NIFS_FEMO_API_KEY` — (선택) 어장환경관측(`femoSeaList`) 키. 비워두면 코드에 저장된 기본 키로 동작.
+   - `NIFS_REDTIDE_API_KEY` — (선택) 적조 정보(`redtideList`/`redtideDetail`) 키. 비워두면 코드에 저장된 기본 키로 동작.
    - `SEED_DEMO_PASSWORD` — (선택) `npm run seed`가 만드는 소유자 계정 비밀번호. 기본값 `demo1234`.
    - `SEED_ORG_NAME` / `SEED_OWNER_NAME` / `SEED_OWNER_EMAIL` / `SEED_OWNER_PHONE` — (선택) 시드할 관리원명·소유자
      이름·로그인 이메일·전화번호. 기본값 해강수산질병관리원 / 이동길 / `leedonggil@haegang.kr` / 없음.
@@ -89,7 +89,7 @@ Postgres가 로컬에 없다면 `npm run smoke-test`로 (pg-mem 기반 인메모
 | POST/GET | `/api/share-links` | 공유링크 발급/목록 |
 | GET | `/api/public/reports/:token` | **공개** — 공유링크로 리포트 조회 |
 | GET | `/api/ocean/realtime?station=` | **공개** — NIFS 실시간 수온 프록시 |
-| GET | `/api/ocean/quality?lat=&lon=[&refresh=1]` | **공개** — 가장 가까운(50km 이내) NIFS 어장환경 조사 정점의 최신 수질(염분·DO·pH·영양염 등). 없으면 `null` |
+| GET | `/api/ocean/redtide[?refresh=1]` | **공개** — 최신 NIFS 적조 속보(진행상황·특보·전망·당부사항·출현 해역)와 최근 속보 10건 |
 
 ## 알아둘 점
 
@@ -99,10 +99,10 @@ Postgres가 로컬에 없다면 `npm run smoke-test`로 (pg-mem 기반 인메모
 - NIFS `risaList` API는 실시간 수온만 제공하고 7일 이력/염도/용존산소/적조는
   주지 않습니다 — `oceanSnapshotForFarm()`은 그 사실을 숨기지 않고 그대로
   단일 값만 리포트 생성에 반영합니다.
-- 염분·용존산소·pH 등은 NIFS 어장환경관측(`femoSeaList`, `src/lib/femo.js`,
-  `D:\py\croll\main.py` 이식)에서 가져옵니다. 실시간 센서가 아니라 연 4회
-  내외의 정기 현장조사라 관측일이 수개월 전일 수 있고, 서버는 작년+올해
-  자료를 메모리에 6시간 캐시합니다 (`refresh=1`은 1분에 한 번까지만 재조회).
+- 적조 정보는 NIFS `redtideList`/`redtideDetail`(`src/lib/redtide.js`)에서 가져옵니다. 실제
+  응답 필드명은 PDF 명세와 다르고(`cod_news`, `day_report`, `nam_biology`, `txt_seas` …),
+  상세 조회 파라미터도 `srcode`가 아니라 `cod_news`입니다. 30분 캐시, `refresh=1`은 1분에 한 번까지.
+  (예전 어장환경 정기조사 `femoSeaList` 수질 데이터는 최신화가 안 돼서 제거했습니다.)
 
 ## 알림 (Web Push)
 
