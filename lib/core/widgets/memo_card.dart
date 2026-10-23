@@ -50,120 +50,140 @@ class MemoCard extends ConsumerWidget {
       if (memo.content.contains('할일:')) '할일',
     }.toList();
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border.all(color: const Color(0xFFE3E8EF)),
+    // Tapping the card (outside its footer actions) opens 메모 상세.
+    return Material(
+      color: AppColors.surface,
+      shape: RoundedRectangleBorder(
+        side: const BorderSide(color: Color(0xFFE3E8EF)),
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 6,
-            runSpacing: 4,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => showDetail(context),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (showFarmTag) _Pill(text: memo.farmLabel, bg: AppColors.neutralChipStrong, fg: AppColors.textSecondary),
-              _Pill(text: memo.authorName, bg: authorBg, fg: authorFg, bold: true),
-              if (memo.mentionedMe && !memo.isDone)
-                const _Pill(text: '@나 호출됨', bg: AppColors.warning, fg: Colors.white, bold: true),
-              if (memo.isDone)
-                _Pill(
-                  text: '✓ 완료${memo.doneByName == null || memo.doneByName!.isEmpty ? '' : ' · ${memo.doneByName}'}'
-                      ' ${DateFormat('M/d HH:mm').format(memo.doneAt!.toLocal())}',
-                  bg: AppColors.goodTint,
-                  fg: AppColors.goodDark,
-                  bold: true,
-                ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  memo.content,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: memo.isDone ? AppColors.textMuted : AppColors.textPrimary,
-                    height: 1.55,
-                    decoration: memo.isDone ? TextDecoration.lineThrough : null,
-                    decorationColor: AppColors.textMuted,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(DateFormat('M/d HH:mm').format(memo.createdAt) + (memo.isEdited ? ' · 수정됨' : ''),
-                  style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
-            ],
-          ),
-          if (memo.photoIds.isNotEmpty || memo.photoCount > 0) ...[
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                for (final id in memo.photoIds) _MemoPhotoThumb(photoId: id),
-                // Seed memos only carry a count, not stored images.
-                for (var i = memo.photoIds.length; i < memo.photoCount; i++) const _PhotoPlaceholder(),
-              ],
-            ),
-          ],
-          if (displayTags.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 6,
-              runSpacing: 4,
-              children: displayTags
-                  .map((t) => _Pill(text: t, bg: AppColors.neutralChip, fg: AppColors.neutralIcon, small: true))
-                  .toList(),
-            ),
-          ],
-          const SizedBox(height: 8),
-          const Divider(height: 1),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Flexible(
-                child: Wrap(
-                  spacing: 14,
-                  runSpacing: 4,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    if (memo.isTask || memo.mentionedMe || memo.isDone)
-                      _FooterAction(
-                        label: memo.isDone ? '완료 취소' : '✓ 완료',
-                        color: memo.isDone ? AppColors.textMuted : AppColors.good,
-                        onTap: () => _toggleDone(context, ref),
-                      ),
-                    _FooterAction(
-                      label: memo.commentCount > 0 ? '댓글 ${memo.commentCount}' : '댓글 달기',
-                      onTap: () => showComments(context),
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 6,
+                runSpacing: 4,
+                children: [
+                  if (showFarmTag) _Pill(text: memo.farmLabel, bg: AppColors.neutralChipStrong, fg: AppColors.textSecondary),
+                  _Pill(text: memo.authorName, bg: authorBg, fg: authorFg, bold: true),
+                  if (memo.mentionedMe && !memo.isDone)
+                    const _Pill(text: '@나 호출됨', bg: AppColors.warning, fg: Colors.white, bold: true),
+                  if (memo.isDone)
+                    _Pill(
+                      text: '✓ 완료${memo.doneByName == null || memo.doneByName!.isEmpty ? '' : ' · ${memo.doneByName}'}'
+                          ' ${DateFormat('M/d HH:mm').format(memo.doneAt!.toLocal())}',
+                      bg: AppColors.goodTint,
+                      fg: AppColors.goodDark,
+                      bold: true,
                     ),
-                    _FooterAction(label: '공유', onTap: () => _share(context)),
-                    if (canModify) _FooterAction(label: '수정', onTap: () => _showEditSheet(context)),
-                    if (canSeeHistory)
-                      _FooterAction(label: '수정 이력 ${memo.edits.length}', onTap: () => _showHistorySheet(context)),
-                    if (canModify) _FooterAction(label: '삭제', onTap: () => _confirmDelete(context, ref), danger: true),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      memo.content,
+                      maxLines: 4,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: memo.isDone ? AppColors.textMuted : AppColors.textPrimary,
+                        height: 1.55,
+                        decoration: memo.isDone ? TextDecoration.lineThrough : null,
+                        decorationColor: AppColors.textMuted,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(DateFormat('M/d HH:mm').format(memo.createdAt) + (memo.isEdited ? ' · 수정됨' : ''),
+                      style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
+                ],
+              ),
+              if (memo.photoIds.isNotEmpty || memo.photoCount > 0) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (final id in memo.photoIds) _MemoPhotoThumb(photoId: id),
+                    // Seed memos only carry a count, not stored images.
+                    for (var i = memo.photoIds.length; i < memo.photoCount; i++) const _PhotoPlaceholder(),
                   ],
                 ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                memo.readCount > 0 ? '읽음 ${memo.readCount}' : '안 읽음',
-                style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: memo.readCount > 0 ? FontWeight.w600 : FontWeight.w400,
-                  color: memo.readCount > 0 ? AppColors.textMuted : AppColors.textFaint,
+              ],
+              if (displayTags.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: displayTags
+                      .map((t) => _Pill(text: t, bg: AppColors.neutralChip, fg: AppColors.neutralIcon, small: true))
+                      .toList(),
                 ),
+              ],
+              const SizedBox(height: 8),
+              const Divider(height: 1),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Flexible(
+                    child: Wrap(
+                      spacing: 14,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        if (memo.isTask || memo.mentionedMe || memo.isDone)
+                          _FooterAction(
+                            label: memo.isDone ? '완료 취소' : '✓ 완료',
+                            color: memo.isDone ? AppColors.textMuted : AppColors.good,
+                            onTap: () => _toggleDone(context, ref),
+                          ),
+                        _FooterAction(
+                          label: memo.commentCount > 0 ? '댓글 ${memo.commentCount}' : '댓글 달기',
+                          onTap: () => showComments(context),
+                        ),
+                        _FooterAction(label: '공유', onTap: () => _share(context)),
+                        if (canModify) _FooterAction(label: '수정', onTap: () => _showEditSheet(context)),
+                        if (canSeeHistory)
+                          _FooterAction(label: '수정 이력 ${memo.edits.length}', onTap: () => _showHistorySheet(context)),
+                        if (canModify) _FooterAction(label: '삭제', onTap: () => _confirmDelete(context, ref), danger: true),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    memo.readCount > 0 ? '읽음 ${memo.readCount}' : '안 읽음',
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: memo.readCount > 0 ? FontWeight.w600 : FontWeight.w400,
+                      color: memo.readCount > 0 ? AppColors.textMuted : AppColors.textFaint,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-        ],
+        ),
       ),
+    );
+  }
+
+  /// Opens 메모 상세: the full memo plus its 최근 이력 (등록·수정·댓글·완료).
+  void showDetail(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (_) => _MemoDetailSheet(memo: memo),
     );
   }
 
@@ -1169,6 +1189,343 @@ class _Pill extends StatelessWidget {
           fontWeight: bold ? FontWeight.w700 : FontWeight.w600,
           color: fg,
         ),
+      ),
+    );
+  }
+}
+
+/// 메모 상세: the whole memo (no line clamp), its facts at a glance, and
+/// 최근 이력 — 등록, 수정, 댓글, 완료 merged newest first.
+class _MemoDetailSheet extends ConsumerStatefulWidget {
+  const _MemoDetailSheet({required this.memo});
+
+  final Memo memo;
+
+  @override
+  ConsumerState<_MemoDetailSheet> createState() => _MemoDetailSheetState();
+}
+
+class _HistoryEntry {
+  const _HistoryEntry({required this.at, required this.icon, required this.color, required this.title, this.body});
+
+  final DateTime at;
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String? body;
+}
+
+class _MemoDetailSheetState extends ConsumerState<_MemoDetailSheet> {
+  List<MemoComment>? _comments;
+  String? _commentsError;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadComments();
+  }
+
+  Future<void> _loadComments() async {
+    try {
+      final comments = await ref.read(memoRepositoryProvider).listComments(widget.memo.id);
+      if (mounted) setState(() => _comments = comments);
+    } catch (_) {
+      if (mounted) setState(() => _commentsError = '댓글 이력을 불러오지 못했어요');
+    }
+  }
+
+  List<_HistoryEntry> _history(Memo memo) {
+    final entries = <_HistoryEntry>[
+      _HistoryEntry(at: memo.createdAt, icon: Icons.edit_note, color: AppColors.brand, title: '${memo.authorName} 등록'),
+      for (final e in memo.edits)
+        _HistoryEntry(
+          at: e.editedAt,
+          icon: Icons.edit_outlined,
+          color: AppColors.warningDark,
+          title: '${e.editorName.isEmpty ? '구성원' : e.editorName} 수정',
+          body: '수정 전: ${e.previousContent}',
+        ),
+      for (final c in _comments ?? const <MemoComment>[])
+        _HistoryEntry(
+          at: c.createdAt,
+          icon: Icons.chat_bubble_outline,
+          color: AppColors.neutralIconStrong,
+          title: '${c.authorName} 댓글',
+          body: [
+            if (c.mentions.isNotEmpty) c.mentions.map((m) => '@${m.name}').join(' '),
+            if (c.content.isNotEmpty) c.content,
+            if (c.attachments.isNotEmpty) '첨부 ${c.attachments.length}개',
+          ].join(' · '),
+        ),
+      if (memo.doneAt != null)
+        _HistoryEntry(
+          at: memo.doneAt!,
+          icon: Icons.check_circle_outline,
+          color: AppColors.good,
+          title: memo.doneByName == null || memo.doneByName!.isEmpty ? '완료 처리' : '${memo.doneByName} 완료 처리',
+        ),
+    ];
+    entries.sort((a, b) => b.at.compareTo(a.at));
+    return entries;
+  }
+
+  Future<void> _openComments(Memo memo) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (_) => _MemoCommentsSheet(memo: memo),
+    );
+    _loadComments();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Follow the live list so 완료·수정 made from here show up at once.
+    var memo = widget.memo;
+    for (final m in ref.watch(memosProvider(null)).valueOrNull ?? const <Memo>[]) {
+      if (m.id == memo.id) memo = m;
+    }
+    final card = MemoCard(memo: memo);
+    final member = ref.watch(authStateProvider).valueOrNull?.member;
+    final isPrivileged = member?.role == MemberRole.owner || member?.role == MemberRole.director;
+    final isMine = memo.authorType == MemoAuthorType.institute &&
+        member != null &&
+        (memo.authorMemberId != null ? memo.authorMemberId == member.id : memo.authorName.endsWith(' · ${member.name}'));
+    final canModify = memo.authorType == MemoAuthorType.institute && member != null && (isPrivileged || isMine);
+    final fmt = DateFormat('yyyy.M.d (E) HH:mm', 'ko_KR');
+    final history = _history(memo);
+    // Non-privileged members get only the count, not the edit log itself.
+    final hiddenEdits = memo.editCount - memo.edits.length;
+    final doneBy = memo.doneByName == null || memo.doneByName!.isEmpty ? '' : ' · ${memo.doneByName}';
+
+    return SafeArea(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Expanded(
+                  child: Text('메모 상세', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+                ),
+                IconButton(
+                  tooltip: '닫기',
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.close, size: 20),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(color: AppColors.background, borderRadius: BorderRadius.circular(12)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SelectableText(
+                    memo.content,
+                    style: TextStyle(
+                      fontSize: 14,
+                      height: 1.6,
+                      color: memo.isDone ? AppColors.textMuted : AppColors.textPrimary,
+                      decoration: memo.isDone ? TextDecoration.lineThrough : null,
+                      decorationColor: AppColors.textMuted,
+                    ),
+                  ),
+                  if (memo.photoIds.isNotEmpty || memo.photoCount > 0) ...[
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        for (final id in memo.photoIds) _MemoPhotoThumb(photoId: id),
+                        for (var i = memo.photoIds.length; i < memo.photoCount; i++) const _PhotoPlaceholder(),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            _DetailRow(label: '양식장', value: memo.farmLabel),
+            _DetailRow(label: '작성자', value: memo.authorName),
+            if (memo.assigneeName != null) _DetailRow(label: '담당자', value: memo.assigneeName!),
+            _DetailRow(label: '등록', value: fmt.format(memo.createdAt.toLocal())),
+            _DetailRow(
+              label: '상태',
+              value: memo.isDone
+                  ? '완료 · ${fmt.format(memo.doneAt!.toLocal())}$doneBy'
+                  : (memo.isTask || memo.mentionedMe ? '진행 중' : '일반 메모'),
+              valueColor: memo.isDone ? AppColors.good : null,
+            ),
+            _DetailRow(label: '읽음', value: memo.readCount > 0 ? '${memo.readCount}명' : '아직 없음'),
+            if (memo.tags.isNotEmpty) _DetailRow(label: '태그', value: memo.tags.join(', ')),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (memo.isTask || memo.mentionedMe || memo.isDone)
+                  _DetailAction(
+                    icon: memo.isDone ? Icons.undo : Icons.check,
+                    label: memo.isDone ? '완료 취소' : '완료',
+                    color: memo.isDone ? AppColors.textMuted : AppColors.good,
+                    onTap: () => card._toggleDone(context, ref),
+                  ),
+                _DetailAction(
+                  icon: Icons.chat_bubble_outline,
+                  label: memo.commentCount > 0 ? '댓글 ${memo.commentCount}' : '댓글 달기',
+                  onTap: () => _openComments(memo),
+                ),
+                _DetailAction(icon: Icons.ios_share, label: '공유', onTap: () => card._share(context)),
+                if (canModify) _DetailAction(icon: Icons.edit_outlined, label: '수정', onTap: () => card._showEditSheet(context)),
+              ],
+            ),
+            const SizedBox(height: 20),
+            const Text('최근 이력', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+            const SizedBox(height: 10),
+            if (_comments == null && _commentsError == null)
+              const Padding(padding: EdgeInsets.only(bottom: 8), child: LinearProgressIndicator(minHeight: 2)),
+            for (var i = 0; i < history.length; i++)
+              _HistoryTile(entry: history[i], last: i == history.length - 1),
+            if (hiddenEdits > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text('수정 $hiddenEdits회 · 수정 전 내용은 원장·소유자만 볼 수 있어요.',
+                    style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted)),
+              ),
+            if (_commentsError != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(_commentsError!, style: const TextStyle(fontSize: 11.5, color: AppColors.danger)),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({required this.label, required this.value, this.valueColor});
+
+  final String label;
+  final String value;
+  final Color? valueColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(width: 56, child: Text(label, style: const TextStyle(fontSize: 12, color: AppColors.textMuted))),
+          Expanded(
+            child: Text(value,
+                style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: valueColor ?? AppColors.textPrimary)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DetailAction extends StatelessWidget {
+  const _DetailAction({required this.icon, required this.label, required this.onTap, this.color});
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: onTap,
+      style: OutlinedButton.styleFrom(
+        foregroundColor: color ?? AppColors.brand,
+        side: const BorderSide(color: AppColors.border),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        visualDensity: VisualDensity.compact,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      ),
+      icon: Icon(icon, size: 15),
+      label: Text(label, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+    );
+  }
+}
+
+/// One step of the 최근 이력 timeline: a dot on a vertical line, then what
+/// happened and when.
+class _HistoryTile extends StatelessWidget {
+  const _HistoryTile({required this.entry, required this.last});
+
+  final _HistoryEntry entry;
+  final bool last;
+
+  @override
+  Widget build(BuildContext context) {
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            width: 24,
+            child: Column(
+              children: [
+                Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(color: entry.color.withValues(alpha: 0.12), shape: BoxShape.circle),
+                  child: Icon(entry.icon, size: 13, color: entry.color),
+                ),
+                if (!last) Expanded(child: Container(width: 1.5, color: AppColors.border)),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(top: 3, bottom: last ? 0 : 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(entry.title,
+                            style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                      ),
+                      Text(DateFormat('M/d HH:mm').format(entry.at.toLocal()),
+                          style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
+                    ],
+                  ),
+                  if (entry.body != null && entry.body!.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(entry.body!,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, height: 1.45)),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
