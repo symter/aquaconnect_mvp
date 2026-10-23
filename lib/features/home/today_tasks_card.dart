@@ -117,27 +117,30 @@ class TodayTasksCard extends ConsumerWidget {
   }
 }
 
-class _TaskRow extends StatelessWidget {
+/// One open task: tap the circle to finish it right here, the text to open
+/// 메모 상세.
+class _TaskRow extends ConsumerWidget {
   const _TaskRow({required this.memo});
 
   final Memo memo;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final line = memo.content.trim().split('\n').first.replaceFirst(RegExp(r'^할일\s*:\s*'), '');
     return InkWell(
       onTap: () => MemoCard(memo: memo).showDetail(context),
       borderRadius: BorderRadius.circular(8),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
+        padding: const EdgeInsets.symmetric(vertical: 1),
         child: Row(
           children: [
-            Icon(
-              memo.mentionedMe ? Icons.alternate_email : Icons.radio_button_unchecked,
-              size: 16,
-              color: memo.mentionedMe ? AppColors.warningDark : AppColors.brand,
-            ),
-            const SizedBox(width: 8),
+            DoneCheckButton(done: false, size: 22, onTap: () => MemoCard(memo: memo).toggleDone(context, ref)),
+            const SizedBox(width: 2),
+            if (memo.mentionedMe)
+              const Padding(
+                padding: EdgeInsets.only(right: 4),
+                child: Icon(Icons.alternate_email, size: 14, color: AppColors.warningDark),
+              ),
             Expanded(
               child: Text.rich(
                 TextSpan(children: [

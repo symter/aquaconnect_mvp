@@ -432,7 +432,7 @@ class _TodayCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  open.isEmpty ? '오늘 업무를 모두 끝냈어요!' : '메모의 ✓ 완료를 누르면 여기서 빠져요.',
+                  open.isEmpty ? '오늘 업무를 모두 끝냈어요!' : '메모 왼쪽 동그라미(✓)를 누르면 완료돼서 여기서 빠져요.',
                   style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
                 ),
               ] else ...[

@@ -42,6 +42,7 @@ class MemoCard extends ConsumerWidget {
       WidgetsBinding.instance.addPostFrameCallback((_) => tracker.seen(memo.id));
     }
     final canSeeHistory = isPrivileged && memo.edits.isNotEmpty;
+    final canComplete = memo.isTask || memo.mentionedMe || memo.isDone;
     final isInstitute = memo.authorType == MemoAuthorType.institute;
     final authorBg = isInstitute ? AppColors.brandTint : AppColors.goodTint;
     final authorFg = isInstitute ? AppColors.brand : AppColors.goodDark;
@@ -87,6 +88,10 @@ class MemoCard extends ConsumerWidget {
               const SizedBox(height: 6),
               Row(
                 children: [
+                  if (canComplete) ...[
+                    DoneCheckButton(done: memo.isDone, onTap: () => toggleDone(context, ref)),
+                    const SizedBox(width: 6),
+                  ],
                   Expanded(
                     child: Text(
                       memo.content,
@@ -140,12 +145,10 @@ class MemoCard extends ConsumerWidget {
                       runSpacing: 4,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        if (memo.isTask || memo.mentionedMe || memo.isDone)
-                          _FooterAction(
-                            label: memo.isDone ? '완료 취소' : '✓ 완료',
-                            color: memo.isDone ? AppColors.textMuted : AppColors.good,
-                            onTap: () => _toggleDone(context, ref),
-                          ),
+                        if (canComplete)
+                          memo.isDone
+                              ? _FooterAction(label: '완료 취소', color: AppColors.textMuted, onTap: () => toggleDone(context, ref))
+                              : _CompleteButton(onTap: () => toggleDone(context, ref)),
                         _FooterAction(
                           label: memo.commentCount > 0 ? '댓글 ${memo.commentCount}' : '댓글 달기',
                           onTap: () => showComments(context),
@@ -203,7 +206,8 @@ class MemoCard extends ConsumerWidget {
     Share.share(text, subject: '${memo.farmLabel} 현장 메모');
   }
 
-  Future<void> _toggleDone(BuildContext context, WidgetRef ref) async {
+  /// 완료 / 완료 취소, with a 되돌리기 snackbar after completing.
+  Future<void> toggleDone(BuildContext context, WidgetRef ref) async {
     final done = !memo.isDone;
     try {
       await ref.read(memoRepositoryProvider).setMemoDone(id: memo.id, done: done);
@@ -1383,7 +1387,7 @@ class _MemoDetailSheetState extends ConsumerState<_MemoDetailSheet> {
                     icon: memo.isDone ? Icons.undo : Icons.check,
                     label: memo.isDone ? '완료 취소' : '완료',
                     color: memo.isDone ? AppColors.textMuted : AppColors.good,
-                    onTap: () => card._toggleDone(context, ref),
+                    onTap: () => card.toggleDone(context, ref),
                   ),
                 _DetailAction(
                   icon: Icons.chat_bubble_outline,
@@ -1526,6 +1530,78 @@ class _HistoryTile extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The round ✓ at the start of a task memo — a big target (44px) so 완료 is
+/// one easy tap; filled green once done (tap again to reopen).
+class DoneCheckButton extends StatelessWidget {
+  const DoneCheckButton({super.key, required this.done, required this.onTap, this.size = 26});
+
+  final bool done;
+  final VoidCallback onTap;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: done ? '완료 취소' : '완료하기',
+      child: Tooltip(
+        message: done ? '완료 취소' : '완료하기',
+        child: InkResponse(
+          onTap: onTap,
+          radius: 24,
+          child: SizedBox(
+            width: 44,
+            height: 44,
+            child: Center(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                width: size,
+                height: size,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: done ? AppColors.good : Colors.white,
+                  border: Border.all(color: AppColors.good, width: 2),
+                ),
+                child: Icon(Icons.check, size: size * 0.62, color: done ? Colors.white : AppColors.good.withValues(alpha: 0.35)),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Footer "✓ 완료하기" — a filled pill rather than a text link.
+class _CompleteButton extends StatelessWidget {
+  const _CompleteButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.good,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.check, size: 14, color: Colors.white),
+              SizedBox(width: 3),
+              Text('완료하기', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Colors.white)),
+            ],
+          ),
+        ),
       ),
     );
   }
