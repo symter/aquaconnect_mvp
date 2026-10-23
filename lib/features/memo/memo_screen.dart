@@ -342,7 +342,7 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
     final formatter = DateFormat('M월 d일 EEEE', 'ko_KR');
     final map = <String, List<Memo>>{};
     for (final memo in memos) {
-      final label = _safeFormat(formatter, memo.createdAt);
+      final label = _safeFormat(formatter, memo.createdAt.toLocal());
       map.putIfAbsent(label, () => []).add(memo);
     }
     return map;

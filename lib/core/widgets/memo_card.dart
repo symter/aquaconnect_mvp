@@ -102,7 +102,7 @@ class MemoCard extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Text(DateFormat('M/d HH:mm').format(memo.createdAt) + (memo.isEdited ? ' · 수정됨' : ''),
+                  Text(DateFormat('M/d HH:mm').format(memo.createdAt.toLocal()) + (memo.isEdited ? ' · 수정됨' : ''),
                       style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
                 ],
               ),
@@ -192,7 +192,7 @@ class MemoCard extends ConsumerWidget {
   /// Kakao business channel; the share sheet needs no key.) Photos aren't
   /// included.
   void _share(BuildContext context) {
-    final when = DateFormat('M월 d일 HH:mm').format(memo.createdAt);
+    final when = DateFormat('M월 d일 HH:mm').format(memo.createdAt.toLocal());
     final text = [
       '[${memo.farmLabel}] 현장 메모',
       '',
