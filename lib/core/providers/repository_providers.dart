@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/repositories/ai_report_repository.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/disease_info_repository.dart';
 import '../../data/repositories/farm_repository.dart';
 import '../../data/repositories/memo_repository.dart';
 import '../../data/repositories/notification_repository.dart';
 import '../../data/repositories/org_repository.dart';
+import '../../data/repositories/mock/mock_ai_report_repository.dart';
 import '../../data/repositories/mock/mock_auth_repository.dart';
 import '../../data/repositories/mock/mock_disease_info_repository.dart';
 import '../../data/repositories/mock/mock_farm_repository.dart';
@@ -15,6 +17,7 @@ import '../../data/repositories/mock/mock_notification_repository.dart';
 import '../../data/repositories/mock/mock_org_repository.dart';
 import '../../data/repositories/mock/mock_report_repository.dart';
 import '../../data/repositories/mock/mock_share_link_repository.dart';
+import '../../data/repositories/remote/remote_ai_report_repository.dart';
 import '../../data/repositories/remote/remote_auth_repository.dart';
 import '../../data/repositories/remote/remote_disease_info_repository.dart';
 import '../../data/repositories/remote/remote_farm_repository.dart';
@@ -117,6 +120,11 @@ final reportRepositoryProvider = Provider<ReportRepository>((ref) {
     );
   }
   return RemoteReportRepository(apiClient: ref.watch(apiClientProvider));
+});
+
+final aiReportRepositoryProvider = Provider<AiReportRepository>((ref) {
+  if (Env.useMock) return MockAiReportRepository();
+  return RemoteAiReportRepository(apiClient: ref.watch(apiClientProvider));
 });
 
 final shareLinkRepositoryProvider = Provider<ShareLinkRepository>((ref) {

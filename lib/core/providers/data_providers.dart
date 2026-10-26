@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/models/ai_report.dart';
 import '../../data/models/disease_info.dart';
 import '../../data/models/farm.dart';
 import '../../data/models/memo.dart';
@@ -70,6 +71,20 @@ final reportProvider = FutureProvider.family<Report?, String>((ref, farmId) {
 final allReportsProvider = FutureProvider<List<Report>>((ref) async {
   final farms = await ref.watch(farmsProvider.future);
   return ref.watch(reportRepositoryProvider).listLatestReports(farmIds: farms.map((f) => f.id).toList());
+});
+
+/// Whether the server has an AI model for AI 리포트.
+final aiModelStatusProvider = FutureProvider<AiModelStatus>((ref) {
+  return ref.watch(aiReportRepositoryProvider).status();
+});
+
+/// A farm's AI 리포트 list, newest first (summaries without body).
+final aiReportsProvider = FutureProvider.family<List<AiReport>, String>((ref, farmId) {
+  return ref.watch(aiReportRepositoryProvider).listForFarm(farmId);
+});
+
+final aiReportProvider = FutureProvider.family<AiReport, String>((ref, id) {
+  return ref.watch(aiReportRepositoryProvider).getReport(id);
 });
 
 /// Every share link issued by the org (active or not), newest first.

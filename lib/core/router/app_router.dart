@@ -20,6 +20,8 @@ import '../../features/mypage/organization_info_screen.dart';
 import '../../features/mypage/share_link_management_screen.dart';
 import '../../features/notifications/notification_settings_screen.dart';
 import '../../features/notifications/notifications_screen.dart';
+import '../../features/reports/ai_report_list_screen.dart';
+import '../../features/reports/ai_report_screen.dart';
 import '../../features/reports/all_report_screen.dart';
 import '../../features/reports/report_detail_screen.dart';
 import '../../features/reports/shared_report_web_screen.dart';
@@ -100,6 +102,18 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/reports/:farmId/farm-report',
         builder: (context, state) => SharedReportWebScreen.preview(farmId: state.pathParameters['farmId']!),
+      ),
+      GoRoute(
+        path: '/reports/:farmId/ai',
+        builder: (context, state) => AiReportListScreen(farmId: state.pathParameters['farmId']!),
+      ),
+      GoRoute(
+        path: '/reports/:farmId/ai/new',
+        builder: (context, state) => AiReportCreateScreen(farmId: state.pathParameters['farmId']!),
+      ),
+      GoRoute(
+        path: '/ai-reports/:id',
+        builder: (context, state) => AiReportScreen(reportId: state.pathParameters['id']!),
       ),
       GoRoute(
         path: '/reports/:farmId',
