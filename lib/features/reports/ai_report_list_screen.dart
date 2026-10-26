@@ -48,6 +48,10 @@ class AiReportListScreen extends ConsumerWidget {
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
           children: [
             _IntroCard(status: status),
+            if (status != null && status.configured && status.models.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              AiUsageCard(status: status),
+            ],
             const SizedBox(height: 12),
             PrimaryButton(
               label: '새 AI 리포트 만들기',
@@ -124,7 +128,7 @@ class _IntroCard extends StatelessWidget {
                     size: 13, color: s.configured ? AppColors.good : AppColors.warningDark),
                 const SizedBox(width: 5),
                 Expanded(
-                  child: Text(s.configured ? 'AI 연결됨 · ${s.model}' : '미연결 — ${s.note}',
+                  child: Text(s.configured ? 'AI 연결됨 · 기본 모델 ${s.model}' : '미연결 — ${s.note}',
                       style: TextStyle(
                           fontSize: 11, fontWeight: FontWeight.w700, color: s.configured ? AppColors.goodDark : AppColors.warningDark)),
                 ),
@@ -132,6 +136,93 @@ class _IntroCard extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+String _resetLabel(DateTime? resetsAt) {
+  if (resetsAt == null) return '';
+  return '${DateFormat('M/d HH:mm').format(resetsAt.toLocal())} 초기화';
+}
+
+/// 모델별 오늘 사용량 — counted from this server's own requests, since
+/// Gemini doesn't report the real remaining quota.
+class AiUsageCard extends StatelessWidget {
+  const AiUsageCard({super.key, required this.status});
+  final AiModelStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(color: AppColors.surface, border: Border.all(color: AppColors.border), borderRadius: BorderRadius.circular(14)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text('오늘 남은 사용량', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+              ),
+              Text(_resetLabel(status.resetsAt), style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          for (final m in status.models) ...[
+            AiModelUsageRow(option: m),
+            const SizedBox(height: 10),
+          ],
+          const Text('이 앱에서 보낸 요청 기준이에요. 같은 키를 다른 곳에서 쓰면 실제로 남은 양은 더 적을 수 있어요.',
+              style: TextStyle(fontSize: 10.5, color: AppColors.textMuted, height: 1.4)),
+        ],
+      ),
+    );
+  }
+}
+
+class AiModelUsageRow extends StatelessWidget {
+  const AiModelUsageRow({super.key, required this.option, this.dense = false});
+  final AiModelOption option;
+  final bool dense;
+
+  @override
+  Widget build(BuildContext context) {
+    final m = option;
+    final ratio = m.dailyLimit == 0 ? 1.0 : (m.usedToday / m.dailyLimit).clamp(0.0, 1.0);
+    final color = m.exhausted
+        ? AppColors.danger
+        : ratio >= 0.75
+            ? AppColors.warning
+            : AppColors.brand;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            if (!dense)
+              Expanded(
+                child: Text(m.label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
+              )
+            else
+              const Spacer(),
+            Text(
+              m.exhausted ? '오늘 소진 (${m.usedToday}/${m.dailyLimit})' : '남은 ${m.remaining}회 · ${m.usedToday}/${m.dailyLimit}',
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: m.exhausted ? AppColors.dangerDark : AppColors.textTertiary),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(value: ratio, minHeight: 5, backgroundColor: AppColors.neutralChip, color: color),
+        ),
+        if (m.limited && !m.exhausted)
+          const Padding(
+            padding: EdgeInsets.only(top: 3),
+            child: Text('최근 요청이 한도 초과로 거절됐어요. 잠시 후 다시 시도해 주세요.',
+                style: TextStyle(fontSize: 10.5, color: AppColors.warningInk)),
+          ),
+      ],
     );
   }
 }
@@ -252,6 +343,19 @@ class _AiReportCreateScreenState extends ConsumerState<AiReportCreateScreen> {
   final Set<String> _excluded = {};
   bool _includeComments = true;
   bool _busy = false;
+  String? _model;
+
+  /// The picked model, else the server default, else the first with
+  /// requests left today.
+  AiModelOption? _effectiveModel(AiModelStatus? status) {
+    final models = status?.models ?? const <AiModelOption>[];
+    if (status == null || models.isEmpty) return null;
+    AiModelOption? byId(String? id) => models.where((m) => m.id == id).firstOrNull;
+    return byId(_model) ??
+        [byId(status.model), ...models].whereType<AiModelOption>().where((m) => !m.exhausted).firstOrNull ??
+        byId(status.model) ??
+        models.first;
+  }
 
   List<Memo> _inRange(List<Memo> memos, DateTime from, DateTime to) {
     final end = to.add(const Duration(days: 1));
@@ -262,7 +366,7 @@ class _AiReportCreateScreenState extends ConsumerState<AiReportCreateScreen> {
       ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
   }
 
-  Future<void> _generate(List<Memo> picked, DateTime from, DateTime to, bool allPicked) async {
+  Future<void> _generate(List<Memo> picked, DateTime from, DateTime to, bool allPicked, String? model) async {
     setState(() => _busy = true);
     try {
       final report = await ref.read(aiReportRepositoryProvider).generate(
@@ -271,10 +375,13 @@ class _AiReportCreateScreenState extends ConsumerState<AiReportCreateScreen> {
             to: _ymd.format(to),
             memoIds: allPicked ? null : picked.map((m) => m.id).toList(),
             includeComments: _includeComments,
+            model: model,
           );
       ref.invalidate(aiReportsProvider(widget.farmId));
+      ref.invalidate(aiModelStatusProvider);
       if (mounted) context.pushReplacement('/ai-reports/${report.id}');
     } catch (e) {
+      ref.invalidate(aiModelStatusProvider);
       if (!mounted) return;
       setState(() => _busy = false);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('AI 리포트를 만들지 못했어요: $e')));
@@ -284,6 +391,8 @@ class _AiReportCreateScreenState extends ConsumerState<AiReportCreateScreen> {
   @override
   Widget build(BuildContext context) {
     final memosAsync = ref.watch(memosProvider(widget.farmId));
+    final status = ref.watch(aiModelStatusProvider).valueOrNull;
+    final model = _effectiveModel(status);
     final (from, to) = _preset.range(DateTime.now());
 
     return Scaffold(
@@ -399,6 +508,29 @@ class _AiReportCreateScreenState extends ConsumerState<AiReportCreateScreen> {
                           subtitle: Text('선택한 메모의 댓글 $comments개 · 폐사 집계에는 넣지 않아요',
                               style: const TextStyle(fontSize: 11.5, color: AppColors.textTertiary)),
                         ),
+                        if (status != null && status.models.isNotEmpty) ...[
+                          const SizedBox(height: 14),
+                          Row(
+                            children: [
+                              const Expanded(
+                                child: Text('AI 모델', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+                              ),
+                              Text(_resetLabel(status.resetsAt), style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          for (final m in status.models) ...[
+                            _ModelTile(
+                              option: m,
+                              selected: m.id == model?.id,
+                              isDefault: m.id == status.model,
+                              onTap: _busy || m.exhausted ? null : () => setState(() => _model = m.id),
+                            ),
+                            const SizedBox(height: 8),
+                          ],
+                          const Text('남은 횟수는 이 앱에서 보낸 요청 기준이에요.',
+                              style: TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
+                        ],
                       ],
                     ),
                   ),
@@ -406,9 +538,11 @@ class _AiReportCreateScreenState extends ConsumerState<AiReportCreateScreen> {
                     padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
                     decoration: const BoxDecoration(color: AppColors.surface, border: Border(top: BorderSide(color: AppColors.border))),
                     child: PrimaryButton(
-                      label: 'AI 리포트 만들기',
+                      label: model == null ? 'AI 리포트 만들기' : 'AI 리포트 만들기 · ${model.label}',
                       icon: Icons.auto_awesome,
-                      onPressed: _busy || picked.isEmpty ? null : () => _generate(picked, from, to, picked.length == inRange.length),
+                      onPressed: _busy || picked.isEmpty || (model?.exhausted ?? false)
+                          ? null
+                          : () => _generate(picked, from, to, picked.length == inRange.length, model?.id),
                     ),
                   ),
                 ],
@@ -489,6 +623,65 @@ class _MemoPickTile extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ModelTile extends StatelessWidget {
+  const _ModelTile({required this.option, required this.selected, required this.isDefault, required this.onTap});
+
+  final AiModelOption option;
+  final bool selected;
+  final bool isDefault;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final m = option;
+    return Material(
+      color: selected ? AppColors.brandTint : AppColors.surface,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(12, 10, 14, 10),
+          decoration: BoxDecoration(
+            border: Border.all(color: selected ? AppColors.brand : AppColors.border, width: selected ? 1.5 : 1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Opacity(
+            opacity: m.exhausted ? 0.5 : 1,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(selected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                    size: 18, color: selected ? AppColors.brand : AppColors.textFaint),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(m.label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+                          if (isDefault) ...[
+                            const SizedBox(width: 6),
+                            const Text('기본', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: AppColors.brand)),
+                          ],
+                        ],
+                      ),
+                      Text(m.description, style: const TextStyle(fontSize: 11, color: AppColors.textTertiary)),
+                      const SizedBox(height: 6),
+                      AiModelUsageRow(option: m, dense: true),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

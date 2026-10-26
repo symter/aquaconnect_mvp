@@ -122,16 +122,75 @@ class AiReportMemo {
       );
 }
 
+/// Server AI connection, plus every model staff can pick and how much of
+/// its daily allowance is left.
 class AiModelStatus {
-  const AiModelStatus({required this.configured, required this.model, required this.note});
+  const AiModelStatus({
+    required this.configured,
+    required this.model,
+    required this.note,
+    this.models = const [],
+    this.resetsAt,
+  });
 
   final bool configured;
+
+  /// The server's default model id.
   final String model;
   final String note;
+  final List<AiModelOption> models;
+
+  /// When Google's daily limits next reset (midnight US Pacific).
+  final DateTime? resetsAt;
 
   factory AiModelStatus.fromJson(Map<String, dynamic> json) => AiModelStatus(
         configured: json['configured'] as bool? ?? false,
         model: json['model'] as String? ?? '',
         note: json['note'] as String? ?? '',
+        models: ((json['models'] as List<dynamic>?) ?? [])
+            .map((e) => AiModelOption.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        resetsAt: json['resetsAt'] == null ? null : DateTime.parse(json['resetsAt'] as String),
+      );
+}
+
+/// One selectable model. [usedToday] counts requests *this server* sent
+/// since the last reset — Gemini doesn't report the real remaining quota, so
+/// calls made with the same key elsewhere aren't included.
+class AiModelOption {
+  const AiModelOption({
+    required this.id,
+    required this.label,
+    required this.description,
+    required this.dailyLimit,
+    required this.usedToday,
+    required this.tokensToday,
+    required this.limited,
+    required this.remaining,
+  });
+
+  final String id;
+  final String label;
+  final String description;
+  final int dailyLimit;
+  final int usedToday;
+  final int tokensToday;
+
+  /// The model's last call came back 429 (rate/daily limit hit) and nothing
+  /// has succeeded since.
+  final bool limited;
+  final int remaining;
+
+  bool get exhausted => remaining <= 0;
+
+  factory AiModelOption.fromJson(Map<String, dynamic> json) => AiModelOption(
+        id: json['id'] as String,
+        label: json['label'] as String? ?? json['id'] as String,
+        description: json['description'] as String? ?? '',
+        dailyLimit: json['dailyLimit'] as int? ?? 0,
+        usedToday: json['usedToday'] as int? ?? 0,
+        tokensToday: json['tokensToday'] as int? ?? 0,
+        limited: json['limited'] as bool? ?? false,
+        remaining: json['remaining'] as int? ?? 0,
       );
 }

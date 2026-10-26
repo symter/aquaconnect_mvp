@@ -32,12 +32,14 @@ class RemoteAiReportRepository implements AiReportRepository {
     required String to,
     List<String>? memoIds,
     bool includeComments = true,
+    String? model,
   }) async {
     final json = await _api.post('/api/ai-reports/farm/$farmId', body: {
       'from': from,
       'to': to,
       'memoIds': ?memoIds,
       'includeComments': includeComments,
+      'model': ?model,
     }) as Map<String, dynamic>;
     return AiReport.fromJson(json);
   }

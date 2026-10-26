@@ -22,6 +22,7 @@ class MockAiReportRepository implements AiReportRepository {
     required String to,
     List<String>? memoIds,
     bool includeComments = true,
+    String? model,
   }) =>
       throw Exception(_notConnected);
 

@@ -10,13 +10,15 @@ abstract class AiReportRepository {
   Future<AiReport> getReport(String id);
 
   /// Asks the AI for a new draft from the farm's memos between [from] and
-  /// [to] (KST dates, inclusive). [memoIds] null means every memo in range.
+  /// [to] (KST dates, inclusive). [memoIds] null means every memo in range;
+  /// [model] null uses the server's default model.
   Future<AiReport> generate({
     required String farmId,
     required String from,
     required String to,
     List<String>? memoIds,
     bool includeComments = true,
+    String? model,
   });
 
   Future<AiReport> updateBody(String id, String body);
