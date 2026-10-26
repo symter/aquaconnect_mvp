@@ -4,6 +4,7 @@ import express from 'express';
 import 'express-async-errors';
 
 import { adminRouter } from './routes/admin.js';
+import { aiReportsRouter } from './routes/aiReports.js';
 import { authRouter } from './routes/auth.js';
 import { diseaseInfoRouter } from './routes/diseaseInfo.js';
 import { farmsRouter } from './routes/farms.js';
@@ -36,6 +37,7 @@ app.use('/api/organization', organizationRouter);
 app.use('/api/notifications', notificationsRouter);
 app.use('/api/disease-info', diseaseInfoRouter);
 app.use('/api/reports', reportsRouter);
+app.use('/api/ai-reports', aiReportsRouter);
 app.use('/api/share-links', shareLinksRouter);
 app.use('/api/ocean', oceanRouter);
 app.use('/api/public', publicRouter);
