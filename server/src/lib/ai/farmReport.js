@@ -87,7 +87,7 @@ async function publicData(farm, from, to) {
  * comments: [{ memo_id, author_name, content, created_at }]
  * prevMemos: 직전 같은 길이 기간의 메모(비교용, 없으면 [])
  */
-export async function draftFarmReport({ farm, from, to, memos, comments, prevMemos, candidates }) {
+export async function draftFarmReport({ farm, from, to, memos, comments, prevMemos, candidates, model, onResult }) {
   const sorted = [...memos].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
   const numbered = sorted.map((m, i) => ({
     id: i + 1,
@@ -162,7 +162,7 @@ export async function draftFarmReport({ farm, from, to, memos, comments, prevMem
     .filter(Boolean)
     .join(NL + NL);
 
-  const { text, model } = await chat(FARM_REPORT_PROMPT, input, { maxTokens: 16000, json: true });
+  const { text, model: usedModel } = await chat(FARM_REPORT_PROMPT, input, { model, maxTokens: 16000, json: true, onResult });
   const raw = parseDraft(text);
   if (!raw) throw new AiError('AI가 정해진 형식(JSON)으로 작성하지 못했습니다. 다시 만들어 주세요.');
   const source = {
@@ -174,7 +174,7 @@ export async function draftFarmReport({ farm, from, to, memos, comments, prevMem
   const body = renderDraft(checked.draft, source);
 
   return {
-    model,
+    model: usedModel,
     promptVersion: FARM_PROMPT_VERSION,
     raw,
     draft: checked.draft,

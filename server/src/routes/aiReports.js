@@ -4,7 +4,8 @@ import { requireAuth } from '../auth.js';
 import { query } from '../db.js';
 import { orgIdForMember } from '../lib/orgScope.js';
 import { draftFarmReport } from '../lib/ai/farmReport.js';
-import { AiError, modelStatus } from '../lib/ai/model.js';
+import { AiError, MODEL_CATALOG, modelStatus } from '../lib/ai/model.js';
+import { modelsWithUsage, recordUsage } from '../lib/ai/usage.js';
 
 export const aiReportsRouter = Router();
 aiReportsRouter.use(requireAuth);
@@ -67,9 +68,11 @@ async function memberName(memberId) {
   return rows[0]?.name ?? '';
 }
 
-aiReportsRouter.get('/status', (req, res) => {
+// 연결 상태 + 고를 수 있는 모델과 모델별 오늘 사용량(이 서버가 보낸 요청 기준).
+aiReportsRouter.get('/status', async (req, res) => {
   const { configured, model, note } = modelStatus();
-  res.json({ configured, model, note });
+  const usage = await modelsWithUsage();
+  res.json({ configured, model, note, ...usage });
 });
 
 aiReportsRouter.get('/farm/:farmId', async (req, res) => {
@@ -94,7 +97,8 @@ aiReportsRouter.post('/farm/:farmId', async (req, res) => {
   const farm = await loadFarm(orgId, req.params.farmId);
   if (!farm) return res.status(404).json({ error: '양식장을 찾을 수 없습니다.' });
 
-  const { from, to, memoIds, includeComments = true } = req.body ?? {};
+  const { from, to, memoIds, includeComments = true, model } = req.body ?? {};
+  if (model != null && !MODEL_CATALOG.some((m) => m.id === model)) return res.status(400).json({ error: '고를 수 없는 AI 모델입니다.' });
   if (!DATE_RE.test(from ?? '') || !DATE_RE.test(to ?? '') || from > to) {
     return res.status(400).json({ error: '기간(from, to)을 YYYY-MM-DD 형식으로 올바르게 지정해 주세요.' });
   }
@@ -138,7 +142,17 @@ aiReportsRouter.post('/farm/:farmId', async (req, res) => {
 
   let result;
   try {
-    result = await draftFarmReport({ farm, from, to, memos: selected, comments, prevMemos, candidates: periodMemos.length });
+    result = await draftFarmReport({
+      farm,
+      from,
+      to,
+      memos: selected,
+      comments,
+      prevMemos,
+      candidates: periodMemos.length,
+      model: model ?? undefined,
+      onResult: (r) => recordUsage({ orgId, memberId: req.memberId, ...r }),
+    });
   } catch (err) {
     if (err instanceof AiError) return res.status(err.status).json({ error: err.message });
     throw err;
