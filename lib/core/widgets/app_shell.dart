@@ -26,8 +26,8 @@ class AppShell extends ConsumerWidget {
   /// One-time intro shown the first time each tab is opened (after the
   /// welcome card). Same order as [_tabs].
   static const _intros = [
-    (id: 'home', title: '홈', body: '맨 위 오늘의 업무에서 오늘 할 일을 먼저 확인하고, 담당 양식장과 바다 수온·적조 정보도 여기서 바로 봐요. 아래 입력창에서 메모를 남기고, 오른쪽 위 종 모양에서 알림을 확인해요.'),
-    (id: 'memo', title: '메모', body: '맨 위 오늘의 업무에서 내가 할 일을 확인하고, 끝난 일은 메모 왼쪽 동그라미(✓)를 눌러 완료해요. 양식장은 오른쪽 위 선택 버튼으로 골라 봐요.'),
+    (id: 'home', title: '홈', body: '맨 위 오늘의 업무에서 오늘 할 일을 먼저 확인하고, 관리 양식장과 바다 수온·적조 정보도 여기서 바로 봐요. 아래 입력창에서 메모를 남기고, 오른쪽 위 종 모양에서 알림을 확인해요.'),
+    (id: 'memo', title: '메모', body: '위쪽 오늘의 업무 탭에서 내가 할 일만 모아 보고, 끝난 일은 메모 왼쪽 동그라미(✓)를 눌러 완료해요. 양식장은 오른쪽 위 선택 버튼으로 골라 봐요.'),
     (id: 'calendar', title: '캘린더', body: '메모가 날짜별로 모여 있어요. 완료한 일은 완료한 날, 아직인 일은 등록한 날에 보여요. 두 손가락으로 벌리거나 −/+ 버튼으로 확대·축소해요.'),
     (id: 'mypage', title: '마이페이지', body: '양식장·구성원 관리, 바다 위치, 알림·오늘의 업무 알림 설정은 여기에서 해요.'),
   ];
@@ -45,7 +45,7 @@ class AppShell extends ConsumerWidget {
       overlay = TutorialOverlay(
         icon: Icons.waves,
         title: 'AquaConnect에 오신 걸 환영해요',
-        body: '담당 양식장의 수온·질병 위험을 한눈에 확인하고, 리포트를 어가에 바로 공유해 보세요.',
+        body: '관리 양식장의 수온·질병 위험을 한눈에 확인하고, 리포트를 어가에 바로 공유해 보세요.',
         primaryLabel: '시작하기',
         onPrimary: notifier.markWelcomeSeen,
         onSkip: () async {

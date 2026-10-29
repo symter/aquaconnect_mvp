@@ -10,8 +10,9 @@ import '../../data/models/memo.dart';
 
 /// 오늘의 업무 at the top of Home — the first thing seen on opening the app,
 /// so "오늘 뭐 해야 하지?" is answered without a tap. Shows what's left (a
-/// few rows, each opening 메모 상세) and today's progress; 모두 보기 opens the
-/// memo tab's 오늘의 업무 view.
+/// few rows, each opening 메모 상세) and today's progress. This is the one
+/// summary of it: 모두 보기 / 외 N건 open the memo tab's 오늘의 업무 view,
+/// which lists the memos themselves.
 class TodayTasksCard extends ConsumerWidget {
   const TodayTasksCard({super.key});
 
@@ -24,6 +25,7 @@ class TodayTasksCard extends ConsumerWidget {
     final open = tasks.open;
     final doneToday = tasks.doneToday;
     final total = open.length + doneToday;
+    final mentioned = open.where((m) => m.mentionedMe).length;
     // Called-in (호출) first, then oldest first: the longest-waiting job on top.
     final sorted = [...open]
       ..sort((a, b) {
@@ -78,7 +80,11 @@ class TodayTasksCard extends ConsumerWidget {
           Text(
             open.isEmpty
                 ? (doneToday > 0 ? '오늘 업무를 모두 끝냈어요! 수고하셨어요 👏' : '오늘 남은 업무가 없어요.')
-                : '남은 업무 ${open.length}건${doneToday > 0 ? ' · 오늘 $doneToday건 완료' : ''}',
+                : [
+                    '남은 업무 ${open.length}건',
+                    if (mentioned > 0) '나를 호출 $mentioned건',
+                    if (doneToday > 0) '오늘 $doneToday건 완료',
+                  ].join(' · '),
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w800,
@@ -101,10 +107,17 @@ class TodayTasksCard extends ConsumerWidget {
             const SizedBox(height: 8),
             for (final memo in sorted.take(_previewCount)) _TaskRow(memo: memo),
             if (sorted.length > _previewCount)
-              Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Text('외 ${sorted.length - _previewCount}건',
-                    style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.textMuted)),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: InkWell(
+                  onTap: () => context.go('/memo?view=today'),
+                  borderRadius: BorderRadius.circular(6),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(2, 4, 2, 2),
+                    child: Text('외 ${sorted.length - _previewCount}건 더 보기 ›',
+                        style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.brand)),
+                  ),
+                ),
               ),
           ] else if (total == 0) ...[
             const SizedBox(height: 4),

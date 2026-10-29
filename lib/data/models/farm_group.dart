@@ -1,6 +1,6 @@
 import 'farm.dart';
 
-/// How Home orders / sections the 담당 양식장 list.
+/// How Home orders / sections the 관리 양식장 list.
 /// 지역별 is the default; the order here is also the order in the sort menu.
 enum FarmSort {
   region,

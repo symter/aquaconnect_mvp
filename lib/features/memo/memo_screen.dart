@@ -30,8 +30,9 @@ class MemoScreen extends ConsumerStatefulWidget {
   ConsumerState<MemoScreen> createState() => _MemoScreenState();
 }
 
-/// Memo tab categories (the chips); the farm is picked separately.
-enum _MemoView { all, today, todo, mentioned, done }
+/// Memo tab categories (the chips); the farm is picked separately. 호출받은
+/// 메모 are part of 오늘의 업무 (and marked '@나 호출됨'), so they get no chip.
+enum _MemoView { all, today, todo, done }
 
 /// Farm filter: every farm, memos without a farm, or one farm id.
 const _allFarms = '';
@@ -114,6 +115,7 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
     final farmsAsync = ref.watch(farmsProvider);
     final memosAsync = ref.watch(memosProvider(null));
     final me = ref.watch(authStateProvider).valueOrNull?.member;
+    final today = ref.watch(myTodayTasksProvider);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -165,11 +167,10 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
                           child: ListView(
                             scrollDirection: Axis.horizontal,
                             children: [
-                              for (final (view, label) in const [
+                              for (final (view, label) in [
                                 (_MemoView.all, '전체'),
-                                (_MemoView.today, '오늘의 업무'),
-                                (_MemoView.todo, '할일'),
-                                (_MemoView.mentioned, '나를 호출'),
+                                (_MemoView.today, _withCount('오늘의 업무', today?.open.length)),
+                                (_MemoView.todo, _withCount('할일', memosAsync.valueOrNull?.where(_isOpenTask).length)),
                                 (_MemoView.done, '완료'),
                               ]) ...[
                                 FilterPillChip(label: label, selected: _view == view, onTap: () => setState(() => _view = view)),
@@ -203,8 +204,9 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
                   bool isMine(Memo m) => me != null && m.isOpenTaskFor(memberId: me.id, memberName: me.name);
                   final filtered = _applyFilter(memos, isMine).where((m) => m.id != focused?.id).toList();
                   final groups = _groupByDay(filtered);
-                  final showToday = _query.trim().isEmpty && me != null;
-                  if (filtered.isEmpty && focused == null && !showToday) {
+                  // Progress only on 오늘의 업무; the summary itself lives on Home.
+                  final showProgress = _view == _MemoView.today && _query.trim().isEmpty && today != null;
+                  if (filtered.isEmpty && focused == null && !showProgress) {
                     return Center(
                       child: Text(
                         _emptyMessage(),
@@ -216,14 +218,9 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
                   return ListView(
                     padding: const EdgeInsets.fromLTRB(20, 14, 20, 16),
                     children: [
-                      if (showToday) ...[
-                        _TodayCard(
-                          open: memos.where(isMine).toList(),
-                          doneToday: memos.where((m) => m.isDone && m.doneByMemberId == me.id && _isToday(m.doneAt!)).length,
-                          selected: _view == _MemoView.today,
-                          onTap: () => setState(() => _view = _view == _MemoView.today ? _MemoView.all : _MemoView.today),
-                        ),
-                        const SizedBox(height: 12),
+                      if (showProgress) ...[
+                        _TodayProgress(open: today.open.length, doneToday: today.doneToday),
+                        const SizedBox(height: 8),
                       ],
                       if (filtered.isEmpty && focused == null)
                         Padding(
@@ -302,8 +299,7 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
     final byView = switch (_view) {
       _MemoView.all => memos,
       _MemoView.today => memos.where(isMine).toList(),
-      _MemoView.todo => memos.where((m) => m.isTask && !m.isDone).toList(),
-      _MemoView.mentioned => memos.where((m) => m.mentionedMe).toList(),
+      _MemoView.todo => memos.where(_isOpenTask).toList(),
       _MemoView.done => memos.where((m) => m.isDone).toList(),
     };
     final byFarm = switch (_farm) {
@@ -319,17 +315,14 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
     return switch (_view) {
       _MemoView.today => '오늘 남은 업무가 없어요.\n할일·담당자를 지정하거나 호출받은 메모가 여기에 모여요.',
       _MemoView.todo => '남은 할일이 없어요.',
-      _MemoView.mentioned => '나를 호출한 메모가 없어요.',
       _MemoView.done => '완료한 메모가 없어요.',
       _MemoView.all => '아직 메모가 없습니다.',
     };
   }
 
-  static bool _isToday(DateTime at) {
-    final local = at.toLocal();
-    final now = DateTime.now();
-    return local.year == now.year && local.month == now.month && local.day == now.day;
-  }
+  static bool _isOpenTask(Memo m) => m.isTask && !m.isDone;
+
+  static String _withCount(String label, int? n) => n == null || n == 0 ? label : '$label $n';
 
   /// Every whitespace-separated word must appear somewhere in the memo's
   /// content, tags, farm name or author (case-insensitive).
@@ -359,112 +352,43 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
   }
 }
 
-/// 오늘의 업무: what's left for me today (my 할일 / 담당 / 호출), at the top
-/// of the memo tab so opening the app answers "오늘 뭐 해야 하지?". Tap to
-/// show just those memos.
-class _TodayCard extends StatelessWidget {
-  const _TodayCard({required this.open, required this.doneToday, required this.selected, required this.onTap});
+/// Top of the 오늘의 업무 view: how far today has got. The counts and the
+/// first few jobs are on Home's 오늘의 업무 card; this is just the progress.
+class _TodayProgress extends StatelessWidget {
+  const _TodayProgress({required this.open, required this.doneToday});
 
-  final List<Memo> open;
+  final int open;
   final int doneToday;
-  final bool selected;
-  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final mentioned = open.where((m) => m.mentionedMe).length;
-    final total = open.length + doneToday;
-    String dateLabel;
-    try {
-      dateLabel = DateFormat('M/d (E)', 'ko_KR').format(DateTime.now());
-    } catch (_) {
-      dateLabel = DateFormat('M/d').format(DateTime.now());
-    }
-    return Material(
-      color: selected ? AppColors.brandTint : AppColors.surface,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: selected ? AppColors.brand : AppColors.brandTintBorder, width: selected ? 1.5 : 1),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.checklist_rtl, size: 18, color: AppColors.brand),
-                  const SizedBox(width: 6),
-                  const Text('오늘의 업무', style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w900, color: AppColors.brandDark)),
-                  const SizedBox(width: 6),
-                  Flexible(
-                    child: Text(dateLabel,
-                        maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted)),
-                  ),
-                  const Spacer(),
-                  Text(selected ? '전체 보기' : '모아 보기',
-                      style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.brand)),
-                  const Icon(Icons.chevron_right, size: 16, color: AppColors.brand),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  _TodayStat(label: '남은 업무', value: open.length, color: open.isEmpty ? AppColors.textMuted : AppColors.brand),
-                  _TodayStat(label: '나를 호출', value: mentioned, color: mentioned == 0 ? AppColors.textMuted : AppColors.warningDark),
-                  _TodayStat(label: '오늘 완료', value: doneToday, color: doneToday == 0 ? AppColors.textMuted : AppColors.good),
-                ],
-              ),
-              if (total > 0) ...[
-                const SizedBox(height: 10),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: doneToday / total,
-                    minHeight: 6,
-                    backgroundColor: AppColors.neutralChip,
-                    color: AppColors.good,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  open.isEmpty ? '오늘 업무를 모두 끝냈어요!' : '메모 왼쪽 동그라미(✓)를 누르면 완료돼서 여기서 빠져요.',
-                  style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
-                ),
-              ] else ...[
-                const SizedBox(height: 8),
-                const Text('할일 태그·담당자를 지정하거나 댓글로 호출받은 메모가 여기에 모여요.',
-                    style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
-              ],
-            ],
-          ),
+    final total = open + doneToday;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          open == 0
+              ? (doneToday > 0 ? '오늘 업무를 모두 끝냈어요! 수고하셨어요 👏' : '오늘 남은 업무가 없어요.')
+              : '남은 업무 $open건${doneToday > 0 ? ' · 오늘 $doneToday건 완료' : ''}',
+          style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: open == 0 ? AppColors.good : AppColors.textPrimary),
         ),
-      ),
-    );
-  }
-}
-
-class _TodayStat extends StatelessWidget {
-  const _TodayStat({required this.label, required this.value, required this.color});
-
-  final String label;
-  final int value;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('$value', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: color)),
-          Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+        if (total > 0) ...[
+          const SizedBox(height: 6),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: doneToday / total,
+              minHeight: 5,
+              backgroundColor: AppColors.neutralChip,
+              color: AppColors.good,
+            ),
+          ),
         ],
-      ),
+        if (open > 0) ...[
+          const SizedBox(height: 4),
+          const Text('메모 왼쪽 동그라미(✓)를 누르면 완료돼서 여기서 빠져요.', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+        ],
+      ],
     );
   }
 }
