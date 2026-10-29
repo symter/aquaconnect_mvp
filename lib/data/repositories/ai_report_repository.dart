@@ -23,6 +23,9 @@ abstract class AiReportRepository {
 
   Future<AiReport> updateBody(String id, String body);
 
+  /// Sets the 전문가 최종 의견 (empty clears it).
+  Future<AiReport> updateFinalOpinion(String id, String opinion);
+
   Future<AiReport> setConfirmed(String id, {required bool confirmed});
 
   Future<void> delete(String id);

@@ -30,6 +30,9 @@ class MockAiReportRepository implements AiReportRepository {
   Future<AiReport> updateBody(String id, String body) => throw Exception(_notConnected);
 
   @override
+  Future<AiReport> updateFinalOpinion(String id, String opinion) => throw Exception(_notConnected);
+
+  @override
   Future<AiReport> setConfirmed(String id, {required bool confirmed}) => throw Exception(_notConnected);
 
   @override

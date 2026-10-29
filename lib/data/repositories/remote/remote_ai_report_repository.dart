@@ -51,6 +51,12 @@ class RemoteAiReportRepository implements AiReportRepository {
   }
 
   @override
+  Future<AiReport> updateFinalOpinion(String id, String opinion) async {
+    final json = await _api.put('/api/ai-reports/$id', body: {'finalOpinion': opinion}) as Map<String, dynamic>;
+    return AiReport.fromJson(json);
+  }
+
+  @override
   Future<AiReport> setConfirmed(String id, {required bool confirmed}) async {
     final json = await _api.post('/api/ai-reports/$id/${confirmed ? 'confirm' : 'unconfirm'}') as Map<String, dynamic>;
     return AiReport.fromJson(json);

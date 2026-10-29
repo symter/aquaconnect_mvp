@@ -26,6 +26,9 @@ class AiReport {
     this.aiBody,
     this.checks = const [],
     this.memos = const [],
+    this.meta,
+    this.finalOpinion = '',
+    this.editedSections = const [],
   });
 
   final String id;
@@ -59,6 +62,17 @@ class AiReport {
   final List<AiReportCheck> checks;
   final List<AiReportMemo> memos;
 
+  /// Numbers for the report form (tiles, timeline, charts), computed by the
+  /// server from the memos — see `formMeta` in server/src/lib/ai/farmReport.js.
+  /// Null on reports made before the form existed.
+  final Map<String, dynamic>? meta;
+
+  /// 전문가 최종 의견.
+  final String finalOpinion;
+
+  /// Sections whose text differs from the AI draft.
+  final List<String> editedSections;
+
   bool get isConfirmed => status == 'confirmed';
 
   factory AiReport.fromJson(Map<String, dynamic> json) => AiReport(
@@ -86,6 +100,9 @@ class AiReport {
         memos: ((json['memos'] as List<dynamic>?) ?? [])
             .map((e) => AiReportMemo.fromJson(e as Map<String, dynamic>))
             .toList(),
+        meta: json['meta'] as Map<String, dynamic>?,
+        finalOpinion: json['finalOpinion'] as String? ?? '',
+        editedSections: ((json['editedSections'] as List<dynamic>?) ?? []).cast<String>(),
       );
 }
 
