@@ -1,5 +1,9 @@
-/// One AI 관리 리포트 (ported from symterAI): an AI draft built from a farm's
-/// memos over a chosen period, which staff can edit and then 확정.
+/// One AI 리포트 (ported from symterAI): an AI draft built from memos over a
+/// chosen period, which staff edit, 확정 (each 확정 saves a 판) and — for a
+/// farm report — 발송 to the farm's share link.
+///
+/// [type] 'farm' is one farm's 관리 리포트; 'agency' is the 종합 리포트 over
+/// every farm of the institute ([farmId] null, never sent).
 ///
 /// [body] is "## 섹션" headings followed by "- 항목" lines; items carry
 /// inline 〔근거: …〕 / 〔확인 필요: …〕 tags written by the server's
@@ -7,10 +11,12 @@
 class AiReport {
   const AiReport({
     required this.id,
+    this.type = 'farm',
     required this.farmId,
     required this.periodStart,
     required this.periodEnd,
     required this.status,
+    this.version = 0,
     required this.model,
     required this.memoCount,
     required this.commentCount,
@@ -22,24 +28,38 @@ class AiReport {
     this.editedAt,
     this.confirmedByName,
     this.confirmedAt,
+    this.sentByName,
+    this.sentAt,
     this.body,
     this.aiBody,
     this.checks = const [],
     this.memos = const [],
+    this.comments = const [],
+    this.evidence = const [],
     this.meta,
+    this.examples = const [],
+    this.staged,
     this.finalOpinion = '',
     this.editedSections = const [],
+    this.farmName,
+    this.orgName,
   });
 
   final String id;
-  final String farmId;
+
+  /// 'farm' | 'agency'
+  final String type;
+  final String? farmId;
 
   /// KST calendar dates, "YYYY-MM-DD".
   final String periodStart;
   final String periodEnd;
 
-  /// 'draft' | 'confirmed'
+  /// 'draft' | 'confirmed' | 'sent'
   final String status;
+
+  /// How many 판 have been approved so far (0 = never 확정).
+  final int version;
   final String model;
   final int memoCount;
   final int commentCount;
@@ -55,17 +75,32 @@ class AiReport {
   final DateTime? editedAt;
   final String? confirmedByName;
   final DateTime? confirmedAt;
+  final String? sentByName;
+
+  /// Last 발송 (also set while a new 판 is being drafted after a send).
+  final DateTime? sentAt;
 
   /// Only filled on the detail fetch — list rows leave these empty.
   final String? body;
   final String? aiBody;
   final List<AiReportCheck> checks;
   final List<AiReportMemo> memos;
+  final List<AiReportComment> comments;
+
+  /// 근거 확인: per section, each AI item's rendered line and its memos.
+  final List<AiEvidenceSection> evidence;
 
   /// Numbers for the report form (tiles, timeline, charts), computed by the
-  /// server from the memos — see `formMeta` in server/src/lib/ai/farmReport.js.
-  /// Null on reports made before the form existed.
+  /// server from the memos — `formMeta` in server/src/lib/ai/farmReport.js
+  /// (farm) or `meta` in agencyReport.js (agency). Null on reports made
+  /// before the form existed.
   final Map<String, dynamic>? meta;
+
+  /// Approved reports put in the prompt as style examples.
+  final List<Map<String, dynamic>> examples;
+
+  /// Present when the memos were long enough to be 중간 정리'd first.
+  final Map<String, dynamic>? staged;
 
   /// 전문가 최종 의견.
   final String finalOpinion;
@@ -73,14 +108,27 @@ class AiReport {
   /// Sections whose text differs from the AI draft.
   final List<String> editedSections;
 
-  bool get isConfirmed => status == 'confirmed';
+  /// Only on a report the farm received (the public share-link view).
+  final String? farmName;
+  final String? orgName;
+
+  bool get isAgency => type == 'agency';
+  bool get isDraft => status == 'draft';
+  bool get isSent => status == 'sent';
+
+  /// 확정 or 발송 — approved, no longer editable.
+  bool get isConfirmed => status == 'confirmed' || status == 'sent';
+
+  AiReportMemo? memoNumbered(int n) => memos.where((m) => m.n == n).firstOrNull;
 
   factory AiReport.fromJson(Map<String, dynamic> json) => AiReport(
         id: json['id'] as String,
-        farmId: json['farmId'] as String,
+        type: json['type'] as String? ?? 'farm',
+        farmId: json['farmId'] as String?,
         periodStart: json['periodStart'] as String,
         periodEnd: json['periodEnd'] as String,
         status: json['status'] as String,
+        version: json['version'] as int? ?? 0,
         model: json['model'] as String? ?? '',
         memoCount: json['memoCount'] as int? ?? 0,
         commentCount: json['commentCount'] as int? ?? 0,
@@ -89,22 +137,30 @@ class AiReport {
         createdByName: json['createdByName'] as String? ?? '',
         createdAt: DateTime.parse(json['createdAt'] as String),
         editedByName: json['editedByName'] as String?,
-        editedAt: json['editedAt'] == null ? null : DateTime.parse(json['editedAt'] as String),
+        editedAt: _date(json['editedAt']),
         confirmedByName: json['confirmedByName'] as String?,
-        confirmedAt: json['confirmedAt'] == null ? null : DateTime.parse(json['confirmedAt'] as String),
+        confirmedAt: _date(json['confirmedAt']),
+        sentByName: json['sentByName'] as String?,
+        sentAt: _date(json['sentAt']),
         body: json['body'] as String?,
         aiBody: json['aiBody'] as String?,
-        checks: ((json['checks'] as List<dynamic>?) ?? [])
-            .map((e) => AiReportCheck.fromJson(e as Map<String, dynamic>))
-            .toList(),
-        memos: ((json['memos'] as List<dynamic>?) ?? [])
-            .map((e) => AiReportMemo.fromJson(e as Map<String, dynamic>))
-            .toList(),
+        checks: _list(json['checks'], AiReportCheck.fromJson),
+        memos: _list(json['memos'], AiReportMemo.fromJson),
+        comments: _list(json['comments'], AiReportComment.fromJson),
+        evidence: _list(json['evidence'], AiEvidenceSection.fromJson),
         meta: json['meta'] as Map<String, dynamic>?,
+        examples: ((json['examples'] as List<dynamic>?) ?? []).cast<Map<String, dynamic>>(),
+        staged: json['staged'] as Map<String, dynamic>?,
         finalOpinion: json['finalOpinion'] as String? ?? '',
         editedSections: ((json['editedSections'] as List<dynamic>?) ?? []).cast<String>(),
+        farmName: json['farmName'] as String?,
+        orgName: json['orgName'] as String?,
       );
 }
+
+DateTime? _date(Object? v) => v == null ? null : DateTime.parse(v as String);
+List<T> _list<T>(Object? v, T Function(Map<String, dynamic>) f) =>
+    ((v as List<dynamic>?) ?? []).map((e) => f(e as Map<String, dynamic>)).toList();
 
 class AiReportCheck {
   const AiReportCheck({required this.section, required this.text, required this.problem});
@@ -120,22 +176,162 @@ class AiReportCheck {
       );
 }
 
+/// One AI item's line as it was rendered into the body, and its 근거.
+class AiEvidenceItem {
+  const AiEvidenceItem({required this.line, required this.evidence, required this.commentRefs});
+
+  final String line;
+
+  /// Memo numbers ([AiReportMemo.n]).
+  final List<int> evidence;
+
+  /// Comment keys ([AiReportComment.key]).
+  final List<String> commentRefs;
+
+  factory AiEvidenceItem.fromJson(Map<String, dynamic> json) => AiEvidenceItem(
+        line: json['line'] as String? ?? '',
+        evidence: ((json['evidence'] as List<dynamic>?) ?? []).map((e) => (e as num).toInt()).toList(),
+        commentRefs: ((json['commentRefs'] as List<dynamic>?) ?? []).cast<String>(),
+      );
+}
+
+class AiEvidenceSection {
+  const AiEvidenceSection({required this.title, required this.items});
+
+  final String title;
+  final List<AiEvidenceItem> items;
+
+  factory AiEvidenceSection.fromJson(Map<String, dynamic> json) => AiEvidenceSection(
+        title: json['title'] as String? ?? '',
+        items: _list(json['items'], AiEvidenceItem.fromJson),
+      );
+}
+
+/// A comment on a selected memo, as it read when the report was generated.
+class AiReportComment {
+  const AiReportComment({required this.key, required this.memoN, required this.date, required this.author, required this.body, required this.late});
+
+  /// "C{memo number}-{k}"
+  final String key;
+  final int memoN;
+  final String date;
+  final String author;
+  final String body;
+
+  /// Written after the report period ended.
+  final bool late;
+
+  factory AiReportComment.fromJson(Map<String, dynamic> json) => AiReportComment(
+        key: json['key'] as String? ?? '',
+        memoN: (json['memoN'] as num?)?.toInt() ?? 0,
+        date: json['date'] as String? ?? '',
+        author: json['author'] as String? ?? '',
+        body: json['body'] as String? ?? '',
+        late: json['late'] as bool? ?? false,
+      );
+}
+
 /// A memo as it read when the report was generated (the input snapshot).
 class AiReportMemo {
-  const AiReportMemo({required this.id, required this.date, required this.kind, required this.author, required this.body});
+  const AiReportMemo({
+    required this.id,
+    this.n,
+    required this.date,
+    required this.kind,
+    required this.author,
+    required this.body,
+    this.period = 'current',
+    this.farmName,
+  });
 
   final String id;
+
+  /// The number the AI saw it as ([#n]).
+  final int? n;
   final String date;
   final String kind;
   final String author;
   final String body;
 
+  /// 'current' (in the report period) | 'previous' (the comparison period).
+  final String period;
+
+  /// 종합 리포트 only.
+  final String? farmName;
+
   factory AiReportMemo.fromJson(Map<String, dynamic> json) => AiReportMemo(
         id: json['id'] as String,
+        n: (json['n'] as num?)?.toInt(),
         date: json['date'] as String? ?? '',
         kind: json['kind'] as String? ?? '',
         author: json['author'] as String? ?? '',
         body: json['body'] as String? ?? '',
+        period: json['period'] as String? ?? 'current',
+        farmName: json['farmName'] as String?,
+      );
+}
+
+/// One approved 판.
+class AiReportVersion {
+  const AiReportVersion({
+    required this.version,
+    required this.body,
+    required this.finalOpinion,
+    required this.approvedByName,
+    required this.approvedAt,
+    required this.editedSections,
+    required this.sends,
+  });
+
+  final int version;
+  final String body;
+  final String finalOpinion;
+  final String approvedByName;
+  final DateTime approvedAt;
+  final List<String> editedSections;
+
+  /// When this 판 went to the farm (empty = never sent).
+  final List<({DateTime sentAt, String sentByName})> sends;
+
+  factory AiReportVersion.fromJson(Map<String, dynamic> json) => AiReportVersion(
+        version: (json['version'] as num).toInt(),
+        body: json['body'] as String? ?? '',
+        finalOpinion: json['finalOpinion'] as String? ?? '',
+        approvedByName: json['approvedByName'] as String? ?? '',
+        approvedAt: DateTime.parse(json['approvedAt'] as String),
+        editedSections: ((json['editedSections'] as List<dynamic>?) ?? []).cast<String>(),
+        sends: [
+          for (final s in ((json['sends'] as List<dynamic>?) ?? []).cast<Map<String, dynamic>>())
+            (sentAt: DateTime.parse(s['sentAt'] as String), sentByName: s['sentByName'] as String? ?? ''),
+        ],
+      );
+}
+
+/// 분류 점검: memos the automatic classification wasn't sure about.
+class AiMemoReview {
+  const AiMemoReview({required this.total, required this.unclassified, required this.deathsWithoutCount, required this.items});
+
+  final int total;
+  final int unclassified;
+  final int deathsWithoutCount;
+  final List<({String id, String farmName, String date, String kind, String body, String topic, List<String> reasons})> items;
+
+  factory AiMemoReview.fromJson(Map<String, dynamic> json) => AiMemoReview(
+        total: json['total'] as int? ?? 0,
+        unclassified: json['unclassified'] as int? ?? 0,
+        deathsWithoutCount: json['deathsWithoutCount'] as int? ?? 0,
+        items: [
+          for (final u in ((json['uncertain'] as List<dynamic>?) ?? []).cast<Map<String, dynamic>>())
+            (
+              id: u['id'] as String,
+              farmName: u['farmName'] as String? ?? '',
+              date: u['date'] as String? ?? '',
+              kind: u['kind'] as String? ?? '',
+              body: u['body'] as String? ?? '',
+              topic: u['topic'] as String? ?? '',
+              reasons: ((u['reasons'] as List<dynamic>?) ?? []).cast<String>(),
+            ),
+        ],
       );
 }
 

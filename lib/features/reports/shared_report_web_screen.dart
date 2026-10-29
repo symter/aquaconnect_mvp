@@ -8,6 +8,7 @@ import '../../data/logic/farm_monthly_report_builder.dart';
 import '../../data/models/farm.dart';
 import '../../data/models/farm_monthly_report.dart';
 import '../../data/models/report.dart';
+import 'ai_report_print_screen.dart';
 import 'farm_report_frame.dart';
 import 'farm_report_html.dart';
 import 'inquiry_sheet.dart';
@@ -133,7 +134,9 @@ class _SharedReportWebScreenState extends ConsumerState<SharedReportWebScreen> {
                       children: [
                         _Header(farmName: loaded.farm.name, onSavePdf: _savePdf),
                         if (widget.isPreview)
-                          const Padding(padding: EdgeInsets.fromLTRB(12, 10, 12, 0), child: _PreviewBanner()),
+                          const Padding(padding: EdgeInsets.fromLTRB(12, 10, 12, 0), child: _PreviewBanner())
+                        else
+                          ReceivedAiReportsStrip(token: widget.token!),
                         Expanded(child: FarmReportFrame(html: loaded.html, controller: _frame)),
                         if (!widget.isPreview)
                           _InquiryCta(orgName: loaded.orgName, onTap: () => _openInquiry(loaded))

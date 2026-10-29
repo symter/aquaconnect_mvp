@@ -125,6 +125,36 @@ class _Body extends StatelessWidget {
             if (newMemoCount > 0) '최근 24시간 신규 메모 $newMemoCount건',
           ],
         ),
+        const SizedBox(height: 12),
+        Material(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(14),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: () => context.push('/ai-reports/agency'),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(border: Border.all(color: AppColors.brandTintBorder), borderRadius: BorderRadius.circular(14)),
+              child: const Row(
+                children: [
+                  Icon(Icons.auto_awesome, size: 18, color: AppColors.brand),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('AI 종합 리포트', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+                        Text('관리 양식장 전체 메모를 기간별로 AI가 정리해요 (원장님 보고용)',
+                            style: TextStyle(fontSize: 11.5, color: AppColors.textTertiary)),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.chevron_right, color: AppColors.neutralArrow),
+                ],
+              ),
+            ),
+          ),
+        ),
         const SizedBox(height: 16),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),

@@ -6,10 +6,13 @@ import 'package:intl/intl.dart' show DateFormat, NumberFormat;
 import '../../core/theme/app_colors.dart';
 import '../../data/models/ai_report.dart';
 
-/// The AI 관리 리포트 as the farm receives it — symterAI's ReportDocument
-/// form: 기본 정보 → the seven sections, each with its tiles/charts
+/// The AI 리포트 as the farm (or the 원장님) receives it — symterAI's
+/// ReportDocument form: 기본 정보 → the sections, each with its tiles/charts
 /// underneath → 전문가 최종 의견. Everything in the charts comes from
 /// [AiReport.meta] (code-computed from the memos), never from the AI text.
+///
+/// A farm report ([AiReport.isAgency] false) is the 양식장 관리 리포트; an
+/// agency report is the 관리원 종합 리포트 over every farm.
 class AiReportDocument extends StatelessWidget {
   const AiReportDocument({
     super.key,
@@ -17,6 +20,7 @@ class AiReportDocument extends StatelessWidget {
     required this.farmName,
     required this.orgName,
     this.onEditOpinion,
+    this.onItemTap,
   });
 
   final AiReport report;
@@ -25,6 +29,9 @@ class AiReportDocument extends StatelessWidget {
 
   /// Shown as 의견 작성 next to 전문가 최종 의견 (drafts only).
   final VoidCallback? onEditOpinion;
+
+  /// 근거 확인: an item line was tapped (staff only — null on the farm view).
+  final void Function(String sectionTitle, String line)? onItemTap;
 
   /// Same titles and order as FARM_SECTIONS in server/src/lib/ai/prompts.js.
   static const sectionTitles = [
@@ -37,6 +44,18 @@ class AiReportDocument extends StatelessWidget {
     '다음 관리 계획',
   ];
 
+  /// Same titles and order as AGENCY_SECTIONS in server/src/lib/ai/prompts.js.
+  static const agencySectionTitles = [
+    '이번 기간 전체 현황',
+    '주제별 종합',
+    '주의가 필요한 양식장',
+    '폐사 현황',
+    '해역 수온 참고 자료',
+    '다음 확인 사항',
+  ];
+
+  static List<String> titlesFor(AiReport r) => r.isAgency ? agencySectionTitles : sectionTitles;
+
   @override
   Widget build(BuildContext context) {
     final r = report;
@@ -44,7 +63,7 @@ class AiReportDocument extends StatelessWidget {
     final sections = parseAiReportBody(r.body ?? '');
     // Reports made before the form (no meta) or whose headings were edited
     // away just show their text.
-    final structured = m != null && sectionTitles.every((t) => sections.any((s) => s.title == t));
+    final structured = m != null && titlesFor(r).every((t) => sections.any((s) => s.title == t));
     final fmt = DateFormat('yyyy년 M월 d일');
     final recordPeriod = m?['recordPeriod'] as Map<String, dynamic>?;
     final authors = ((m?['authors'] as List<dynamic>?) ?? []).cast<String>();
@@ -55,7 +74,7 @@ class AiReportDocument extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (!r.isConfirmed)
+          if (r.isDraft)
             Container(
               margin: const EdgeInsets.only(bottom: 14),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -63,25 +82,38 @@ class AiReportDocument extends StatelessWidget {
               child: const Text('초안 — 전문가 확인 전입니다. 확정 후 최종본으로 공유하세요.',
                   style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.warningTintInk)),
             ),
-          const Text('양식장 관리 리포트',
-              textAlign: TextAlign.center, style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+          Text(r.isAgency ? '관리원 종합 리포트' : '양식장 관리 리포트',
+              textAlign: TextAlign.center, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
           const SizedBox(height: 16),
-          _MetaTable(rows: [
-            ('양식장', farmName),
-            ('대상 기간', '${r.periodStart} ~ ${r.periodEnd}'),
-            ('수산질병관리원', orgName),
-            ('담당', r.confirmedByName ?? (authors.isNotEmpty ? authors.join(', ') : '(확정 시 표시)')),
-            if (recordPeriod != null) ('메모 기록 기간', '${recordPeriod['first']} ~ ${recordPeriod['last']}'),
-            ('입력 범위', '메모 ${r.memoCount}건${r.commentCount > 0 ? ' · 연결 댓글 ${r.commentCount}개 포함' : ''}'),
-            ('리포트 생성일', fmt.format(r.createdAt.toLocal())),
-            if (r.confirmedAt != null) ('확정일', fmt.format(r.confirmedAt!.toLocal())),
-          ]),
+          if (r.isAgency)
+            _MetaTable(rows: [
+              ('수산질병관리원', orgName),
+              ('대상 기간', '${r.periodStart} ~ ${r.periodEnd}'),
+              if (m != null) ('관리 양식장', '${m['farmCount']}곳 (이 기간 메모가 있는 양식장 ${m['activeFarmCount']}곳)'),
+              ('입력 범위', '메모 ${r.memoCount}건'),
+              ('리포트 생성일', fmt.format(r.createdAt.toLocal())),
+              if (r.confirmedAt != null) ('확정일', fmt.format(r.confirmedAt!.toLocal())),
+            ])
+          else
+            _MetaTable(rows: [
+              ('양식장', farmName),
+              ('대상 기간', '${r.periodStart} ~ ${r.periodEnd}'),
+              ('수산질병관리원', orgName),
+              ('담당', r.confirmedByName ?? (authors.isNotEmpty ? authors.join(', ') : '(확정 시 표시)')),
+              if (recordPeriod != null) ('메모 기록 기간', '${recordPeriod['first']} ~ ${recordPeriod['last']}'),
+              ('입력 범위', '메모 ${r.memoCount}건${r.commentCount > 0 ? ' · 연결 댓글 ${r.commentCount}개 포함' : ''}'),
+              ('리포트 생성일', fmt.format(r.createdAt.toLocal())),
+              if (r.confirmedAt != null) ('확정일', fmt.format(r.confirmedAt!.toLocal())),
+              if (r.sentAt != null && r.isSent) ('발송일', fmt.format(r.sentAt!.toLocal())),
+            ]),
           for (final s in sections) ...[
             const SizedBox(height: 22),
             _SectionHeading(s.title),
-            for (final line in s.lines) _ItemLine(line: line),
-            if (structured) ..._extras(s.title, r, m),
+            for (final line in s.lines)
+              _ItemLine(line: line, onTap: onItemTap == null ? null : () => onItemTap!(s.title, line)),
+            if (structured) ...(r.isAgency ? _agencyExtras(s.title, m) : _extras(s.title, r, m)),
           ],
+          if (structured && r.isAgency) ..._agencyTable(m),
           const SizedBox(height: 22),
           _OpinionSection(report: r, onEdit: onEditOpinion),
           const SizedBox(height: 18),
@@ -92,6 +124,117 @@ class AiReportDocument extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  List<Widget> _agencyExtras(String title, Map<String, dynamic> m) {
+    final rows = ((m['rows'] as List<dynamic>?) ?? []).cast<Map<String, dynamic>>();
+    final deaths = (m['deathTotals'] as Map<String, dynamic>?) ?? const {};
+    final open = ((m['open'] as List<dynamic>?) ?? []).cast<Map<String, dynamic>>();
+    final topics = ((m['topicTotals'] as List<dynamic>?) ?? []).cast<Map<String, dynamic>>();
+    final stations = ((m['stations'] as List<dynamic>?) ?? []).cast<Map<String, dynamic>>();
+    final total = rows.fold<int>(0, (n, x) => n + (x['memos'] as int? ?? 0));
+    final max = deaths['max'] as int? ?? 0;
+    String num(Object? v) => v is double && v == v.roundToDouble() ? v.toInt().toString() : '$v';
+
+    switch (agencySectionTitles.indexOf(title)) {
+      case 0:
+        return [
+          _Tiles([
+            ('관리 양식장', '${m['farmCount']}곳', null),
+            ('관리원 기록', '$total건', null),
+            ('확인된 폐사', max > 0 ? _range(deaths['min'] as int? ?? 0, max) : (deaths['events'] as int? ?? 0) > 0 ? '마리수 미확정' : '없음', kindColor('폐사')),
+            ('후속 확인 필요', '${open.length}건', null),
+          ]),
+        ];
+      case 1:
+        return [
+          if (topics.isNotEmpty) _CountRows([for (final t in topics) (t['topic'] as String, '${t['count']}건')]),
+          if (rows.any((x) => (x['memos'] as int? ?? 0) > 0)) ...[
+            const _Sub('양식장 × 주제'),
+            _TopicMatrix(rows: rows, topics: ((m['topicOrder'] as List<dynamic>?) ?? []).cast<String>()),
+          ],
+        ];
+      case 3:
+        final withDeaths = rows.where((x) => (x['deaths'] as int? ?? 0) > 0).toList();
+        if (withDeaths.isEmpty) return const [_Muted('폐사가 적힌 기록이 없습니다.')];
+        return [
+          _CountRows([
+            for (final x in withDeaths)
+              (
+                x['name'] as String,
+                [
+                  if ((x['deathsMax'] as int? ?? 0) > 0) _range(x['deathsMin'] as int? ?? 0, x['deathsMax'] as int),
+                  if ((x['deathsUnknown'] as int? ?? 0) > 0) '수량 미기재 ${x['deathsUnknown']}건',
+                ].join(' · '),
+              ),
+          ]),
+        ];
+      case 4:
+        if (stations.isEmpty) return const [_Muted('연결된 관측소가 없습니다.')];
+        return [
+          _CountRows([
+            for (final st in stations)
+              (
+                '${st['name']} (양식장 ${st['farms']}곳)',
+                st['observation'] == null ? '자료 없음' : '${(st['observation'] as Map)['layer']} ${num((st['observation'] as Map)['waterTempC'])}℃',
+              ),
+          ]),
+          const _Muted('관측소 값은 리포트 작성 시점의 실시간 값이며 기간 평균이 아닙니다.'),
+        ];
+      case 5:
+        return [_OpenItems(items: open)];
+      default:
+        return const [];
+    }
+  }
+
+  List<Widget> _agencyTable(Map<String, dynamic> m) {
+    final rows = ((m['rows'] as List<dynamic>?) ?? []).cast<Map<String, dynamic>>();
+    if (rows.isEmpty) return const [];
+    String num(Object? v) => v == null ? '-' : (v is double && v == v.roundToDouble() ? v.toInt().toString() : '$v');
+    return [
+      const SizedBox(height: 22),
+      const _SectionHeading('양식장별 현황 표'),
+      SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          headingRowHeight: 34,
+          dataRowMinHeight: 32,
+          dataRowMaxHeight: 40,
+          horizontalMargin: 4,
+          columnSpacing: 14,
+          headingTextStyle: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: AppColors.textSecondary),
+          dataTextStyle: const TextStyle(fontSize: 12, color: AppColors.textPrimary),
+          columns: const [
+            DataColumn(label: Text('양식장')),
+            DataColumn(label: Text('지역')),
+            DataColumn(label: Text('메모'), numeric: true),
+            DataColumn(label: Text('방문'), numeric: true),
+            DataColumn(label: Text('폐사'), numeric: true),
+            DataColumn(label: Text('접종'), numeric: true),
+            DataColumn(label: Text('관측소')),
+            DataColumn(label: Text('수온'), numeric: true),
+          ],
+          rows: [
+            for (final x in rows)
+              DataRow(cells: [
+                DataCell(Text('${x['name']}')),
+                DataCell(Text((x['region'] as String?)?.isNotEmpty == true ? x['region'] as String : '-')),
+                DataCell(Text('${x['memos']}')),
+                DataCell(Text('${x['visits']}')),
+                DataCell(Text((x['deathsMax'] as int? ?? 0) > 0
+                    ? _range(x['deathsMin'] as int? ?? 0, x['deathsMax'] as int)
+                    : (x['deaths'] as int? ?? 0) > 0
+                        ? '미확정'
+                        : '0')),
+                DataCell(Text('${x['vaccinations']}')),
+                DataCell(Text('${x['station'] ?? '-'}')),
+                DataCell(Text(x['waterTempC'] == null ? '-' : '${num(x['waterTempC'])}℃')),
+              ]),
+          ],
+        ),
+      ),
+    ];
   }
 
   List<Widget> _extras(String title, AiReport r, Map<String, dynamic> m) {
@@ -317,8 +460,11 @@ final _tagRe = RegExp(r'〔([^〕]*)〕');
 /// / 〔근거: …〕 tags inline (근거 muted), plus any 〔확인 필요: …〕 from the
 /// evidence check as a note underneath (staff only — gone once fixed).
 class _ItemLine extends StatelessWidget {
-  const _ItemLine({required this.line});
+  const _ItemLine({required this.line, this.onTap});
   final String line;
+
+  /// 근거 확인 (staff view only).
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -343,7 +489,7 @@ class _ItemLine extends StatelessWidget {
     }
     spans.add(TextSpan(text: text.substring(last)));
 
-    return Padding(
+    final item = Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -371,6 +517,8 @@ class _ItemLine extends StatelessWidget {
         ],
       ),
     );
+    if (onTap == null) return item;
+    return InkWell(onTap: onTap, borderRadius: BorderRadius.circular(6), child: item);
   }
 }
 
@@ -810,10 +958,67 @@ class _OpinionSection extends StatelessWidget {
         else
           _MetaTable(rows: [
             ('승인', r.confirmedByName ?? ''),
-            ('승인일', DateFormat('yyyy년 M월 d일').format(r.confirmedAt!.toLocal())),
+            ('승인일', r.confirmedAt == null ? '-' : DateFormat('yyyy년 M월 d일').format(r.confirmedAt!.toLocal())),
+            if (r.version > 0) ('리포트 판', '제${r.version}판'),
             ('전문가 수정', r.editedSections.isEmpty ? 'AI 초안을 수정 없이 승인함' : '${r.editedSections.join(', ')} 섹션을 전문가가 수정함'),
           ]),
       ],
+    );
+  }
+}
+
+/// 양식장 × 주제 — how many memos of each topic per farm (symterAI
+/// TopicHeatmap); darker = more.
+class _TopicMatrix extends StatelessWidget {
+  const _TopicMatrix({required this.rows, required this.topics});
+  final List<Map<String, dynamic>> rows;
+  final List<String> topics;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = rows.where((x) => (x['memos'] as int? ?? 0) > 0).toList();
+    final peak = active.fold<int>(1, (m, x) {
+      final counts = (x['topicCounts'] as Map<String, dynamic>?) ?? const {};
+      return counts.values.fold<int>(m, (a, v) => math.max(a, (v as num).toInt()));
+    });
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Table(
+        defaultColumnWidth: const IntrinsicColumnWidth(),
+        defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+        children: [
+          TableRow(children: [
+            const SizedBox(),
+            for (final t in topics)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(4, 0, 4, 6),
+                child: Text(t, style: const TextStyle(fontSize: 10.5, color: AppColors.textSecondary)),
+              ),
+          ]),
+          for (final x in active)
+            TableRow(children: [
+              Padding(
+                padding: const EdgeInsets.only(right: 8, top: 2, bottom: 2),
+                child: Text('${x['name']}', style: const TextStyle(fontSize: 11.5, color: AppColors.textPrimary)),
+              ),
+              for (final t in topics)
+                () {
+                  final n = (((x['topicCounts'] as Map<String, dynamic>?) ?? const {})[t] as num?)?.toInt() ?? 0;
+                  return Container(
+                    margin: const EdgeInsets.all(1.5),
+                    height: 26,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: n == 0 ? AppColors.neutralCard : _topicColor.withValues(alpha: 0.18 + 0.72 * n / peak),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(n == 0 ? '' : '$n',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: n / peak > 0.5 ? Colors.white : AppColors.textPrimary)),
+                  );
+                }(),
+            ]),
+        ],
+      ),
     );
   }
 }

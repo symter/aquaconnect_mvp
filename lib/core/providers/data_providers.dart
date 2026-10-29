@@ -92,6 +92,21 @@ final aiReportProvider = FutureProvider.family<AiReport, String>((ref, id) {
   return ref.watch(aiReportRepositoryProvider).getReport(id);
 });
 
+/// The institute's 종합 리포트.
+final aiAgencyReportsProvider = FutureProvider<List<AiReport>>((ref) {
+  return ref.watch(aiReportRepositoryProvider).listAgency();
+});
+
+/// Approved 판 of one AI report, newest first.
+final aiReportVersionsProvider = FutureProvider.family<List<AiReportVersion>, String>((ref, id) {
+  return ref.watch(aiReportRepositoryProvider).versions(id);
+});
+
+/// 분류 점검 for one farm (or the institute when farmId is null) over a period.
+final aiMemoReviewProvider = FutureProvider.family<AiMemoReview, ({String? farmId, String from, String to})>((ref, q) {
+  return ref.watch(aiReportRepositoryProvider).memoReview(from: q.from, to: q.to, farmId: q.farmId);
+});
+
 /// Every share link issued by the org (active or not), newest first.
 final shareLinksProvider = FutureProvider<List<ShareLink>>((ref) {
   return ref.watch(shareLinkRepositoryProvider).listShareLinks();
