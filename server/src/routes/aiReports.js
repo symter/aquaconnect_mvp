@@ -5,6 +5,7 @@ import { query } from '../db.js';
 import { orgIdForMember } from '../lib/orgScope.js';
 import { draftFarmReport } from '../lib/ai/farmReport.js';
 import { AiError, MODEL_CATALOG, modelStatus } from '../lib/ai/model.js';
+import { FARM_SECTIONS } from '../lib/ai/prompts.js';
 import { modelsWithUsage, recordUsage } from '../lib/ai/usage.js';
 
 export const aiReportsRouter = Router();
@@ -13,6 +14,29 @@ aiReportsRouter.use(requireAuth);
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_PERIOD_DAYS = 92;
 const MAX_MEMOS = 300;
+
+/** "## 제목" 섹션별 본문 */
+function sectionsOf(body) {
+  const out = new Map();
+  let title = '';
+  for (const line of String(body ?? '').split(/\r?\n/)) {
+    if (line.startsWith('## ')) {
+      title = line.slice(3).trim();
+      out.set(title, []);
+    } else if (line.trim()) {
+      out.set(title, [...(out.get(title) ?? []), line.trim()]);
+    }
+  }
+  return out;
+}
+
+/** AI 원문과 비교해 전문가가 고친 섹션 */
+function editedSections(aiBody, body) {
+  const a = sectionsOf(aiBody);
+  const b = sectionsOf(body);
+  const titles = [...new Set([...FARM_SECTIONS, ...a.keys(), ...b.keys()])].filter(Boolean);
+  return titles.filter((t) => (a.get(t) ?? []).join('\n') !== (b.get(t) ?? []).join('\n'));
+}
 
 function toAiReportJson(row, { full = true } = {}) {
   return {
@@ -38,6 +62,10 @@ function toAiReportJson(row, { full = true } = {}) {
           aiBody: row.ai_body,
           checks: row.checks ?? [],
           memos: (row.input_snapshot?.memos ?? []).map((m) => ({ id: m.id, date: m.date, kind: m.kind, author: m.author, body: m.body })),
+          // 리포트 양식(타일·차트)용 값. 이 기능 이전에 만든 리포트에는 없다(null).
+          meta: row.input_snapshot?.meta ?? null,
+          finalOpinion: row.final_opinion ?? '',
+          editedSections: editedSections(row.ai_body, row.body),
         }
       : {}),
   };
@@ -192,11 +220,18 @@ aiReportsRouter.put('/:id', async (req, res) => {
   const row = await loadReport(orgId, req.params.id);
   if (!row) return res.status(404).json({ error: 'AI 리포트를 찾을 수 없습니다.' });
   if (row.status === 'confirmed') return res.status(409).json({ error: '확정된 리포트입니다. 확정을 취소한 뒤 수정해 주세요.' });
+  // body 와 finalOpinion(전문가 최종 의견) 중 보낸 것만 바꾼다.
+  const hasBody = req.body?.body !== undefined;
   const body = String(req.body?.body ?? '').trim();
-  if (!body) return res.status(400).json({ error: '리포트 내용이 비어 있습니다.' });
+  if (hasBody && !body) return res.status(400).json({ error: '리포트 내용이 비어 있습니다.' });
+  const opinion = req.body?.finalOpinion === undefined ? null : String(req.body.finalOpinion).trim();
+  if (!hasBody && opinion === null) return res.status(400).json({ error: '바꿀 내용이 없습니다.' });
   const { rows } = await query(
-    'update ai_reports set body = $2, edited_by_name = $3, edited_at = now() where id = $1 returning *',
-    [row.id, body, await memberName(req.memberId)],
+    `update ai_reports set body = coalesce($2, body), final_opinion = coalesce($3, final_opinion),
+        edited_by_name = case when $2::text is null then edited_by_name else $4 end,
+        edited_at = case when $2::text is null then edited_at else now() end
+      where id = $1 returning *`,
+    [row.id, hasBody ? body : null, opinion, await memberName(req.memberId)],
   );
   res.json(toAiReportJson(rows[0]));
 });

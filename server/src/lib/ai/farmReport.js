@@ -6,6 +6,7 @@ import { fetchRealtimeObservations, pickPreferredObservation } from '../nifs.js'
 import { fetchRedTide } from '../redtide.js';
 import { parseDraft, renderDraft, verifyDraft } from './draft.js';
 import { analyzeMemos, formatCount, summarizeFarm } from './memoAnalysis.js';
+import { summarizeField } from './memoExtract.js';
 import { AiError, chat } from './model.js';
 import { FARM_REPORT_PROMPT, FARM_PROMPT_VERSION } from './prompts.js';
 
@@ -51,6 +52,7 @@ function tally(an) {
   return lines;
 }
 
+/** 공공데이터: AI 입력 줄(lines)과 리포트 양식에 남길 값(data). */
 async function publicData(farm, from, to) {
   const lines = [];
   let temp = null;
@@ -79,7 +81,54 @@ async function publicData(farm, from, to) {
     const occ = (redTide.occurrences ?? []).slice(0, 5).map((o) => [o.area, o.organism].filter(Boolean).join(' ')).filter(Boolean);
     lines.push(`- 적조 속보(국립수산과학원) ${redTide.reportDate} 발표: ${occ.join(', ') || '세부 해역 정보 없음'} (전국 해역 대상 속보이며 이 양식장 해역과 같다는 뜻이 아님)`);
   }
-  return lines;
+  const data = {
+    station: farm.nearest_station_name ? { code: farm.nearest_station_code, name: farm.nearest_station_name } : null,
+    // 리포트 작성 시점의 실시간 값(기간 평균이 아님). 조회 실패면 null.
+    observation: temp
+      ? { layer: temp.layer, waterTempC: temp.waterTempC, observedDate: temp.observedDate, observedTime: temp.observedTime }
+      : null,
+    redTide:
+      redTide === undefined
+        ? { status: 'error' }
+        : redTide
+          ? {
+              status: 'found',
+              reportDate: redTide.reportDate,
+              occurrences: (redTide.occurrences ?? []).slice(0, 5).map((o) => [o.area, o.organism].filter(Boolean).join(' ')).filter(Boolean),
+            }
+          : { status: 'none' },
+    fetchedAt: new Date().toISOString(),
+    notConnected: ['기간별 일 평균 수온(관측소 이력)', '고수온·저수온 특보', '용존산소·염분(외부 관측)'],
+  };
+  return { lines, data };
+}
+
+/** 리포트 양식(타일·타임라인·차트)에 쓰는 값. 모두 코드가 메모에서 계산한 것이고 AI 출력과 무관하다. */
+function formMeta({ numbered, an, prevAn, pub }) {
+  const field = summarizeField(numbered);
+  const byKind = {};
+  for (const m of numbered) byKind[m.kind] = (byKind[m.kind] ?? 0) + 1;
+  const clip = (s, n) => {
+    const one = s.replace(/\s+/g, ' ').trim();
+    return one.length > n ? `${one.slice(0, n)}…` : one;
+  };
+  return {
+    generatedAt: new Date().toISOString(),
+    recordPeriod: field.recordDates.length ? { first: field.recordDates[0], last: field.recordDates[field.recordDates.length - 1] } : null,
+    authors: [...new Set(numbered.map((m) => m.author).filter(Boolean))],
+    memoStats: { byKind },
+    events: numbered.map((m) => ({ date: m.date, kind: m.kind })),
+    tanks: field.tanks,
+    measurements: field.measurements,
+    analysis: {
+      total: an.total,
+      topics: an.topics,
+      deaths: { events: an.deaths.events, min: an.deaths.min, max: an.deaths.max, unknown: an.deaths.unknown, byDay: an.deaths.byDay },
+      open: an.open.map((m) => ({ date: m.date, topic: m.a.primary, status: m.a.status, text: clip(m.body, 90) })),
+    },
+    prev: prevAn && { total: prevAn.total, deathEvents: prevAn.deaths.events },
+    publicData: pub,
+  };
 }
 
 /**
@@ -144,6 +193,7 @@ export async function draftFarmReport({ farm, from, to, memos, comments, prevMem
     ? an.open.map((o) => `- [#${o.n}] ${o.date} ${o.a.primary}: 상태 ${o.a.status}`).join(NL)
     : '(없음)';
 
+  const pub = await publicData(farm, from, to);
   const input = [
     `기간: ${from} ~ ${to} (한국 시간)${NL}양식장: ${farm.name} / 지역: ${farm.region || '미입력'} / 주소: ${farm.address || '미입력'}`,
     [
@@ -157,7 +207,7 @@ export async function draftFarmReport({ farm, from, to, memos, comments, prevMem
     `[이번 기간 현장 메모 — 1순위 근거]${NL}${memoLines.length ? memoLines.join(NL) : '(메모 없음)'}`,
     commentBlock,
     prevBlock,
-    `[공공데이터 — 외부 관측(보조 자료). 양식장 수조 실측값이 아님]${NL}${(await publicData(farm, from, to)).join(NL)}`,
+    `[공공데이터 — 외부 관측(보조 자료). 양식장 수조 실측값이 아님]${NL}${pub.lines.join(NL)}`,
   ]
     .filter(Boolean)
     .join(NL + NL);
@@ -185,6 +235,7 @@ export async function draftFarmReport({ farm, from, to, memos, comments, prevMem
       memos: numbered.map((m) => ({ n: m.n, id: m.uuid, date: m.date, kind: m.kind, author: m.author, authorType: m.authorType, body: m.body })),
       prevMemos: prevNumbered.map((m) => ({ n: m.n, id: m.uuid, date: m.date, kind: m.kind, body: m.body })),
       comments: commentRows,
+      meta: formMeta({ numbered, an, prevAn, pub: pub.data }),
     },
   };
 }
