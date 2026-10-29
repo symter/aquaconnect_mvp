@@ -209,21 +209,29 @@ class MemoCard extends ConsumerWidget {
   /// 완료 / 완료 취소, with a 되돌리기 snackbar after completing.
   Future<void> toggleDone(BuildContext context, WidgetRef ref) async {
     final done = !memo.isDone;
+    // Grabbed up front: completing can drop this card from its list (Home's
+    // 오늘의 업무), and the 되돌리기 snackbar should still show.
+    final messenger = ScaffoldMessenger.of(context);
+    final repo = ref.read(memoRepositoryProvider);
     try {
-      await ref.read(memoRepositoryProvider).setMemoDone(id: memo.id, done: done);
-      if (done && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: const Text('완료했어요'),
-          action: SnackBarAction(
-            label: '되돌리기',
-            onPressed: () => ref.read(memoRepositoryProvider).setMemoDone(id: memo.id, done: false),
-          ),
-        ));
+      await repo.setMemoDone(id: memo.id, done: done);
+      if (done) {
+        // Only the latest completion's snackbar; an action would otherwise
+        // keep it up until dismissed.
+        messenger
+          ..clearSnackBars()
+          ..showSnackBar(SnackBar(
+            content: const Text('완료했어요'),
+            duration: const Duration(seconds: 3),
+            persist: false,
+            action: SnackBarAction(
+              label: '되돌리기',
+              onPressed: () => repo.setMemoDone(id: memo.id, done: false),
+            ),
+          ));
       }
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('완료 처리하지 못했어요: $e')));
-      }
+      messenger.showSnackBar(SnackBar(content: Text('완료 처리하지 못했어요: $e')));
     }
   }
 
