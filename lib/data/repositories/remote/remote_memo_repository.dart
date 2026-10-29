@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import '../../models/memo.dart';
 import '../../models/memo_comment.dart';
+import '../../models/memo_import.dart';
 import '../../services/api_client.dart';
 import '../memo_repository.dart';
 
@@ -150,5 +151,22 @@ class RemoteMemoRepository implements MemoRepository {
   Future<void> deleteComment({required String memoId, required String commentId}) async {
     await _api.delete('/api/memos/$memoId/comments/$commentId');
     _refresh.add(null);
+  }
+
+  @override
+  Future<MemoImportResult> importMemos({
+    required String farmId,
+    required String fileName,
+    required Uint8List bytes,
+    bool dryRun = false,
+  }) async {
+    final json = await _api.post('/api/memos/import', body: {
+      'farmId': farmId,
+      'fileName': fileName,
+      'data': base64Encode(bytes),
+      'dryRun': dryRun,
+    }) as Map<String, dynamic>;
+    if (!dryRun) _refresh.add(null);
+    return MemoImportResult.fromJson(json);
   }
 }

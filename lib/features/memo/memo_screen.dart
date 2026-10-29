@@ -150,6 +150,13 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
                         ),
                         const SizedBox(width: 4),
                         IconButton(
+                          tooltip: '메모 일괄 업로드 (엑셀 CSV·메모장)',
+                          onPressed: () => context.push(_farm.isEmpty || _farm == _noFarm ? '/memo-import' : '/memo-import?farmId=$_farm'),
+                          icon: const Icon(Icons.upload_file, size: 20, color: AppColors.neutralIconStrong),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                        ),
+                        IconButton(
                           tooltip: '메모 검색',
                           onPressed: _openSearch,
                           icon: const Icon(Icons.search, size: 20, color: AppColors.neutralIconStrong),
