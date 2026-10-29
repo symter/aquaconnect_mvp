@@ -126,6 +126,28 @@ const day = (date) => `${Number(date.slice(5, 7))}월 ${Number(date.slice(8))}�
 
 /** 구조화된 초안 → 본문("## 제목" + "- 항목"). 근거 메모는 날짜·종류로 표시한다(메모 번호는 화면에서 의미가 없으므로). */
 export function renderDraft(draft, source) {
+  const line = itemRenderer(source);
+  return draft.sections
+    .map((s) => {
+      const lines = s.items.length ? s.items.map(line) : ['- 이 항목에 해당하는 기록이 없습니다.'];
+      return `## ${s.title}\n${lines.join('\n')}`;
+    })
+    .join('\n\n');
+}
+
+/**
+ * 근거 확인용: 섹션마다 AI 초안의 각 항목이 본문에 찍힌 줄과 그 근거(메모 번호·댓글 키).
+ * 화면은 본문 줄을 이 줄과 맞춰 보고, 같으면 근거 메모를 보여 준다(전문가가 고친 줄은 맞지 않는다).
+ */
+export function evidenceOf(draft, source) {
+  const line = itemRenderer(source);
+  return (draft?.sections ?? []).map((s) => ({
+    title: s.title,
+    items: s.items.map((it) => ({ line: line(it), evidence: it.evidence ?? [], commentRefs: it.comment_refs ?? [] })),
+  }));
+}
+
+function itemRenderer(source) {
   const memo = new Map([...source.memos, ...(source.prev ?? [])].map((m) => [m.n, m]));
   const cite = (ids) => {
     const labels = [...new Set(ids.map((id) => memo.get(id)).filter(Boolean).map((m) => (m.kind === '메모' ? day(m.date) : `${day(m.date)} ${m.kind}`)))];
@@ -138,12 +160,5 @@ export function renderDraft(draft, source) {
     const labels = [...new Set(keys.map((k) => comment.get(k)).filter(Boolean).map((c) => `${day(c.date)} 댓글${c.late ? '(기간 이후 추가 기록)' : ''}`))];
     return labels.length ? ` 〔근거 댓글: ${labels.join('·')}〕` : '';
   };
-  return draft.sections
-    .map((s) => {
-      const lines = s.items.length
-        ? s.items.map((it) => `- ${PREFIX[it.kind] ?? ''}${it.text}${cite(it.evidence)}${citeComments(it.comment_refs)}${it.flag ? ` 〔확인 필요: ${it.flag}〕` : ''}`)
-        : ['- 이 항목에 해당하는 기록이 없습니다.'];
-      return `## ${s.title}\n${lines.join('\n')}`;
-    })
-    .join('\n\n');
+  return (it) => `- ${PREFIX[it.kind] ?? ''}${it.text}${cite(it.evidence)}${citeComments(it.comment_refs)}${it.flag ? ` 〔확인 필요: ${it.flag}〕` : ''}`;
 }

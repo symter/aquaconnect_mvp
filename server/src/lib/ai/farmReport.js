@@ -5,10 +5,12 @@
 import { fetchRealtimeObservations, pickPreferredObservation } from '../nifs.js';
 import { fetchRedTide } from '../redtide.js';
 import { parseDraft, renderDraft, verifyDraft } from './draft.js';
+import { approvedExamples } from './examples.js';
 import { analyzeMemos, formatCount, summarizeFarm } from './memoAnalysis.js';
 import { summarizeField } from './memoExtract.js';
 import { AiError, chat } from './model.js';
-import { FARM_REPORT_PROMPT, FARM_PROMPT_VERSION } from './prompts.js';
+import { FARM_REPORT_PROMPT, FARM_PROMPT_VERSION, SUMMARIZE_PROMPT_VERSION } from './prompts.js';
+import { condense } from './staged.js';
 
 const NL = '\n';
 const KST = 9 * 3600_000;
@@ -137,6 +139,7 @@ function formMeta({ numbered, an, prevAn, pub }) {
  * prevMemos: 직전 같은 길이 기간의 메모(비교용, 없으면 [])
  */
 export async function draftFarmReport({ farm, from, to, memos, comments, prevMemos, candidates, model, onResult }) {
+  const examples = await approvedExamples(farm.org_id, 'farm', { excludeFarmId: farm.id });
   const sorted = [...memos].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
   const numbered = sorted.map((m, i) => ({
     id: i + 1,
@@ -194,7 +197,8 @@ export async function draftFarmReport({ farm, from, to, memos, comments, prevMem
     : '(없음)';
 
   const pub = await publicData(farm, from, to);
-  const input = [
+  const memoHeader = '[이번 기간 현장 메모 — 1순위 근거]';
+  const parts = (memoPart, commentPart) => [
     `기간: ${from} ~ ${to} (한국 시간)${NL}양식장: ${farm.name} / 지역: ${farm.region || '미입력'} / 주소: ${farm.address || '미입력'}`,
     [
       '[선택 범위 — 사용자가 고른 기록만 입력되었다]',
@@ -204,15 +208,33 @@ export async function draftFarmReport({ farm, from, to, memos, comments, prevMem
     ].join(NL),
     `[집계 — 코드가 계산한 값. 그대로 쓰고 직접 계산하지 않는다]${NL}${tally(an).join(NL)}`,
     `[후속 확인 필요]${NL}${openLines}`,
-    `[이번 기간 현장 메모 — 1순위 근거]${NL}${memoLines.length ? memoLines.join(NL) : '(메모 없음)'}`,
-    commentBlock,
+    memoPart,
+    commentPart,
     prevBlock,
     `[공공데이터 — 외부 관측(보조 자료). 양식장 수조 실측값이 아님]${NL}${pub.lines.join(NL)}`,
   ]
     .filter(Boolean)
     .join(NL + NL);
+  // 검증은 언제나 원문 전체(input)와 대조한다. 모델에는 길면 중간 정리본(sendInput)을 보낸다.
+  const input = parts(`${memoHeader}${NL}${memoLines.length ? memoLines.join(NL) : '(메모 없음)'}`, commentBlock);
 
-  const { text, model: usedModel } = await chat(FARM_REPORT_PROMPT, input, { model, maxTokens: 16000, json: true, onResult });
+  // 메모 한 건 + 그 메모에 달린 댓글이 한 단위(같은 묶음에 들어간다).
+  const lineOf = new Map(an.sorted.map((m, i) => [m.n, memoLines[i]]));
+  const units = an.sorted.map((m) => {
+    const cs = commentRows.filter((c) => c.memoN === m.n);
+    return {
+      ids: [m.n],
+      refs: cs.map((c) => c.key),
+      text: [lineOf.get(m.n), ...cs.map((c) => `  - ${c.key} ${c.date} ${c.author}: ${c.body.replace(/\s+/g, ' ')}${c.late ? ' 〔기간 이후 추가 기록〕' : ''}`)].join(NL),
+    };
+  });
+  const condensed = await condense(units, parts('', '').length, { model, onResult });
+  const sendInput = condensed
+    ? parts(`[이번 기간 현장 메모 — 메모가 많아 묶음별로 먼저 정리한 항목. 각 항목의 [#번호]가 근거 메모이고 〔댓글 …〕은 근거 댓글]${NL}${condensed.block}`, '')
+    : input;
+
+  const system = FARM_REPORT_PROMPT + (examples?.text ?? '');
+  const { text, model: usedModel } = await chat(system, sendInput, { model, maxTokens: 16000, json: true, onResult });
   const raw = parseDraft(text);
   if (!raw) throw new AiError('AI가 정해진 형식(JSON)으로 작성하지 못했습니다. 다시 만들어 주세요.');
   const source = {
@@ -221,6 +243,10 @@ export async function draftFarmReport({ farm, from, to, memos, comments, prevMem
     comments: commentRows,
   };
   const checked = verifyDraft(raw, source, input);
+  // 중간 정리에서 근거가 맞지 않아 버린 항목도 검증 목록에 남겨 전문가가 보게 한다.
+  for (const st of condensed?.stages ?? []) {
+    for (const r of st.rejected) checked.checks.push({ section: '중간 정리', text: r.text, problem: `${st.label}: ${r.reason} → 항목에서 제외함` });
+  }
   const body = renderDraft(checked.draft, source);
 
   return {
@@ -236,6 +262,15 @@ export async function draftFarmReport({ farm, from, to, memos, comments, prevMem
       prevMemos: prevNumbered.map((m) => ({ n: m.n, id: m.uuid, date: m.date, kind: m.kind, body: m.body })),
       comments: commentRows,
       meta: formMeta({ numbered, an, prevAn, pub: pub.data }),
+      examples: examples?.used ?? [],
+      ...(condensed
+        ? {
+            staged: {
+              promptVersion: SUMMARIZE_PROMPT_VERSION,
+              stages: condensed.stages.map((st) => ({ label: st.label, entries: st.entries, rejected: st.rejected.length, fallbacks: st.fallbacks })),
+            },
+          }
+        : {}),
     },
   };
 }

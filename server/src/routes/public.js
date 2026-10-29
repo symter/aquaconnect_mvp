@@ -38,6 +38,74 @@ publicRouter.get('/reports/:token', async (req, res) => {
   });
 });
 
+async function activeLink(token) {
+  const { rows } = await query('select * from share_links where token = $1', [token]);
+  const link = rows[0];
+  const isActive = link && !link.revoked_at && (!link.expires_at || new Date(link.expires_at) > new Date());
+  return isActive ? link : null;
+}
+
+const ymd = (value) => {
+  if (typeof value === 'string') return value.slice(0, 10);
+  const d = new Date(value);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+/** 양식장이 받은 AI 관리 리포트(발송 스냅샷) — 메모 원문·검증 메모 같은 내부 자료는 싣지 않는다. */
+function toSentAiReportJson(s) {
+  return {
+    id: s.report_id,
+    type: 'farm',
+    farmId: s.farm_id,
+    farmName: s.farm_name,
+    orgName: s.org_name,
+    periodStart: ymd(s.period_start),
+    periodEnd: ymd(s.period_end),
+    status: 'sent',
+    version: s.version,
+    model: '',
+    memoCount: s.memo_count,
+    commentCount: s.comment_count,
+    checkCount: 0,
+    edited: (s.edited_sections ?? []).length > 0,
+    createdByName: '',
+    createdAt: s.sent_at,
+    confirmedByName: s.approved_by_name,
+    confirmedAt: s.approved_at,
+    sentByName: s.sent_by_name,
+    sentAt: s.sent_at,
+    body: s.body,
+    finalOpinion: s.final_opinion,
+    editedSections: s.edited_sections ?? [],
+    meta: s.meta,
+  };
+}
+
+// 받은 AI 관리 리포트 목록: 리포트마다 가장 최근 발송본 하나(새 판을 만들어도 다시 발송될 때까지 이전 발송본).
+publicRouter.get('/reports/:token/ai-reports', async (req, res) => {
+  const link = await activeLink(req.params.token);
+  if (!link) return res.status(404).json({ error: '링크가 만료되었거나 존재하지 않습니다.' });
+  const { rows } = await query(
+    `select * from (
+       select distinct on (report_id) * from ai_report_sends where farm_id = $1 order by report_id, sent_at desc
+     ) latest order by sent_at desc`,
+    [link.farm_id],
+  );
+  res.json(rows.map((s) => ({ ...toSentAiReportJson(s), body: undefined, meta: undefined })));
+});
+
+publicRouter.get('/reports/:token/ai-reports/:reportId', async (req, res) => {
+  const link = await activeLink(req.params.token);
+  if (!link) return res.status(404).json({ error: '링크가 만료되었거나 존재하지 않습니다.' });
+  if (!/^[0-9a-f-]{36}$/i.test(req.params.reportId)) return res.status(404).json({ error: '리포트를 찾을 수 없습니다.' });
+  const { rows } = await query(
+    'select * from ai_report_sends where farm_id = $1 and report_id = $2 order by sent_at desc limit 1',
+    [link.farm_id, req.params.reportId],
+  );
+  if (!rows[0]) return res.status(404).json({ error: '리포트를 찾을 수 없습니다.' });
+  res.json(toSentAiReportJson(rows[0]));
+});
+
 const INQUIRY_MAX_LENGTH = 500;
 // No login on this route, so cap how fast one link can post.
 const INQUIRIES_PER_LINK_PER_HOUR = 10;
