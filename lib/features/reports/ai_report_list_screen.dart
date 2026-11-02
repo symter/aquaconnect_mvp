@@ -130,7 +130,7 @@ class _IntroCard extends StatelessWidget {
                     size: 13, color: s.configured ? AppColors.good : AppColors.warningDark),
                 const SizedBox(width: 5),
                 Expanded(
-                  child: Text(s.configured ? 'AI 연결됨 · 기본 모델 ${s.model}' : '미연결 — ${s.note}',
+                  child: Text(s.configured ? 'AI 연결됨 · ${_autoModelLabel(s)}' : '미연결 — ${s.note}',
                       style: TextStyle(
                           fontSize: 11, fontWeight: FontWeight.w700, color: s.configured ? AppColors.goodDark : AppColors.warningDark)),
                 ),
@@ -142,13 +142,19 @@ class _IntroCard extends StatelessWidget {
   }
 }
 
+/// "Gemini 모델 자동 선택 · 지금 Gemini 3.8 Flash".
+String _autoModelLabel(AiModelStatus s) {
+  final next = s.nextModel;
+  return '${s.providerLabel.isEmpty ? 'AI' : s.providerLabel} 모델 자동 선택${next == null ? '' : ' · 지금 ${next.label}'}';
+}
+
 String _resetLabel(DateTime? resetsAt) {
   if (resetsAt == null) return '';
   return '${DateFormat('M/d HH:mm').format(resetsAt.toLocal())} 초기화';
 }
 
-/// 모델별 오늘 사용량 — counted from this server's own requests, since
-/// Gemini doesn't report the real remaining quota.
+/// 모델별 오늘 사용량 — counted from this server's own requests, since the
+/// AI providers don't report the real remaining quota.
 class AiUsageCard extends StatelessWidget {
   const AiUsageCard({super.key, required this.status});
   final AiModelStatus status;
@@ -174,7 +180,8 @@ class AiUsageCard extends StatelessWidget {
             AiModelUsageRow(option: m),
             const SizedBox(height: 10),
           ],
-          const Text('이 앱에서 보낸 요청 기준이에요. 같은 키를 다른 곳에서 쓰면 실제로 남은 양은 더 적을 수 있어요.',
+          const Text('위 모델부터 차례로 써요. 한도가 떨어지면 다음 모델로 자동으로 넘어가요. '
+              '이 앱에서 보낸 요청 기준이라, 같은 키를 다른 곳에서 쓰면 실제로 남은 양은 더 적을 수 있어요.',
               style: TextStyle(fontSize: 10.5, color: AppColors.textMuted, height: 1.4)),
         ],
       ),
@@ -190,7 +197,8 @@ class AiModelUsageRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final m = option;
-    final ratio = m.dailyLimit == 0 ? 1.0 : (m.usedToday / m.dailyLimit).clamp(0.0, 1.0);
+    final limit = m.dailyLimit;
+    final ratio = limit == null ? 0.0 : (limit == 0 ? 1.0 : (m.usedToday / limit).clamp(0.0, 1.0));
     final color = m.exhausted
         ? AppColors.danger
         : ratio >= 0.75
@@ -208,7 +216,11 @@ class AiModelUsageRow extends StatelessWidget {
             else
               const Spacer(),
             Text(
-              m.exhausted ? '오늘 소진 (${m.usedToday}/${m.dailyLimit})' : '남은 ${m.remaining}회 · ${m.usedToday}/${m.dailyLimit}',
+              limit == null
+                  ? '오늘 ${m.usedToday}회 사용 · 하루 한도 없음'
+                  : m.exhausted
+                      ? '오늘 소진 (${m.usedToday}/$limit)'
+                      : '남은 ${m.remaining}회 · ${m.usedToday}/$limit',
               style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: m.exhausted ? AppColors.dangerDark : AppColors.textTertiary),
             ),
           ],
@@ -221,7 +233,7 @@ class AiModelUsageRow extends StatelessWidget {
         if (m.limited && !m.exhausted)
           const Padding(
             padding: EdgeInsets.only(top: 3),
-            child: Text('최근 요청이 한도 초과로 거절됐어요. 잠시 후 다시 시도해 주세요.',
+            child: Text('최근 요청이 한도 초과로 거절됐어요. 그동안은 다음 모델을 먼저 써요.',
                 style: TextStyle(fontSize: 10.5, color: AppColors.warningInk)),
           ),
       ],
@@ -347,19 +359,6 @@ class _AiReportCreateScreenState extends ConsumerState<AiReportCreateScreen> {
   final Set<String> _excluded = {};
   bool _includeComments = true;
   bool _busy = false;
-  String? _model;
-
-  /// The picked model, else the server default, else the first with
-  /// requests left today.
-  AiModelOption? _effectiveModel(AiModelStatus? status) {
-    final models = status?.models ?? const <AiModelOption>[];
-    if (status == null || models.isEmpty) return null;
-    AiModelOption? byId(String? id) => models.where((m) => m.id == id).firstOrNull;
-    return byId(_model) ??
-        [byId(status.model), ...models].whereType<AiModelOption>().where((m) => !m.exhausted).firstOrNull ??
-        byId(status.model) ??
-        models.first;
-  }
 
   List<Memo> _inRange(List<Memo> memos, DateTime from, DateTime to) {
     final end = to.add(const Duration(days: 1));
@@ -370,7 +369,7 @@ class _AiReportCreateScreenState extends ConsumerState<AiReportCreateScreen> {
       ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
   }
 
-  Future<void> _generate(List<Memo> picked, DateTime from, DateTime to, bool allPicked, String? model) async {
+  Future<void> _generate(List<Memo> picked, DateTime from, DateTime to, bool allPicked) async {
     setState(() => _busy = true);
     try {
       final report = await ref.read(aiReportRepositoryProvider).generate(
@@ -379,7 +378,6 @@ class _AiReportCreateScreenState extends ConsumerState<AiReportCreateScreen> {
             to: _ymd.format(to),
             memoIds: allPicked ? null : picked.map((m) => m.id).toList(),
             includeComments: _includeComments,
-            model: model,
           );
       ref.invalidate(aiReportsProvider(widget.farmId));
       ref.invalidate(aiModelStatusProvider);
@@ -396,7 +394,6 @@ class _AiReportCreateScreenState extends ConsumerState<AiReportCreateScreen> {
   Widget build(BuildContext context) {
     final memosAsync = ref.watch(memosProvider(widget.farmId));
     final status = ref.watch(aiModelStatusProvider).valueOrNull;
-    final model = _effectiveModel(status);
     final (from, to) = _preset.range(DateTime.now());
 
     return Scaffold(
@@ -512,28 +509,9 @@ class _AiReportCreateScreenState extends ConsumerState<AiReportCreateScreen> {
                           subtitle: Text('선택한 메모의 댓글 $comments개 · 폐사 집계에는 넣지 않아요',
                               style: const TextStyle(fontSize: 11.5, color: AppColors.textTertiary)),
                         ),
-                        if (status != null && status.models.isNotEmpty) ...[
+                        if (status != null && status.configured) ...[
                           const SizedBox(height: 14),
-                          Row(
-                            children: [
-                              const Expanded(
-                                child: Text('AI 모델', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
-                              ),
-                              Text(_resetLabel(status.resetsAt), style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          for (final m in status.models) ...[
-                            _ModelTile(
-                              option: m,
-                              selected: m.id == model?.id,
-                              isDefault: m.id == status.model,
-                              onTap: _busy || m.exhausted ? null : () => setState(() => _model = m.id),
-                            ),
-                            const SizedBox(height: 8),
-                          ],
-                          const Text('남은 횟수는 이 앱에서 보낸 요청 기준이에요.',
-                              style: TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
+                          _AutoModelNote(status: status),
                         ],
                       ],
                     ),
@@ -542,11 +520,11 @@ class _AiReportCreateScreenState extends ConsumerState<AiReportCreateScreen> {
                     padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
                     decoration: const BoxDecoration(color: AppColors.surface, border: Border(top: BorderSide(color: AppColors.border))),
                     child: PrimaryButton(
-                      label: model == null ? 'AI 리포트 만들기' : 'AI 리포트 만들기 · ${model.label}',
+                      label: 'AI 리포트 만들기',
                       icon: Icons.auto_awesome,
-                      onPressed: _busy || picked.isEmpty || (model?.exhausted ?? false)
+                      onPressed: _busy || picked.isEmpty || status?.configured != true
                           ? null
-                          : () => _generate(picked, from, to, picked.length == inRange.length, model?.id),
+                          : () => _generate(picked, from, to, picked.length == inRange.length),
                     ),
                   ),
                 ],
@@ -609,60 +587,29 @@ class _MemoPickTile extends StatelessWidget {
   }
 }
 
-class _ModelTile extends StatelessWidget {
-  const _ModelTile({required this.option, required this.selected, required this.isDefault, required this.onTap});
-
-  final AiModelOption option;
-  final bool selected;
-  final bool isDefault;
-  final VoidCallback? onTap;
+/// The model is never picked by hand: the server tries the best one with
+/// quota left and falls back to lower ones. This just says which comes first.
+class _AutoModelNote extends StatelessWidget {
+  const _AutoModelNote({required this.status});
+  final AiModelStatus status;
 
   @override
   Widget build(BuildContext context) {
-    final m = option;
-    return Material(
-      color: selected ? AppColors.brandTint : AppColors.surface,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(12, 10, 14, 10),
-          decoration: BoxDecoration(
-            border: Border.all(color: selected ? AppColors.brand : AppColors.border, width: selected ? 1.5 : 1),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Opacity(
-            opacity: m.exhausted ? 0.5 : 1,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(selected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                    size: 18, color: selected ? AppColors.brand : AppColors.textFaint),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(m.label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
-                          if (isDefault) ...[
-                            const SizedBox(width: 6),
-                            const Text('기본', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: AppColors.brand)),
-                          ],
-                        ],
-                      ),
-                      Text(m.description, style: const TextStyle(fontSize: 11, color: AppColors.textTertiary)),
-                      const SizedBox(height: 6),
-                      AiModelUsageRow(option: m, dense: true),
-                    ],
-                  ),
-                ),
-              ],
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(color: AppColors.neutralCard, borderRadius: BorderRadius.circular(12)),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.auto_awesome, size: 15, color: AppColors.textTertiary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '${_autoModelLabel(status)}\n한도가 떨어지면 다음 모델로 자동으로 넘어가요.',
+              style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary, height: 1.45),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -942,13 +889,12 @@ class AiAgencyReportCreateScreen extends ConsumerStatefulWidget {
 class _AiAgencyReportCreateScreenState extends ConsumerState<AiAgencyReportCreateScreen> {
   _Preset _preset = _Preset.lastMonth;
   bool _busy = false;
-  String? _model;
 
-  Future<void> _generate(String? model) async {
+  Future<void> _generate() async {
     final (from, to) = _preset.range(DateTime.now());
     setState(() => _busy = true);
     try {
-      final report = await ref.read(aiReportRepositoryProvider).generateAgency(from: _ymd.format(from), to: _ymd.format(to), model: model);
+      final report = await ref.read(aiReportRepositoryProvider).generateAgency(from: _ymd.format(from), to: _ymd.format(to));
       ref.invalidate(aiAgencyReportsProvider);
       ref.invalidate(aiModelStatusProvider);
       if (mounted) context.pushReplacement('/ai-reports/${report.id}');
@@ -963,11 +909,6 @@ class _AiAgencyReportCreateScreenState extends ConsumerState<AiAgencyReportCreat
   @override
   Widget build(BuildContext context) {
     final status = ref.watch(aiModelStatusProvider).valueOrNull;
-    final models = status?.models ?? const <AiModelOption>[];
-    AiModelOption? byId(String? id) => models.where((m) => m.id == id).firstOrNull;
-    final model = status == null || models.isEmpty
-        ? null
-        : byId(_model) ?? [byId(status.model), ...models].whereType<AiModelOption>().where((m) => !m.exhausted).firstOrNull ?? models.first;
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -990,19 +931,9 @@ class _AiAgencyReportCreateScreenState extends ConsumerState<AiAgencyReportCreat
                     const SizedBox(height: 8),
                     const Text('이 기간에 남긴 모든 양식장의 메모를 넣어요. 메모가 없는 양식장은 집계에서 "기록 없음"이에요.',
                         style: TextStyle(fontSize: 11.5, color: AppColors.textTertiary, height: 1.45)),
-                    if (models.isNotEmpty) ...[
+                    if (status != null && status.configured) ...[
                       const SizedBox(height: 18),
-                      const Text('AI 모델', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
-                      const SizedBox(height: 8),
-                      for (final m in models) ...[
-                        _ModelTile(
-                          option: m,
-                          selected: m.id == model?.id,
-                          isDefault: m.id == status!.model,
-                          onTap: _busy || m.exhausted ? null : () => setState(() => _model = m.id),
-                        ),
-                        const SizedBox(height: 8),
-                      ],
+                      _AutoModelNote(status: status),
                     ],
                   ],
                 ),
@@ -1011,9 +942,9 @@ class _AiAgencyReportCreateScreenState extends ConsumerState<AiAgencyReportCreat
                 padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
                 decoration: const BoxDecoration(color: AppColors.surface, border: Border(top: BorderSide(color: AppColors.border))),
                 child: PrimaryButton(
-                  label: model == null ? '종합 리포트 만들기' : '종합 리포트 만들기 · ${model.label}',
+                  label: '종합 리포트 만들기',
                   icon: Icons.auto_awesome,
-                  onPressed: _busy || status?.configured != true || (model?.exhausted ?? false) ? null : () => _generate(model?.id),
+                  onPressed: _busy || status?.configured != true ? null : _generate,
                 ),
               ),
             ],

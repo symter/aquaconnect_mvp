@@ -1,3 +1,4 @@
+import '../../../core/config/ai_settings.dart';
 import '../../models/ai_report.dart';
 import '../../models/share_link.dart';
 import '../../services/api_client.dart';
@@ -15,7 +16,7 @@ class RemoteAiReportRepository implements AiReportRepository {
 
   @override
   Future<AiModelStatus> status() async {
-    final json = await _api.get('/api/ai-reports/status') as Map<String, dynamic>;
+    final json = await _api.get('/api/ai-reports/status', query: {'provider': AiSettings.provider.name}) as Map<String, dynamic>;
     return AiModelStatus.fromJson(json);
   }
 
@@ -35,19 +36,18 @@ class RemoteAiReportRepository implements AiReportRepository {
     required String to,
     List<String>? memoIds,
     bool includeComments = true,
-    String? model,
   }) async =>
       _report(await _api.post('/api/ai-reports/farm/$farmId', body: {
         'from': from,
         'to': to,
         'memoIds': ?memoIds,
         'includeComments': includeComments,
-        'model': ?model,
+        'provider': AiSettings.provider.name,
       }));
 
   @override
-  Future<AiReport> generateAgency({required String from, required String to, String? model}) async =>
-      _report(await _api.post('/api/ai-reports/agency', body: {'from': from, 'to': to, 'model': ?model}));
+  Future<AiReport> generateAgency({required String from, required String to}) async =>
+      _report(await _api.post('/api/ai-reports/agency', body: {'from': from, 'to': to, 'provider': AiSettings.provider.name}));
 
   @override
   Future<AiReport> updateBody(String id, String body) async => _report(await _api.put('/api/ai-reports/$id', body: {'body': body}));

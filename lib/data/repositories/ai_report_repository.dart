@@ -2,7 +2,8 @@ import '../models/ai_report.dart';
 import '../models/share_link.dart';
 
 abstract class AiReportRepository {
-  /// Whether the server has an AI model configured (never exposes the key).
+  /// Whether the server has the [AiSettings.provider] AI configured (never
+  /// exposes the key), plus its models' usage today.
   Future<AiModelStatus> status();
 
   /// The farm's AI reports, newest first (summaries — no body).
@@ -14,19 +15,19 @@ abstract class AiReportRepository {
   Future<AiReport> getReport(String id);
 
   /// Asks the AI for a new draft from the farm's memos between [from] and
-  /// [to] (KST dates, inclusive). [memoIds] null means every memo in range;
-  /// [model] null uses the server's default model.
+  /// [to] (KST dates, inclusive). [memoIds] null means every memo in range.
+  /// The server picks the model itself (best first, falling back to lower
+  /// ones when a model's quota runs out).
   Future<AiReport> generate({
     required String farmId,
     required String from,
     required String to,
     List<String>? memoIds,
     bool includeComments = true,
-    String? model,
   });
 
   /// A 종합 리포트 over every farm's memos between [from] and [to].
-  Future<AiReport> generateAgency({required String from, required String to, String? model});
+  Future<AiReport> generateAgency({required String from, required String to});
 
   Future<AiReport> updateBody(String id, String body);
 

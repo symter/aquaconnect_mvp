@@ -9,9 +9,9 @@ import { draftAgencyReport } from '../lib/ai/agencyReport.js';
 import { evidenceOf } from '../lib/ai/draft.js';
 import { draftFarmReport, kstDate } from '../lib/ai/farmReport.js';
 import { analyzeMemos } from '../lib/ai/memoAnalysis.js';
-import { AiError, MODEL_CATALOG, modelStatus } from '../lib/ai/model.js';
+import { AiError, DEFAULT_PROVIDER, isProvider, modelStatus, notConfiguredMessage } from '../lib/ai/model.js';
 import { AGENCY_SECTIONS, FARM_SECTIONS } from '../lib/ai/prompts.js';
-import { modelsWithUsage, recordUsage } from '../lib/ai/usage.js';
+import { modelPlan, modelsWithUsage, recordUsage } from '../lib/ai/usage.js';
 
 export const aiReportsRouter = Router();
 aiReportsRouter.use(requireAuth);
@@ -150,11 +150,17 @@ async function transition(client, id, from, set, params = []) {
   return rows[0] ?? null;
 }
 
-// 연결 상태 + 고를 수 있는 모델과 모델별 오늘 사용량(이 서버가 보낸 요청 기준).
+// 앱이 고른 AI(lib/main.dart). 없으면 Gemini.
+const providerOf = (v) => (v == null || v === '' ? DEFAULT_PROVIDER : isProvider(String(v)) ? String(v) : null);
+
+// 연결 상태 + 모델별 오늘 사용량(이 서버가 보낸 요청 기준). model 은 다음 리포트에 먼저 시도할(자동 선택된) 모델.
+// ?provider=gemini|claude
 aiReportsRouter.get('/status', async (req, res) => {
-  const { configured, model, note } = modelStatus();
-  const usage = await modelsWithUsage();
-  res.json({ configured, model, note, ...usage });
+  const provider = providerOf(req.query.provider);
+  if (!provider) return res.status(400).json({ error: '알 수 없는 AI 입니다.' });
+  const usage = await modelsWithUsage(provider);
+  const { models } = await modelPlan(provider);
+  res.json({ ...modelStatus(provider), model: models[0] ?? '', ...usage });
 });
 
 aiReportsRouter.get('/farm/:farmId', async (req, res) => {
@@ -227,18 +233,20 @@ aiReportsRouter.get('/:id/versions', async (req, res) => {
   );
 });
 
-// Body: { from: 'YYYY-MM-DD', to: 'YYYY-MM-DD', memoIds?: string[], includeComments?: boolean, model? }
+// Body: { from: 'YYYY-MM-DD', to: 'YYYY-MM-DD', memoIds?: string[], includeComments?: boolean, provider? }
+// 모델은 자동 선택(modelPlan): 좋은 모델부터 쓰고 한도가 떨어지면 낮은 모델로 넘어간다.
 // memoIds omitted → every memo of the farm in the period.
 aiReportsRouter.post('/farm/:farmId', async (req, res) => {
   const orgId = await orgIdForMember(req.memberId);
   const farm = await loadFarm(orgId, req.params.farmId);
   if (!farm) return res.status(404).json({ error: '양식장을 찾을 수 없습니다.' });
 
-  const { from, to, memoIds, includeComments = true, model } = req.body ?? {};
-  if (model != null && !MODEL_CATALOG.some((m) => m.id === model)) return res.status(400).json({ error: '고를 수 없는 AI 모델입니다.' });
+  const { from, to, memoIds, includeComments = true } = req.body ?? {};
+  const provider = providerOf(req.body?.provider);
+  if (!provider) return res.status(400).json({ error: '알 수 없는 AI 입니다.' });
   const p = periodOf(from, to);
   if (p.error) return res.status(400).json({ error: p.error });
-  if (!modelStatus().configured) return res.status(503).json({ error: 'AI가 연결되지 않았습니다. 서버에 MODEL_API_KEY 를 설정해 주세요.' });
+  if (!modelStatus(provider).configured) return res.status(503).json({ error: notConfiguredMessage(provider) });
 
   const { rows: periodMemos } = await query(
     `select id, content, tags, author_type, author_name, created_at from memos
@@ -282,7 +290,7 @@ aiReportsRouter.post('/farm/:farmId', async (req, res) => {
       comments,
       prevMemos,
       candidates: periodMemos.length,
-      model: model ?? undefined,
+      plan: await modelPlan(provider),
       onResult: (r) => recordUsage({ orgId, memberId: req.memberId, ...r }),
     });
   } catch (err) {
@@ -318,14 +326,15 @@ aiReportsRouter.post('/farm/:farmId', async (req, res) => {
   res.status(201).json(toAiReportJson(rows[0]));
 });
 
-// 관리원 종합 리포트 만들기. Body: { from, to, model? }
+// 관리원 종합 리포트 만들기. Body: { from, to, provider? }
 aiReportsRouter.post('/agency', async (req, res) => {
   const orgId = await orgIdForMember(req.memberId);
-  const { from, to, model } = req.body ?? {};
-  if (model != null && !MODEL_CATALOG.some((m) => m.id === model)) return res.status(400).json({ error: '고를 수 없는 AI 모델입니다.' });
+  const { from, to } = req.body ?? {};
+  const provider = providerOf(req.body?.provider);
+  if (!provider) return res.status(400).json({ error: '알 수 없는 AI 입니다.' });
   const p = periodOf(from, to);
   if (p.error) return res.status(400).json({ error: p.error });
-  if (!modelStatus().configured) return res.status(503).json({ error: 'AI가 연결되지 않았습니다. 서버에 MODEL_API_KEY 를 설정해 주세요.' });
+  if (!modelStatus(provider).configured) return res.status(503).json({ error: notConfiguredMessage(provider) });
 
   const { rows: farms } = await query('select * from farms where org_id = $1 order by name', [orgId]);
   if (!farms.length) return res.status(400).json({ error: '등록된 양식장이 없습니다.' });
@@ -345,7 +354,7 @@ aiReportsRouter.post('/agency', async (req, res) => {
       to,
       farms,
       memos,
-      model: model ?? undefined,
+      plan: await modelPlan(provider),
       onResult: (r) => recordUsage({ orgId, memberId: req.memberId, ...r }),
     });
   } catch (err) {

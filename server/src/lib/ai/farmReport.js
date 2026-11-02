@@ -138,7 +138,7 @@ function formMeta({ numbered, an, prevAn, pub }) {
  * comments: [{ memo_id, author_name, content, created_at }]
  * prevMemos: 직전 같은 길이 기간의 메모(비교용, 없으면 [])
  */
-export async function draftFarmReport({ farm, from, to, memos, comments, prevMemos, candidates, model, onResult }) {
+export async function draftFarmReport({ farm, from, to, memos, comments, prevMemos, candidates, plan, onResult }) {
   const examples = await approvedExamples(farm.org_id, 'farm', { excludeFarmId: farm.id });
   const sorted = [...memos].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
   const numbered = sorted.map((m, i) => ({
@@ -228,13 +228,13 @@ export async function draftFarmReport({ farm, from, to, memos, comments, prevMem
       text: [lineOf.get(m.n), ...cs.map((c) => `  - ${c.key} ${c.date} ${c.author}: ${c.body.replace(/\s+/g, ' ')}${c.late ? ' 〔기간 이후 추가 기록〕' : ''}`)].join(NL),
     };
   });
-  const condensed = await condense(units, parts('', '').length, { model, onResult });
+  const condensed = await condense(units, parts('', '').length, { plan, onResult });
   const sendInput = condensed
     ? parts(`[이번 기간 현장 메모 — 메모가 많아 묶음별로 먼저 정리한 항목. 각 항목의 [#번호]가 근거 메모이고 〔댓글 …〕은 근거 댓글]${NL}${condensed.block}`, '')
     : input;
 
   const system = FARM_REPORT_PROMPT + (examples?.text ?? '');
-  const { text, model: usedModel } = await chat(system, sendInput, { model, maxTokens: 16000, json: true, onResult });
+  const { text, model: usedModel } = await chat(system, sendInput, { plan, maxTokens: 16000, json: true, onResult });
   const raw = parseDraft(text);
   if (!raw) throw new AiError('AI가 정해진 형식(JSON)으로 작성하지 못했습니다. 다시 만들어 주세요.');
   const source = {

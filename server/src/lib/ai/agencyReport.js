@@ -62,7 +62,7 @@ async function stationTemps(farms) {
 /**
  * farms: 관리원의 양식장 행, memos: 기간 메모(모든 양식장) [{ id, farm_id, content, tags, author_type, author_name, created_at }]
  */
-export async function draftAgencyReport({ orgName, from, to, farms, memos, model, onResult }) {
+export async function draftAgencyReport({ orgName, from, to, farms, memos, plan, onResult }) {
   const temps = await stationTemps(farms);
   let n = 0;
   const perFarm = farms.map((f) => {
@@ -115,7 +115,7 @@ export async function draftAgencyReport({ orgName, from, to, farms, memos, model
     blocks.join(NL + NL),
   ].join(NL + NL);
 
-  const { text, model: usedModel } = await chat(AGENCY_REPORT_PROMPT, input, { model, maxTokens: 12000, onResult });
+  const { text, model: usedModel } = await chat(AGENCY_REPORT_PROMPT, input, { plan, maxTokens: 12000, onResult });
   const body = normalizeBody(text);
   const titles = [...body.matchAll(/^## (.+)$/gm)].map((m) => m[1].trim());
   if (!AGENCY_SECTIONS.every((t) => titles.includes(t))) {

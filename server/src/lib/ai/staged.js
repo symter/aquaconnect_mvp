@@ -93,8 +93,8 @@ const entryUnit = (e) => ({
   text: `[#${e.evidence.join(', #')}]${e.date ? ` ${e.date}` : ''} ${e.text}${e.refs.length ? ` 〔댓글 ${e.refs.join(', ')}〕` : ''}`,
 });
 
-async function summarize(units, { model, onResult }) {
-  const { text } = await chat(SUMMARIZE_PROMPT, units.map((u) => u.text).join(NL), { model, maxTokens: 8000, json: true, onResult });
+async function summarize(units, { plan, onResult }) {
+  const { text } = await chat(SUMMARIZE_PROMPT, units.map((u) => u.text).join(NL), { plan, maxTokens: 8000, json: true, onResult });
   const body = text.replace(/^```\w*\n|\n```$/g, '');
   let parsed;
   try {
@@ -110,7 +110,7 @@ async function summarize(units, { model, onResult }) {
  * fixedChars: 메모와 상관없이 최종 입력에 들어가는 글자 수(집계·공공데이터 등).
  * → null(나눌 필요 없음) 또는 { block, stages:[{ label, entries, rejected, fallbacks }] }
  */
-export async function condense(units, fixedChars, { model, onResult }) {
+export async function condense(units, fixedChars, { plan, onResult }) {
   const budget = inputBudget();
   const fits = (us) => fixedChars + us.reduce((n, u) => n + u.text.length + 1, 0) <= budget;
   if (fits(units)) return null;
@@ -126,7 +126,7 @@ export async function condense(units, fixedChars, { model, onResult }) {
     }
     const next = [];
     for (const [i, chunk] of chunks.entries()) {
-      const r = await summarize(chunk, { model, onResult });
+      const r = await summarize(chunk, { plan, onResult });
       stages.push({ label: `${level === 0 ? '중간 정리' : `중간 정리 ${level + 1}차`} ${i + 1}/${chunks.length}`, entries: r.entries.length, rejected: r.rejected, fallbacks: r.fallbacks });
       next.push(...r.entries.map(entryUnit));
     }

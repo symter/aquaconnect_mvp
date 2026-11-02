@@ -26,12 +26,11 @@ class MockAiReportRepository implements AiReportRepository {
     required String to,
     List<String>? memoIds,
     bool includeComments = true,
-    String? model,
   }) =>
       throw Exception(_notConnected);
 
   @override
-  Future<AiReport> generateAgency({required String from, required String to, String? model}) => throw Exception(_notConnected);
+  Future<AiReport> generateAgency({required String from, required String to}) => throw Exception(_notConnected);
 
   @override
   Future<AiReport> updateBody(String id, String body) => throw Exception(_notConnected);

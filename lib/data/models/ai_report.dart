@@ -335,31 +335,41 @@ class AiMemoReview {
       );
 }
 
-/// Server AI connection, plus every model staff can pick and how much of
-/// its daily allowance is left.
+/// Server AI connection for the chosen AI, plus its models (in fallback
+/// order) and how much of each one's daily allowance is left.
 class AiModelStatus {
   const AiModelStatus({
     required this.configured,
     required this.model,
     required this.note,
+    this.providerLabel = '',
     this.models = const [],
     this.resetsAt,
   });
 
   final bool configured;
 
-  /// The server's default model id.
+  /// The model the server will try first for the next report (auto-picked:
+  /// the best one with quota left).
   final String model;
   final String note;
+
+  /// 'Gemini' / 'Claude' — the AI chosen in lib/main.dart.
+  final String providerLabel;
+
+  /// Best first — the order the server falls back through.
   final List<AiModelOption> models;
 
-  /// When Google's daily limits next reset (midnight US Pacific).
+  /// When the daily limits next reset (midnight US Pacific).
   final DateTime? resetsAt;
+
+  AiModelOption? get nextModel => models.where((m) => m.id == model).firstOrNull;
 
   factory AiModelStatus.fromJson(Map<String, dynamic> json) => AiModelStatus(
         configured: json['configured'] as bool? ?? false,
         model: json['model'] as String? ?? '',
         note: json['note'] as String? ?? '',
+        providerLabel: json['providerLabel'] as String? ?? '',
         models: ((json['models'] as List<dynamic>?) ?? [])
             .map((e) => AiModelOption.fromJson(e as Map<String, dynamic>))
             .toList(),
@@ -367,9 +377,10 @@ class AiModelStatus {
       );
 }
 
-/// One selectable model. [usedToday] counts requests *this server* sent
-/// since the last reset — Gemini doesn't report the real remaining quota, so
-/// calls made with the same key elsewhere aren't included.
+/// One model in the fallback chain. [usedToday] counts requests *this
+/// server* sent since the last reset — the AI providers don't report the
+/// real remaining quota, so calls made with the same key elsewhere aren't
+/// included. [dailyLimit] null means no daily limit (Claude by default).
 class AiModelOption {
   const AiModelOption({
     required this.id,
@@ -385,25 +396,25 @@ class AiModelOption {
   final String id;
   final String label;
   final String description;
-  final int dailyLimit;
+  final int? dailyLimit;
   final int usedToday;
   final int tokensToday;
 
   /// The model's last call came back 429 (rate/daily limit hit) and nothing
   /// has succeeded since.
   final bool limited;
-  final int remaining;
+  final int? remaining;
 
-  bool get exhausted => remaining <= 0;
+  bool get exhausted => remaining != null && remaining! <= 0;
 
   factory AiModelOption.fromJson(Map<String, dynamic> json) => AiModelOption(
         id: json['id'] as String,
         label: json['label'] as String? ?? json['id'] as String,
         description: json['description'] as String? ?? '',
-        dailyLimit: json['dailyLimit'] as int? ?? 0,
+        dailyLimit: json['dailyLimit'] as int?,
         usedToday: json['usedToday'] as int? ?? 0,
         tokensToday: json['tokensToday'] as int? ?? 0,
         limited: json['limited'] as bool? ?? false,
-        remaining: json['remaining'] as int? ?? 0,
+        remaining: json['remaining'] as int?,
       );
 }
