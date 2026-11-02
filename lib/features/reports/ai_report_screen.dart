@@ -35,6 +35,7 @@ class _AiReportScreenState extends ConsumerState<AiReportScreen> {
       ref.invalidate(aiAgencyReportsProvider);
     } else {
       ref.invalidate(aiReportsProvider(r.farmId!));
+      ref.invalidate(aiFarmSummariesProvider);
     }
   }
 
@@ -284,6 +285,7 @@ class _MetaCard extends ConsumerWidget {
     final stages = ((r.staged?['stages'] as List<dynamic>?) ?? []).length;
     final lines = <String>[
       'AI 작성 · ${r.model} · ${r.createdByName.isEmpty ? '' : '${r.createdByName} · '}${fmt.format(r.createdAt.toLocal())}',
+      if (r.adminReviewedAt != null) '심터 검토 · ${fmt.format(r.adminReviewedAt!.toLocal())}',
       if (stages > 0) '메모가 많아 $stages개 묶음으로 먼저 정리한 뒤 썼어요',
       if (r.examples.isNotEmpty) '승인된 이전 리포트 ${r.examples.length}건을 문체 참고 예시로 썼어요',
       if (r.editedAt != null) '전문가 수정 · ${r.editedByName ?? ''} · ${fmt.format(r.editedAt!.toLocal())}',
@@ -316,7 +318,9 @@ class _MetaCard extends ConsumerWidget {
             Text(
               r.sentAt != null
                   ? '새 판을 고치는 중이에요. 양식장은 다시 발송할 때까지 제${r.version}판을 봅니다.'
-                  : 'AI 초안입니다. 메모에 없는 내용이 없는지 검토한 뒤 확정해 주세요.',
+                  : r.isAuto
+                      ? '월간 자동 초안이에요. 고칠 내용을 고친 뒤 확정하고 어가에 보내 주세요. 보내기 전에는 어가에 보이지 않아요.'
+                      : 'AI 초안입니다. 메모에 없는 내용이 없는지 검토한 뒤 확정해 주세요.',
               style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.warningInk),
             ),
           ],

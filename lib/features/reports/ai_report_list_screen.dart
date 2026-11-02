@@ -13,12 +13,18 @@ import '../../data/models/memo.dart';
 final _ymd = DateFormat('yyyy-MM-dd');
 
 String aiReportPeriodLabel(AiReport r) {
+  final start = DateTime.parse(r.periodStart), end = DateTime.parse(r.periodEnd);
+  if (start.day == 1 && end.year == start.year && end.month == start.month && end.add(const Duration(days: 1)).month != end.month) {
+    return '${start.year}년 ${start.month}월';
+  }
   String md(String ymd) => '${int.parse(ymd.substring(5, 7))}/${int.parse(ymd.substring(8))}';
   return r.periodStart == r.periodEnd ? md(r.periodStart) : '${md(r.periodStart)} ~ ${md(r.periodEnd)}';
 }
 
-/// 리포트 상세 > AI 관리 리포트 — the farm's AI drafts (ported from
-/// symterAI's 관리 리포트), newest first, plus the entry to make a new one.
+/// A farm's reports (전체 리포트 > 양식장, or 리포트 상세 > AI 관리 리포트):
+/// drafts waiting for review first (the monthly auto draft lands here), then
+/// the previous reports, newest first. 새 AI 리포트 stays available for an
+/// off-cycle report.
 class AiReportListScreen extends ConsumerWidget {
   const AiReportListScreen({super.key, required this.farmId});
 
@@ -42,46 +48,76 @@ class AiReportListScreen extends ConsumerWidget {
       body: RefreshIndicator(
         onRefresh: () async {
           ref.invalidate(aiReportsProvider(farmId));
+          ref.invalidate(aiFarmSummariesProvider);
           ref.invalidate(aiModelStatusProvider);
         },
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
           children: [
+            ...reportsAsync.when(
+              loading: () => const [Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()))],
+              error: (e, _) => [Text('불러오지 못했어요: $e', style: const TextStyle(fontSize: 12, color: AppColors.textMuted))],
+              data: (reports) {
+                final pending = reports.where((r) => r.isDraft).toList();
+                final done = reports.where((r) => !r.isDraft).toList();
+                return [
+                  if (pending.isNotEmpty) ...[
+                    Text('검토 대기 ${pending.length}건',
+                        style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: AppColors.warningTintInk)),
+                    const SizedBox(height: 4),
+                    const Text('눌러서 내용을 확인하고, 고칠 곳을 고친 뒤 확정 → 어가에 보내기를 해 주세요.',
+                        style: TextStyle(fontSize: 11.5, color: AppColors.textTertiary)),
+                    const SizedBox(height: 10),
+                    for (final r in pending) ...[
+                      _ReportTile(report: r, highlight: true),
+                      const SizedBox(height: 8),
+                    ],
+                    const SizedBox(height: 12),
+                  ],
+                  const Text('이전 리포트', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+                  const SizedBox(height: 10),
+                  if (done.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 20),
+                      child: Center(
+                        child: Text('아직 확정한 리포트가 없어요', style: TextStyle(fontSize: 12.5, color: AppColors.textMuted)),
+                      ),
+                    ),
+                  for (final r in done) ...[
+                    _ReportTile(report: r),
+                    const SizedBox(height: 8),
+                  ],
+                ];
+              },
+            ),
+            const SizedBox(height: 20),
+            const Divider(height: 1, color: AppColors.divider),
+            const SizedBox(height: 16),
+            const Text('지금 새로 만들기', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.textSecondary)),
+            const SizedBox(height: 4),
+            const Text('매달 초에 지난달 리포트가 자동으로 만들어져요. 다른 기간이 필요할 때만 직접 만드세요.',
+                style: TextStyle(fontSize: 11.5, color: AppColors.textTertiary)),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: status?.configured == true ? () => context.push('/reports/$farmId/ai/new') : null,
+              icon: const Icon(Icons.auto_awesome, size: 16),
+              label: const Text('새 AI 리포트 만들기'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(46),
+                foregroundColor: AppColors.brand,
+                side: const BorderSide(color: AppColors.brandTintBorder),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                textStyle: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800),
+              ),
+            ),
+            const SizedBox(height: 12),
             _IntroCard(status: status),
             if (status != null && status.configured && status.models.isNotEmpty) ...[
               const SizedBox(height: 12),
               AiUsageCard(status: status),
             ],
             const SizedBox(height: 12),
-            PrimaryButton(
-              label: '새 AI 리포트 만들기',
-              icon: Icons.auto_awesome,
-              onPressed: status?.configured == true ? () => context.push('/reports/$farmId/ai/new') : null,
-            ),
-            const SizedBox(height: 12),
             _MemoReviewEntry(farmId: farmId),
-            const SizedBox(height: 20),
-            const Text('지난 AI 리포트', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
-            const SizedBox(height: 10),
-            reportsAsync.when(
-              loading: () => const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator())),
-              error: (e, _) => Text('불러오지 못했어요: $e', style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
-              data: (reports) => reports.isEmpty
-                  ? const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 24),
-                      child: Center(
-                        child: Text('아직 만든 AI 리포트가 없어요', style: TextStyle(fontSize: 12.5, color: AppColors.textMuted)),
-                      ),
-                    )
-                  : Column(
-                      children: [
-                        for (final r in reports) ...[
-                          _ReportTile(report: r),
-                          const SizedBox(height: 8),
-                        ],
-                      ],
-                    ),
-            ),
           ],
         ),
       ),
@@ -242,8 +278,11 @@ class AiModelUsageRow extends StatelessWidget {
 }
 
 class _ReportTile extends StatelessWidget {
-  const _ReportTile({required this.report});
+  const _ReportTile({required this.report, this.highlight = false});
   final AiReport report;
+
+  /// 검토 대기 — outlined so it stands out from the previous reports.
+  final bool highlight;
 
   @override
   Widget build(BuildContext context) {
@@ -256,7 +295,10 @@ class _ReportTile extends StatelessWidget {
         onTap: () => context.push('/ai-reports/${r.id}'),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(border: Border.all(color: AppColors.border), borderRadius: BorderRadius.circular(14)),
+          decoration: BoxDecoration(
+            border: Border.all(color: highlight ? AppColors.warning : AppColors.border, width: highlight ? 1.5 : 1),
+            borderRadius: BorderRadius.circular(14),
+          ),
           child: Row(
             children: [
               Expanded(
@@ -274,6 +316,7 @@ class _ReportTile extends StatelessWidget {
                     const SizedBox(height: 6),
                     Text(
                       [
+                        if (r.adminReviewedAt != null) '심터 검토',
                         '메모 ${r.memoCount}건',
                         if (r.commentCount > 0) '댓글 ${r.commentCount}개',
                         if (r.checkCount > 0) '확인 필요 ${r.checkCount}',
@@ -306,7 +349,7 @@ class AiReportStatusChip extends StatelessWidget {
     final (label, bg, fg) = switch (report.status) {
       'sent' => ('발송', AppColors.brandTint, AppColors.brand),
       'confirmed' => ('확정', AppColors.goodTint, AppColors.goodDark),
-      _ => ('초안', AppColors.warningTint, AppColors.warningTintInk),
+      _ => ('검토 대기', AppColors.warningTint, AppColors.warningTintInk),
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -380,6 +423,7 @@ class _AiReportCreateScreenState extends ConsumerState<AiReportCreateScreen> {
             includeComments: _includeComments,
           );
       ref.invalidate(aiReportsProvider(widget.farmId));
+      ref.invalidate(aiFarmSummariesProvider);
       ref.invalidate(aiModelStatusProvider);
       if (mounted) context.pushReplacement('/ai-reports/${report.id}');
     } catch (e) {

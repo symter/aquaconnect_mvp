@@ -17,6 +17,8 @@ class AiReport {
     required this.periodEnd,
     required this.status,
     this.version = 0,
+    this.source = 'manual',
+    this.adminReviewedAt,
     required this.model,
     required this.memoCount,
     required this.commentCount,
@@ -60,6 +62,12 @@ class AiReport {
 
   /// How many 판 have been approved so far (0 = never 확정).
   final int version;
+
+  /// 'manual' (made in the app) | 'auto' (the server's monthly draft).
+  final String source;
+
+  /// When 심터 reviewed/edited the draft in the admin portal.
+  final DateTime? adminReviewedAt;
   final String model;
   final int memoCount;
   final int commentCount;
@@ -113,6 +121,7 @@ class AiReport {
   final String? orgName;
 
   bool get isAgency => type == 'agency';
+  bool get isAuto => source == 'auto';
   bool get isDraft => status == 'draft';
   bool get isSent => status == 'sent';
 
@@ -129,6 +138,8 @@ class AiReport {
         periodEnd: json['periodEnd'] as String,
         status: json['status'] as String,
         version: json['version'] as int? ?? 0,
+        source: json['source'] as String? ?? 'manual',
+        adminReviewedAt: _date(json['adminReviewedAt']),
         model: json['model'] as String? ?? '',
         memoCount: json['memoCount'] as int? ?? 0,
         commentCount: json['commentCount'] as int? ?? 0,
@@ -417,4 +428,45 @@ class AiModelOption {
         limited: json['limited'] as bool? ?? false,
         remaining: json['remaining'] as int?,
       );
+}
+
+/// 전체 리포트's farm row: how many drafts wait for review, and the newest
+/// report (any status).
+class AiFarmReportSummary {
+  const AiFarmReportSummary({required this.farmId, required this.pending, required this.total, this.latest});
+
+  final String farmId;
+
+  /// Drafts (검토 대기) — the monthly auto draft until it's 확정.
+  final int pending;
+  final int total;
+  final AiReport? latest;
+
+  factory AiFarmReportSummary.fromJson(Map<String, dynamic> json) {
+    final l = json['latest'] as Map<String, dynamic>?;
+    return AiFarmReportSummary(
+      farmId: json['farmId'] as String,
+      pending: json['pending'] as int? ?? 0,
+      total: json['total'] as int? ?? 0,
+      latest: l == null
+          ? null
+          : AiReport(
+              id: l['id'] as String,
+              farmId: json['farmId'] as String,
+              periodStart: l['periodStart'] as String,
+              periodEnd: l['periodEnd'] as String,
+              status: l['status'] as String,
+              version: l['version'] as int? ?? 0,
+              source: l['source'] as String? ?? 'manual',
+              model: '',
+              memoCount: 0,
+              commentCount: 0,
+              checkCount: 0,
+              edited: false,
+              createdByName: '',
+              createdAt: DateTime.now(),
+              sentAt: l['sentAt'] == null ? null : DateTime.parse(l['sentAt'] as String),
+            ),
+    );
+  }
 }

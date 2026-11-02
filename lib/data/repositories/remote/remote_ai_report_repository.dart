@@ -24,6 +24,11 @@ class RemoteAiReportRepository implements AiReportRepository {
   Future<List<AiReport>> listForFarm(String farmId) async => _reports(await _api.get('/api/ai-reports/farm/$farmId'));
 
   @override
+  Future<List<AiFarmReportSummary>> farmSummaries() async => (await _api.get('/api/ai-reports/farms-summary') as List<dynamic>)
+      .map((e) => AiFarmReportSummary.fromJson(e as Map<String, dynamic>))
+      .toList();
+
+  @override
   Future<List<AiReport>> listAgency() async => _reports(await _api.get('/api/ai-reports/agency'));
 
   @override

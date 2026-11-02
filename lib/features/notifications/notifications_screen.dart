@@ -124,6 +124,7 @@ class _NotificationTile extends StatelessWidget {
       'comment' => (Icons.mode_comment_outlined, AppColors.brand),
       'mention' => (Icons.alternate_email, AppColors.warning),
       'digest' => (Icons.summarize_outlined, AppColors.brand),
+      'report' => (Icons.rate_review_outlined, AppColors.warning),
       _ => (Icons.notifications_outlined, AppColors.textSecondary),
     };
 

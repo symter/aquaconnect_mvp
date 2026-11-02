@@ -92,6 +92,11 @@ final aiReportProvider = FutureProvider.family<AiReport, String>((ref, id) {
   return ref.watch(aiReportRepositoryProvider).getReport(id);
 });
 
+/// 전체 리포트: per farm, drafts waiting for review + the newest report.
+final aiFarmSummariesProvider = FutureProvider<List<AiFarmReportSummary>>((ref) {
+  return ref.watch(aiReportRepositoryProvider).farmSummaries();
+});
+
 /// The institute's 종합 리포트.
 final aiAgencyReportsProvider = FutureProvider<List<AiReport>>((ref) {
   return ref.watch(aiReportRepositoryProvider).listAgency();

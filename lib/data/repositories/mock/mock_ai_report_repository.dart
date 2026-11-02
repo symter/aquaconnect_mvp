@@ -14,6 +14,9 @@ class MockAiReportRepository implements AiReportRepository {
   Future<List<AiReport>> listForFarm(String farmId) async => const [];
 
   @override
+  Future<List<AiFarmReportSummary>> farmSummaries() async => const [];
+
+  @override
   Future<List<AiReport>> listAgency() async => const [];
 
   @override

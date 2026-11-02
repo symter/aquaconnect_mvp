@@ -9,6 +9,9 @@ abstract class AiReportRepository {
   /// The farm's AI reports, newest first (summaries — no body).
   Future<List<AiReport>> listForFarm(String farmId);
 
+  /// Per farm: drafts waiting for review and the newest report.
+  Future<List<AiFarmReportSummary>> farmSummaries();
+
   /// The institute's 종합 리포트, newest first (summaries — no body).
   Future<List<AiReport>> listAgency();
 
