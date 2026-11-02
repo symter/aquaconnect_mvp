@@ -7,7 +7,8 @@ import { pool, query } from '../db.js';
 import { orgIdForMember } from '../lib/orgScope.js';
 import { draftAgencyReport } from '../lib/ai/agencyReport.js';
 import { evidenceOf } from '../lib/ai/draft.js';
-import { draftFarmReport, kstDate } from '../lib/ai/farmReport.js';
+import { createFarmReport } from '../lib/ai/createFarmReport.js';
+import { kstDate } from '../lib/ai/farmReport.js';
 import { analyzeMemos } from '../lib/ai/memoAnalysis.js';
 import { AiError, DEFAULT_PROVIDER, isProvider, modelStatus, notConfiguredMessage } from '../lib/ai/model.js';
 import { AGENCY_SECTIONS, FARM_SECTIONS } from '../lib/ai/prompts.js';
@@ -19,8 +20,6 @@ aiReportsRouter.use(requireAuth);
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_PERIOD_DAYS = 92;
-// 메모가 많으면 묶음별 중간 정리를 거쳐 만든다(staged.js).
-const MAX_MEMOS = 600;
 const MAX_AGENCY_MEMOS = 3000;
 const OPINION_MAX = 3000;
 const SHARE_LINK_MS = 30 * 86400_000;
@@ -63,6 +62,9 @@ function toAiReportJson(row, { full = true } = {}) {
     status: row.status,
     version: row.version ?? 0,
     model: row.model,
+    // manual = 앱에서 직접 만듦, auto = 월간 자동 생성(검토 대기)
+    source: row.source ?? 'manual',
+    adminReviewedAt: row.admin_reviewed_at ?? null,
     memoCount: row.memo_count,
     commentCount: row.comment_count,
     checkCount: Array.isArray(row.checks) ? row.checks.length : 0,
@@ -178,6 +180,33 @@ aiReportsRouter.get('/agency', async (req, res) => {
   res.json(rows.map((r) => toAiReportJson(r, { full: false })));
 });
 
+// 전체 리포트의 양식장 목록용: 양식장마다 검토 대기(초안) 건수와 가장 최근 리포트.
+aiReportsRouter.get('/farms-summary', async (req, res) => {
+  const orgId = await orgIdForMember(req.memberId);
+  const { rows } = await query(
+    `select f.id as farm_id,
+            (select count(*)::int from ai_reports r where r.farm_id = f.id and r.type = 'farm' and r.status = 'draft') as pending,
+            (select count(*)::int from ai_reports r where r.farm_id = f.id and r.type = 'farm') as total,
+            l.id, l.period_start, l.period_end, l.status, l.source, l.version, l.sent_at
+       from farms f
+       left join lateral (
+         select * from ai_reports r where r.farm_id = f.id and r.type = 'farm' order by r.period_end desc, r.created_at desc limit 1
+       ) l on true
+      where f.org_id = $1`,
+    [orgId],
+  );
+  res.json(
+    rows.map((r) => ({
+      farmId: r.farm_id,
+      pending: r.pending,
+      total: r.total,
+      latest: r.id
+        ? { id: r.id, periodStart: kstDateOnly(r.period_start), periodEnd: kstDateOnly(r.period_end), status: r.status, source: r.source, version: r.version, sentAt: r.sent_at }
+        : null,
+    })),
+  );
+});
+
 // 분류 점검 목록(symterAI memo-review 이식): 자동 분류가 확신하지 못한 메모 — 폐사 수량 미기재·수치 여러 개·누적치만·분류 불가.
 // 규칙을 보강할 때 본다. ?from&to (필수) &farmId (없으면 관리원 전체)
 aiReportsRouter.get('/memo-review', async (req, res) => {
@@ -248,82 +277,23 @@ aiReportsRouter.post('/farm/:farmId', async (req, res) => {
   if (p.error) return res.status(400).json({ error: p.error });
   if (!modelStatus(provider).configured) return res.status(503).json({ error: notConfiguredMessage(provider) });
 
-  const { rows: periodMemos } = await query(
-    `select id, content, tags, author_type, author_name, created_at from memos
-      where farm_id = $1 and created_at >= $2 and created_at < $3 order by created_at`,
-    [farm.id, p.start, p.endExclusive],
-  );
-  let selected = periodMemos;
-  if (Array.isArray(memoIds)) {
-    const wanted = new Set(memoIds.map(String));
-    selected = periodMemos.filter((m) => wanted.has(m.id));
-  }
-  if (selected.length === 0) return res.status(400).json({ error: '선택한 기간에 리포트에 넣을 메모가 없습니다.' });
-  if (selected.length > MAX_MEMOS) return res.status(400).json({ error: `메모는 한 번에 ${MAX_MEMOS}건까지 넣을 수 있습니다. 기간을 줄여 주세요.` });
-
-  let comments = [];
-  if (includeComments) {
-    const ids = new Set(selected.map((m) => m.id));
-    const { rows } = await query(
-      `select c.memo_id, c.author_name, c.content, c.created_at from memo_comments c
-         join memos mm on mm.id = c.memo_id
-        where mm.farm_id = $1 and mm.created_at >= $2 and mm.created_at < $3 order by c.created_at`,
-      [farm.id, p.start, p.endExclusive],
-    );
-    comments = rows.filter((c) => ids.has(c.memo_id));
-  }
-
-  const prevStart = new Date(p.start.getTime() - p.days * 86400_000);
-  const { rows: prevMemos } = await query(
-    `select id, content, tags, author_type, author_name, created_at from memos
-      where farm_id = $1 and created_at >= $2 and created_at < $3 order by created_at limit $4`,
-    [farm.id, prevStart, p.start, MAX_MEMOS],
-  );
-
-  let result;
   try {
-    result = await draftFarmReport({
+    const row = await createFarmReport({
+      orgId,
       farm,
       from,
       to,
-      memos: selected,
-      comments,
-      prevMemos,
-      candidates: periodMemos.length,
-      plan: await modelPlan(provider),
-      onResult: (r) => recordUsage({ orgId, memberId: req.memberId, ...r }),
+      memoIds: Array.isArray(memoIds) ? memoIds : null,
+      includeComments,
+      provider,
+      memberId: req.memberId,
+      createdByName: await memberName(req.memberId),
     });
+    res.status(201).json(toAiReportJson(row));
   } catch (err) {
     if (err instanceof AiError) return res.status(err.status).json({ error: err.message });
     throw err;
   }
-
-  const name = await memberName(req.memberId);
-  const { rows } = await query(
-    `insert into ai_reports
-       (org_id, farm_id, type, period_start, period_end, model, prompt_version, memo_count, comment_count,
-        input_snapshot, raw_draft, draft, checks, ai_body, body, created_by, created_by_name)
-     values ($1,$2,'farm',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$13,$14,$15)
-     returning *`,
-    [
-      orgId,
-      farm.id,
-      from,
-      to,
-      result.model,
-      result.promptVersion,
-      selected.length,
-      result.snapshot.comments.length,
-      JSON.stringify(result.snapshot),
-      JSON.stringify(result.raw),
-      JSON.stringify(result.draft),
-      JSON.stringify(result.checks),
-      result.body,
-      req.memberId,
-      name,
-    ],
-  );
-  res.status(201).json(toAiReportJson(rows[0]));
 });
 
 // 관리원 종합 리포트 만들기. Body: { from, to, provider? }

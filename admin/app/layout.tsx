@@ -17,6 +17,7 @@ const navItems = [
   { href: "/",          iconKey: "dashboard", label: "대시보드" },
   { href: "/community", iconKey: "community", label: "커뮤니티 관리" },
   { href: "/accounts",  iconKey: "accounts",  label: "계정 관리" },
+  { href: "/reports",   iconKey: "reports",   label: "AI 리포트 검토" },
 ];
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

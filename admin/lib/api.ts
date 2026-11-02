@@ -76,6 +76,41 @@ export interface MemoDetail extends Memo {
   edits: { editorName: string; previousContent: string; editedAt: string }[];
 }
 
+export type AiReportStatus = "draft" | "confirmed" | "sent";
+
+export interface AiReportSummary {
+  id: string;
+  type: "farm" | "agency";
+  source: "auto" | "manual";
+  status: AiReportStatus;
+  version: number;
+  orgId: string;
+  orgName: string;
+  farmId: string | null;
+  farmName: string | null;
+  periodStart: string;
+  periodEnd: string;
+  model: string;
+  memoCount: number;
+  checkCount: number;
+  edited: boolean;
+  editedByName: string | null;
+  editedAt: string | null;
+  adminReviewedAt: string | null;
+  createdByName: string;
+  createdAt: string;
+  sentAt: string | null;
+}
+
+export interface AiReportDetail extends AiReportSummary {
+  body: string;
+  aiBody: string;
+  checks: { section: string; text: string; problem: string }[];
+  memos: { n: number; date: string; kind: string; author: string; body: string }[];
+}
+
+export const REPORT_STATUS_LABELS: Record<AiReportStatus, string> = { draft: "검토 대기", confirmed: "확정", sent: "어가 발송" };
+
 export const ROLE_LABELS: Record<MemberRole, string> = {
   owner: "소유자",
   director: "원장",

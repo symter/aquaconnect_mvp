@@ -384,3 +384,86 @@ adminRouter.get('/photos/:id', async (req, res) => {
   res.set('Cache-Control', 'private, max-age=31536000, immutable');
   res.send(rows[0].data);
 });
+
+// ── AI 리포트 검토(심터) ─────────────────────────────────────────────
+// 월간 자동 초안을 포함한 모든 기관의 AI 리포트. 심터가 초안을 검토·수정할 수 있다(초안일 때만).
+// 확정·발송은 관리원이 앱에서 한다.
+
+const toAdminReportJson = (r, { full = false } = {}) => ({
+  id: r.id,
+  type: r.type,
+  source: r.source,
+  status: r.status,
+  version: r.version,
+  orgId: r.org_id,
+  orgName: r.org_name,
+  farmId: r.farm_id,
+  farmName: r.farm_name ?? null,
+  periodStart: String(r.period_start_text),
+  periodEnd: String(r.period_end_text),
+  model: r.model,
+  memoCount: r.memo_count,
+  checkCount: Array.isArray(r.checks) ? r.checks.length : 0,
+  edited: r.body !== r.ai_body,
+  editedByName: r.edited_by_name,
+  editedAt: r.edited_at,
+  adminReviewedAt: r.admin_reviewed_at,
+  createdByName: r.created_by_name,
+  createdAt: r.created_at,
+  sentAt: r.sent_at,
+  ...(full
+    ? {
+        body: r.body,
+        aiBody: r.ai_body,
+        checks: r.checks ?? [],
+        memos: (r.input_snapshot?.memos ?? []).map((m) => ({ n: m.n, date: m.date, kind: m.kind, author: m.author ?? '', body: m.body })),
+      }
+    : {}),
+});
+
+const ADMIN_REPORT_SELECT = `select r.*, o.name as org_name, f.name as farm_name,
+    to_char(r.period_start, 'YYYY-MM-DD') as period_start_text, to_char(r.period_end, 'YYYY-MM-DD') as period_end_text
+  from ai_reports r join organizations o on o.id = r.org_id left join farms f on f.id = r.farm_id`;
+
+// ?status=draft|confirmed|sent &source=auto|manual &orgId
+adminRouter.get('/ai-reports', async (req, res) => {
+  const status = ['draft', 'confirmed', 'sent'].includes(req.query.status) ? req.query.status : null;
+  const source = ['auto', 'manual'].includes(req.query.source) ? req.query.source : null;
+  const { rows } = await query(
+    `${ADMIN_REPORT_SELECT}
+      where ($1::text is null or r.status = $1) and ($2::text is null or r.source = $2) and ($3::uuid is null or r.org_id = $3)
+      order by r.created_at desc limit 300`,
+    [status, source, optionalUuid(req.query.orgId)],
+  );
+  res.json(rows.map((r) => toAdminReportJson(r)));
+});
+
+adminRouter.get('/ai-reports/:id', async (req, res) => {
+  if (!UUID_RE.test(req.params.id)) return notFound(res, 'AI 리포트');
+  const { rows } = await query(`${ADMIN_REPORT_SELECT} where r.id = $1`, [req.params.id]);
+  if (!rows[0]) return notFound(res, 'AI 리포트');
+  res.json(toAdminReportJson(rows[0], { full: true }));
+});
+
+// Body: { body?: string } — 본문 수정(초안만). 보내면 검토 완료로도 표시된다. body 없이 보내면 '검토 완료'만.
+adminRouter.put('/ai-reports/:id', async (req, res) => {
+  if (!UUID_RE.test(req.params.id)) return notFound(res, 'AI 리포트');
+  const hasBody = req.body?.body !== undefined;
+  const body = String(req.body?.body ?? '').trim();
+  if (hasBody && !body) return res.status(400).json({ error: '리포트 내용이 비어 있습니다.' });
+  const { rows } = await query(
+    `update ai_reports set body = coalesce($2, body),
+        edited_by_name = case when $2::text is null then edited_by_name else $3 end,
+        edited_at = case when $2::text is null then edited_at else now() end,
+        admin_reviewed_at = now()
+      where id = $1 and status = 'draft' returning id`,
+    [req.params.id, hasBody ? body : null, '심터 검토'],
+  );
+  if (!rows[0]) {
+    const { rows: exists } = await query('select status from ai_reports where id = $1', [req.params.id]);
+    if (!exists[0]) return notFound(res, 'AI 리포트');
+    return res.status(409).json({ error: '초안일 때만 수정할 수 있습니다(이미 확정·발송됨).' });
+  }
+  const { rows: full } = await query(`${ADMIN_REPORT_SELECT} where r.id = $1`, [req.params.id]);
+  res.json(toAdminReportJson(full[0], { full: true }));
+});

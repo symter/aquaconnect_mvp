@@ -44,10 +44,10 @@ async function loadVapidKeys() {
   return { publicKey, privateKey, subject };
 }
 
-// 'inquiry' (a farm's 문의) and 'mention' (호출 in a 댓글) have no setting:
-// they're always delivered. 'comment' follows the memo setting; 'digest' is
+// 'inquiry' (a farm's 문의), 'mention' (호출 in a 댓글) and 'report' (월간 자동
+// 리포트 초안 도착) have no setting: they're always delivered. 'comment' follows the memo setting; 'digest' is
 // governed by digest_settings instead.
-export const NOTIFICATION_TYPES = ['risk', 'memo', 'test', 'inquiry', 'comment', 'digest', 'mention'];
+export const NOTIFICATION_TYPES = ['risk', 'memo', 'test', 'inquiry', 'comment', 'digest', 'mention', 'report'];
 
 const SETTING_COLUMN = { risk: 'risk_alerts', memo: 'memo_alerts', comment: 'memo_alerts' };
 
