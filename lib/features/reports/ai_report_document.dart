@@ -119,7 +119,7 @@ class AiReportDocument extends StatelessWidget {
           const SizedBox(height: 18),
           const Divider(height: 1, color: AppColors.border),
           const SizedBox(height: 10),
-          const Text('외부 관측: 국립수산과학원 실시간 해양관측·적조 속보(리포트 작성 시점에 조회) · 양식장 수조 실측값이 아닙니다',
+          const Text(aiReportSourceFooter,
               style: TextStyle(fontSize: 10.5, color: AppColors.textMuted, height: 1.45)),
         ],
       ),
@@ -134,7 +134,6 @@ class AiReportDocument extends StatelessWidget {
     final stations = ((m['stations'] as List<dynamic>?) ?? []).cast<Map<String, dynamic>>();
     final total = rows.fold<int>(0, (n, x) => n + (x['memos'] as int? ?? 0));
     final max = deaths['max'] as int? ?? 0;
-    String num(Object? v) => v is double && v == v.roundToDouble() ? v.toInt().toString() : '$v';
 
     switch (agencySectionTitles.indexOf(title)) {
       case 0:
@@ -172,14 +171,10 @@ class AiReportDocument extends StatelessWidget {
       case 4:
         if (stations.isEmpty) return const [_Muted('연결된 관측소가 없습니다.')];
         return [
-          _CountRows([
-            for (final st in stations)
-              (
-                '${st['name']} (양식장 ${st['farms']}곳)',
-                st['observation'] == null ? '자료 없음' : '${(st['observation'] as Map)['layer']} ${num((st['observation'] as Map)['waterTempC'])}℃',
-              ),
-          ]),
-          const _Muted('관측소 값은 리포트 작성 시점의 실시간 값이며 기간 평균이 아닙니다.'),
+          _CountRows([for (final st in stations) ('${st['name']} (양식장 ${st['farms']}곳)', stationTempLabel(st))]),
+          _Muted(stations.any((st) => st['temp'] != null)
+              ? '관측소 일 평균 수온의 기간 요약입니다(서버가 1시간마다 모은 관측값). 이력이 없는 관측소는 작성 시점 실시간 값입니다.'
+              : '관측소 값은 리포트 작성 시점의 실시간 값이며 기간 평균이 아닙니다.'),
         ];
       case 5:
         return [_OpenItems(items: open)];
@@ -191,7 +186,6 @@ class AiReportDocument extends StatelessWidget {
   List<Widget> _agencyTable(Map<String, dynamic> m) {
     final rows = ((m['rows'] as List<dynamic>?) ?? []).cast<Map<String, dynamic>>();
     if (rows.isEmpty) return const [];
-    String num(Object? v) => v == null ? '-' : (v is double && v == v.roundToDouble() ? v.toInt().toString() : '$v');
     return [
       const SizedBox(height: 22),
       const _SectionHeading('양식장별 현황 표'),
@@ -213,7 +207,7 @@ class AiReportDocument extends StatelessWidget {
             DataColumn(label: Text('폐사'), numeric: true),
             DataColumn(label: Text('접종'), numeric: true),
             DataColumn(label: Text('관측소')),
-            DataColumn(label: Text('수온'), numeric: true),
+            DataColumn(label: Text('기간 평균 수온'), numeric: true),
           ],
           rows: [
             for (final x in rows)
@@ -229,7 +223,7 @@ class AiReportDocument extends StatelessWidget {
                         : '0')),
                 DataCell(Text('${x['vaccinations']}')),
                 DataCell(Text('${x['station'] ?? '-'}')),
-                DataCell(Text(x['waterTempC'] == null ? '-' : '${num(x['waterTempC'])}℃')),
+                DataCell(Text(farmRowTempLabel(x))),
               ]),
           ],
         ),
@@ -284,14 +278,17 @@ class AiReportDocument extends StatelessWidget {
             ),
         ];
       case 3:
-        return _environment(m);
+        return _environment(r, m);
       case 4:
         final prev = m['prev'] as Map<String, dynamic>?;
-        if (prev == null) return const [];
+        final temp = (m['publicData'] as Map<String, dynamic>?)?['temp'] as Map<String, dynamic>?;
+        final tempTile = temp?['prevAvg'] == null ? null : ('외부 관측 평균 수온 (이전 → 이번 기간)', '${fmtTemp(temp!['prevAvg'])} → ${fmtTemp(temp['avg'])}℃', null);
+        if (prev == null && tempTile == null) return const [];
         return [
           _Tiles([
-            ('현장 기록 (이전 → 이번 기간)', '${prev['total']} → $total건', null),
-            ('폐사 기록 (이전 → 이번 기간)', '${prev['deathEvents']} → $deathEvents건', kindColor('폐사')),
+            if (prev != null) ('현장 기록 (이전 → 이번 기간)', '${prev['total']} → $total건', null),
+            if (prev != null) ('폐사 기록 (이전 → 이번 기간)', '${prev['deathEvents']} → $deathEvents건', kindColor('폐사')),
+            ?tempTile,
           ]),
         ];
       case 5:
@@ -301,11 +298,14 @@ class AiReportDocument extends StatelessWidget {
     }
   }
 
-  List<Widget> _environment(Map<String, dynamic> m) {
+  List<Widget> _environment(AiReport r, Map<String, dynamic> m) {
     final measurements = ((m['measurements'] as List<dynamic>?) ?? []).cast<Map<String, dynamic>>();
     final pub = m['publicData'] as Map<String, dynamic>?;
     final station = pub?['station'] as Map<String, dynamic>?;
     final obs = pub?['observation'] as Map<String, dynamic>?;
+    final temp = pub?['temp'] as Map<String, dynamic>?;
+    final daily = ((pub?['daily'] as List<dynamic>?) ?? []).cast<Map<String, dynamic>>();
+    final events = ((m['events'] as List<dynamic>?) ?? []).cast<Map<String, dynamic>>();
     final redTide = pub?['redTide'] as Map<String, dynamic>?;
     String num(Object? v) => v is double && v == v.roundToDouble() ? v.toInt().toString() : '$v';
 
@@ -318,16 +318,86 @@ class AiReportDocument extends StatelessWidget {
               '${x['name']} ${num(x['value'])}${x['unit']}'),
       ],
       const _Sub('외부 관측(공공데이터)'),
-      if (obs != null)
+      if (temp != null) ...[
+        _Tiles([for (final (label, value) in tempStatItems(temp)) (label, value, null)]),
+        if (daily.length > 1) _TempChart(daily: daily, temp: temp, events: events, from: r.periodStart, to: r.periodEnd),
+        _Muted(tempCoverageNote(station?['name'] as String?, temp)),
+        if (obs != null) _Muted('작성 시점 실시간 값: ${obs['layer']} ${num(obs['waterTempC'])}℃ (관측 ${obs['observedDate']} ${obs['observedTime']})'),
+      ] else if (obs != null) ...[
         _Tiles([
           ('${station?['name'] ?? '관측소'} ${obs['layer']} 수온', '${num(obs['waterTempC'])}℃', null),
-        ])
-      else
+        ]),
+        _Muted('관측 ${obs['observedDate']} ${obs['observedTime']} · 리포트 작성 시점의 실시간 값이며 기간 평균이 아닙니다(이 기간의 수온 이력이 없음).'),
+      ] else
         const _Muted('외부 관측 수온 자료를 가져오지 못했습니다.'),
-      if (obs != null) _Muted('관측 ${obs['observedDate']} ${obs['observedTime']} · 리포트 작성 시점의 실시간 값이며 기간 평균이 아닙니다.'),
       if (pub != null) _PublicSource(pub: pub, redTide: redTide),
     ];
   }
+}
+
+// ───────── 수온 labels (shared with ai_report_html.dart) ─────────
+
+const aiReportSourceFooter = '외부 관측: 국립수산과학원 해양관측 수온(서버가 1시간마다 모은 관측값)·적조 속보 · 양식장 수조 실측값이 아닙니다';
+
+String fmtTemp(Object? v) {
+  if (v is! num) return '-';
+  final d = v.toDouble();
+  return d == d.roundToDouble() ? d.toInt().toString() : d.toStringAsFixed(1);
+}
+
+/// 평균 / 최저 / 최고 / 고수온 일수 / 저수온 일수 / 첫 7일→마지막 7일 (symterAI TempStats).
+List<(String, String)> tempStatItems(Map<String, dynamic> t) {
+  final change = t['weekChange'] as num?;
+  return [
+    ('기간 평균 수온', '${fmtTemp(t['avg'])}℃'),
+    ('최저', '${fmtTemp(t['min'])}℃'),
+    ('최고', '${fmtTemp(t['max'])}℃'),
+    ('고수온 일수(${fmtTemp(t['highThreshold'])}℃↑)', '${t['highDays']}일'),
+    ('저수온 일수(${fmtTemp(t['lowThreshold'])}℃↓)', '${t['lowDays']}일'),
+    ('첫 주→마지막 주', change == null ? '산출 불가' : '${change > 0 ? '+' : ''}${fmtTemp(change)}℃'),
+  ];
+}
+
+String tempCoverageNote(String? stationName, Map<String, dynamic> t) {
+  final days = t['days'] as int? ?? 0;
+  final period = t['periodDays'] as int? ?? days;
+  final partial = days < period ? ' · 기간 $period일 중 $days일만 자료 있음(${t['firstDate']}~${t['lastDate']})' : ' · $days일분';
+  return '${stationName ?? '관측소'} 관측소 ${t['layer']} · 1시간 간격 관측값의 일 평균$partial. '
+      '고수온·저수온 일수는 일 평균 수온이 기준 이상/이하인 날의 수입니다.';
+}
+
+/// 종합 리포트 관측소 한 줄: 기간 요약, 없으면 작성 시점 값.
+String stationTempLabel(Map<String, dynamic> st) {
+  final t = st['temp'] as Map<String, dynamic>?;
+  if (t != null) {
+    return '평균 ${fmtTemp(t['avg'])}℃ (${fmtTemp(t['min'])}~${fmtTemp(t['max'])}℃) · 고수온 ${t['highDays']}일 · 저수온 ${t['lowDays']}일';
+  }
+  final o = st['observation'] as Map<String, dynamic>?;
+  return o == null ? '자료 없음' : '작성 시점 ${o['layer']} ${fmtTemp(o['waterTempC'])}℃';
+}
+
+/// 양식장별 현황 표의 수온 칸: 기간 평균, 없으면 실시간 값.
+String farmRowTempLabel(Map<String, dynamic> x) {
+  if (x['avgTempC'] != null) return '${fmtTemp(x['avgTempC'])}℃';
+  if (x['waterTempC'] != null) return '${fmtTemp(x['waterTempC'])}℃(실시간)';
+  return '-';
+}
+
+const tempLineColor = Color(0xFF3B4A5A);
+const tempBandColor = Color(0x1F52606D);
+const tempHighColor = Color(0xFFC98500);
+const tempLowColor = Color(0xFF185FA5);
+
+/// Nice y range for a 수온 chart: (lo, hi, step).
+(double, double, double) tempRange(Iterable<num> values) {
+  final lo0 = values.reduce((a, b) => a < b ? a : b).toDouble();
+  final hi0 = values.reduce((a, b) => a > b ? a : b).toDouble();
+  final span = math.max(1.0, hi0 - lo0);
+  final step = span <= 4 ? 1.0 : span <= 10 ? 2.0 : span <= 25 ? 5.0 : 10.0;
+  final lo = (lo0 / step).floor() * step;
+  var hi = (hi0 / step).ceil() * step;
+  if (hi <= lo) hi = lo + step;
+  return (lo, hi, step);
 }
 
 // ───────── body parsing ─────────
@@ -533,7 +603,7 @@ class _Tiles extends StatelessWidget {
       padding: const EdgeInsets.only(top: 8, bottom: 4),
       child: LayoutBuilder(builder: (context, c) {
         // As many per row as fit at ~68px each (the form shows 4–5 across).
-        final perRow = (c.maxWidth / 68).floor().clamp(2, math.min(5, items.length));
+        final perRow = (c.maxWidth / 68).floor().clamp(math.min(2, items.length), math.max(1, math.min(5, items.length)));
         final w = (c.maxWidth - (perRow - 1) * 12) / perRow;
         return Wrap(
           spacing: 12,
@@ -829,6 +899,147 @@ class _DeathPainter extends CustomPainter {
   bool shouldRepaint(_DeathPainter old) => old.byDay != byDay;
 }
 
+/// 일별 수온 (symterAI TempChart): 일 평균 선, 일 최저~최고 띠, 고수온·
+/// 저수온 기준선, and below it the days with 폐사·접종·방문 records on the
+/// same date axis.
+class _TempChart extends StatelessWidget {
+  const _TempChart({required this.daily, required this.temp, required this.events, required this.from, required this.to});
+  final List<Map<String, dynamic>> daily;
+  final Map<String, dynamic> temp;
+  final List<Map<String, dynamic>> events;
+  final String from;
+  final String to;
+
+  @override
+  Widget build(BuildContext context) {
+    final lanes = reportKindOrder.where((k) => events.any((e) => e['kind'] == k)).toList();
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            height: _TempPainter.plotBottom + 24 + lanes.length * 22.0,
+            width: double.infinity,
+            child: CustomPaint(
+              painter: _TempPainter(
+                daily: daily,
+                high: (temp['highThreshold'] as num).toDouble(),
+                low: (temp['lowThreshold'] as num).toDouble(),
+                events: events,
+                lanes: lanes,
+                from: _day(from),
+                to: _day(to),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          _Legend([
+            ('일 평균 수온', tempLineColor, false),
+            ('일 최저~최고', const Color(0x5552606D), false),
+            for (final k in lanes) ('$k 기록일', kindColor(k), true),
+          ]),
+        ],
+      ),
+    );
+  }
+}
+
+class _TempPainter extends CustomPainter {
+  _TempPainter({required this.daily, required this.high, required this.low, required this.events, required this.lanes, required this.from, required this.to});
+  final List<Map<String, dynamic>> daily;
+  final double high;
+  final double low;
+  final List<Map<String, dynamic>> events;
+  final List<String> lanes;
+  final DateTime from;
+  final DateTime to;
+
+  static const top = 12.0;
+  static const plotBottom = 202.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final ax = _DayAxis(from, to, 40, 10, size.width);
+    double v(Map<String, dynamic> d, String k) => (d[k] as num).toDouble();
+    final (lo, hi, step) = tempRange([for (final d in daily) ...[v(d, 'min'), v(d, 'max')], high, low]);
+    double y(double t) => top + (hi - t) * (plotBottom - top) / (hi - lo);
+    final right = size.width - ax.right;
+
+    final gridPaint = Paint()..color = _grid;
+    for (var t = lo; t <= hi + 1e-9; t += step) {
+      canvas.drawLine(Offset(ax.left, y(t)), Offset(right, y(t)), gridPaint);
+      _text(canvas, '${fmtTemp(t)}℃', Offset(ax.left - 6, y(t)), align: TextAlign.right);
+    }
+    void dashed(double at, Color c, String label) {
+      final p = Paint()
+        ..color = c
+        ..strokeWidth = 1.2;
+      for (var x = ax.left; x < right; x += 9) {
+        canvas.drawLine(Offset(x, y(at)), Offset(math.min(x + 5, right), y(at)), p);
+      }
+      _text(canvas, label, Offset(right, y(at) - 8), size: 10, color: c, align: TextAlign.right);
+    }
+
+    dashed(high, tempHighColor, '고수온 기준 ${fmtTemp(high)}℃');
+    dashed(low, tempLowColor, '저수온 기준 ${fmtTemp(low)}℃');
+
+    // Runs of consecutive days — a missing day breaks the line and band.
+    final runs = <List<Map<String, dynamic>>>[];
+    for (final d in daily) {
+      final day = _day(d['date'] as String);
+      if (runs.isEmpty || day.difference(_day(runs.last.last['date'] as String)).inDays > 1) runs.add([]);
+      runs.last.add(d);
+    }
+    final linePaint = Paint()
+      ..color = tempLineColor
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke
+      ..strokeJoin = StrokeJoin.round
+      ..strokeCap = StrokeCap.round;
+    for (final run in runs) {
+      double xOf(Map<String, dynamic> d) => ax.x(_day(d['date'] as String));
+      if (run.length == 1) {
+        final d = run.first;
+        canvas.drawLine(Offset(xOf(d), y(v(d, 'min'))), Offset(xOf(d), y(v(d, 'max'))), Paint()..color = const Color(0x5552606D)..strokeWidth = 4);
+        canvas.drawCircle(Offset(xOf(d), y(v(d, 'avg'))), 3, Paint()..color = tempLineColor);
+        continue;
+      }
+      final band = Path()..moveTo(xOf(run.first), y(v(run.first, 'max')));
+      for (final d in run.skip(1)) {
+        band.lineTo(xOf(d), y(v(d, 'max')));
+      }
+      for (final d in run.reversed) {
+        band.lineTo(xOf(d), y(v(d, 'min')));
+      }
+      canvas.drawPath(band..close(), Paint()..color = tempBandColor);
+      final line = Path()..moveTo(xOf(run.first), y(v(run.first, 'avg')));
+      for (final d in run.skip(1)) {
+        line.lineTo(xOf(d), y(v(d, 'avg')));
+      }
+      canvas.drawPath(line, linePaint);
+    }
+
+    for (final (d, align) in ax.ticks) {
+      _text(canvas, _DayAxis.label(d), Offset(ax.x(d), plotBottom + 12), align: align);
+    }
+    for (var n = 0; n < lanes.length; n++) {
+      final k = lanes[n];
+      final ly = plotBottom + 34 + n * 22.0;
+      canvas.drawLine(Offset(ax.left, ly), Offset(right, ly), gridPaint);
+      _text(canvas, k, Offset(ax.left - 6, ly), align: TextAlign.right);
+      for (final date in {for (final e in events.where((e) => e['kind'] == k)) e['date'] as String}) {
+        final c = Offset(ax.x(_day(date)), ly);
+        canvas.drawCircle(c, 7, Paint()..color = Colors.white);
+        canvas.drawCircle(c, 5, Paint()..color = kindColor(k));
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_TempPainter old) => old.daily != daily || old.events != events;
+}
+
 /// 후속 확인이 필요한 기록 — status chip + "MM-DD 주제 — 원문".
 class _OpenItems extends StatelessWidget {
   const _OpenItems({required this.items});
@@ -879,6 +1090,7 @@ class _PublicSource extends StatelessWidget {
   Widget build(BuildContext context) {
     final station = pub['station'] as Map<String, dynamic>?;
     final obs = pub['observation'] as Map<String, dynamic>?;
+    final temp = pub['temp'] as Map<String, dynamic>?;
     final fetched = pub['fetchedAt'] as String?;
     final notConnected = ((pub['notConnected'] as List<dynamic>?) ?? []).cast<String>();
     final red = switch (redTide?['status']) {
@@ -902,11 +1114,12 @@ class _PublicSource extends StatelessWidget {
               style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
           const SizedBox(height: 8),
           _MetaTable(rows: [
-            ('상태', obs != null ? '사용' : '수온 조회 실패 — 사용하지 않음'),
+            ('상태', temp != null || obs != null ? '사용' : '수온 조회 실패 — 사용하지 않음'),
             ('제공 기관', '해양수산부 국립수산과학원'),
-            ('데이터', '실시간 해양관측 수온 · 적조 속보'),
+            ('데이터', '해양관측 수온(1시간 간격 수집) · 적조 속보'),
             if (station != null) ('관측소', '${station['name']}${station['code'] != null ? ' (${station['code']})' : ''}'),
-            if (obs != null) ('관측 시각', '${obs['observedDate']} ${obs['observedTime']}'),
+            if (temp != null) ('수온 자료', '${temp['firstDate']} ~ ${temp['lastDate']} · ${temp['days']}일분 (${temp['layer']})'),
+            if (obs != null) ('실시간 관측 시각', '${obs['observedDate']} ${obs['observedTime']}'),
             ('적조 속보', red),
             if (fetched != null) ('조회 시각', DateFormat('yyyy년 M월 d일 HH:mm').format(DateTime.parse(fetched).toLocal())),
             if (notConnected.isNotEmpty) ('미연동', notConnected.join(', ')),

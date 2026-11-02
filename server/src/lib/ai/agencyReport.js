@@ -3,6 +3,7 @@
 // 근거 번호가 없는 형식이라 검증은 ① 섹션이 다 있는지 ② 입력에 없는 수치·진단 표현이 있는지만 본다.
 
 import { fetchRealtimeObservations, pickPreferredObservation } from '../nifs.js';
+import { periodTemps, tempSummaryLine } from '../oceanHistory.js';
 import { kstDate } from './farmReport.js';
 import { analyzeMemos, formatCount, summarizeFarm, TOPICS } from './memoAnalysis.js';
 import { AiError, chat } from './model.js';
@@ -42,28 +43,39 @@ function tallyLines(an) {
   return lines;
 }
 
-/** 관측소마다 한 번만 실시간 수온을 조회한다(작성 시점 값). */
-async function stationTemps(farms) {
+/** 관측소마다 한 번만: 기간 일 평균 수온(서버 수집 이력)과 작성 시점 실시간 값. */
+async function stationTemps(farms, from, to) {
   const codes = [...new Set(farms.map((f) => f.nearest_station_code).filter(Boolean))];
-  const out = new Map();
+  const live = new Map();
+  const period = new Map();
+  let feed = null;
+  try {
+    feed = await fetchRealtimeObservations();
+  } catch {
+    feed = null;
+  }
   await Promise.all(
     codes.map(async (code) => {
+      const t = feed && pickPreferredObservation(feed.filter((o) => o.stationCode === code));
+      live.set(code, t ? { layer: t.layer, waterTempC: t.waterTempC, observedDate: t.observedDate, observedTime: t.observedTime } : null);
       try {
-        const t = pickPreferredObservation(await fetchRealtimeObservations({ station: code }));
-        out.set(code, t ? { layer: t.layer, waterTempC: t.waterTempC, observedDate: t.observedDate, observedTime: t.observedTime } : null);
-      } catch {
-        out.set(code, null);
+        period.set(code, await periodTemps(code, from, to));
+      } catch (err) {
+        console.error('period temps failed', err);
+        period.set(code, null);
       }
     }),
   );
-  return out;
+  return { live, period };
 }
+
+const periodTempMeta = (p) => (p ? { layer: p.layer, ...p.summary } : null);
 
 /**
  * farms: 관리원의 양식장 행, memos: 기간 메모(모든 양식장) [{ id, farm_id, content, tags, author_type, author_name, created_at }]
  */
 export async function draftAgencyReport({ orgName, from, to, farms, memos, plan, onResult }) {
-  const temps = await stationTemps(farms);
+  const temps = await stationTemps(farms, from, to);
   let n = 0;
   const perFarm = farms.map((f) => {
     const list = memos
@@ -71,7 +83,8 @@ export async function draftAgencyReport({ orgName, from, to, farms, memos, plan,
       .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
       .map((m) => ({ id: ++n, n, uuid: m.id, date: kstDate(m.created_at), kind: kindOf(m.tags ?? []), body: m.content, author: m.author_name }));
     const an = summarizeFarm(analyzeMemos(list));
-    return { farm: f, memos: list, an, temp: f.nearest_station_code ? temps.get(f.nearest_station_code) ?? null : null };
+    const code = f.nearest_station_code;
+    return { farm: f, memos: list, an, temp: code ? temps.live.get(code) ?? null : null, period: code ? temps.period.get(code) ?? null : null };
   });
   const active = perFarm.filter((x) => x.memos.length);
   if (!active.length) throw new AiError('선택한 기간에 메모가 있는 양식장이 없습니다.', 400);
@@ -95,7 +108,9 @@ export async function draftAgencyReport({ orgName, from, to, farms, memos, plan,
         tallyLines(x.an).map((l) => `  ${l}`).join(NL),
         '  [관리원 메모 — 중심 자료]',
         `${picked.map((m) => `    - ${m.date} [${m.a.primary}] (${m.kind}) ${clip(m.body, width)} ${tagsOf(m)}`.trimEnd()).join(NL)}${omitted}`,
-        `  [수온 참고 자료] 관측소 ${x.farm.nearest_station_name || '없음'}: ${t ? `${t.layer} ${t.waterTempC}℃ (관측 ${t.observedDate} ${t.observedTime}, 작성 시점 실시간 값)` : '수온 자료 없음'}`,
+        x.period
+          ? `  [수온 참고 자료] ${tempSummaryLine(x.farm.nearest_station_name, x.period)}`
+          : `  [수온 참고 자료] 관측소 ${x.farm.nearest_station_name || '없음'}: ${t ? `기간 수온 이력 없음 · 작성 시점 ${t.layer} ${t.waterTempC}℃ (관측 ${t.observedDate} ${t.observedTime}, 실시간 값이며 기간 평균이 아님)` : '수온 자료 없음'}`,
       ].join(NL);
     });
 
@@ -142,13 +157,22 @@ export async function draftAgencyReport({ orgName, from, to, farms, memos, plan,
       vaccinations: x.memos.filter((m) => m.kind === '접종').length,
       visits: x.memos.filter((m) => m.kind === '방문').length,
       waterTempC: x.temp?.waterTempC ?? null,
+      avgTempC: x.period?.summary.avg ?? null,
+      highDays: x.period?.summary.highDays ?? null,
     })),
     topicOrder: TOPICS.filter((t) => topicTotals.some((x) => x.topic === t)),
     topicTotals,
     deathTotals,
     open: active.flatMap((x) => x.an.open.map((m) => ({ farm: x.farm.name, date: m.date, topic: m.a.primary, status: m.a.status, text: clip(m.body, 90) }))),
     stations: [...new Map(farms.filter((f) => f.nearest_station_code).map((f) => [f.nearest_station_code, f.nearest_station_name])).entries()].map(
-      ([code, name]) => ({ code, name, farms: farms.filter((f) => f.nearest_station_code === code).length, observation: temps.get(code) ?? null }),
+      ([code, name]) => ({
+        code,
+        name,
+        farms: farms.filter((f) => f.nearest_station_code === code).length,
+        observation: temps.live.get(code) ?? null,
+        temp: periodTempMeta(temps.period.get(code)),
+        daily: temps.period.get(code)?.daily.map(({ date, avg }) => ({ date, avg })) ?? [],
+      }),
     ),
   };
 

@@ -73,7 +73,7 @@ String buildAiReportHtml(AiReport r, {required String farmName, required String 
   } else {
     b.write('<p class="muted">아직 전문가가 확정하지 않은 초안입니다. 위 내용은 AI 초안이며 최종 판단이 아닙니다.</p>');
   }
-  b.write('</section><p class="foot">외부 관측: 국립수산과학원 실시간 해양관측·적조 속보(리포트 작성 시점에 조회) · 양식장 수조 실측값이 아닙니다</p>');
+  b.write('</section><p class="foot">${_e(aiReportSourceFooter)}</p>');
   b.write('</article></body></html>');
   return b.toString();
 }
@@ -263,6 +263,67 @@ String _deathChart(List<Map<String, dynamic>> byDay, String from, String to) {
   return b.toString();
 }
 
+/// 일별 수온 SVG — same chart as the app's _TempChart.
+String _tempChart(List<Map<String, dynamic>> daily, Map<String, dynamic> temp, List<Map<String, dynamic>> events, String from, String to) {
+  const w = 640.0, top = 12.0, plotBottom = 202.0, laneH = 22.0;
+  final lanes = reportKindOrder.where((k) => events.any((e) => e['kind'] == k)).toList();
+  final h = plotBottom + 24 + lanes.length * laneH;
+  final f = _day(from), t = _day(to);
+  final x = _xOf(f, t, 40, 10, w);
+  final high = (temp['highThreshold'] as num).toDouble(), low = (temp['lowThreshold'] as num).toDouble();
+  double v(Map<String, dynamic> d, String k) => (d[k] as num).toDouble();
+  final (lo, hi, step) = tempRange([for (final d in daily) ...[v(d, 'min'), v(d, 'max')], high, low]);
+  double y(double c) => top + (hi - c) * (plotBottom - top) / (hi - lo);
+  String px(double n) => n.toStringAsFixed(1);
+  final b = StringBuffer('<svg class="chart" viewBox="0 0 $w $h" role="img" aria-label="일별 수온 그래프">');
+  for (var c = lo; c <= hi + 1e-9; c += step) {
+    b.write('<line x1="40" x2="${w - 10}" y1="${px(y(c))}" y2="${px(y(c))}" stroke="#e3e9ef"/>');
+    b.write('<text x="34" y="${px(y(c) + 4)}" font-size="11" text-anchor="end" fill="#5d6b7a">${fmtTemp(c)}℃</text>');
+  }
+  for (final (at, color, label) in [(high, '#c98500', '고수온 기준'), (low, '#185fa5', '저수온 기준')]) {
+    b.write('<line x1="40" x2="${w - 10}" y1="${px(y(at))}" y2="${px(y(at))}" stroke="$color" stroke-dasharray="5 4"/>');
+    b.write('<text x="${w - 10}" y="${px(y(at) - 4)}" font-size="11" text-anchor="end" fill="$color">$label ${fmtTemp(at)}℃</text>');
+  }
+  final runs = <List<Map<String, dynamic>>>[];
+  for (final d in daily) {
+    final day = _day(d['date'] as String);
+    if (runs.isEmpty || day.difference(_day(runs.last.last['date'] as String)).inDays > 1) runs.add([]);
+    runs.last.add(d);
+  }
+  for (final run in runs) {
+    double xd(Map<String, dynamic> d) => x(_day(d['date'] as String));
+    if (run.length == 1) {
+      final d = run.first;
+      b.write('<line x1="${px(xd(d))}" x2="${px(xd(d))}" y1="${px(y(v(d, 'min')))}" y2="${px(y(v(d, 'max')))}" stroke="#52606d" stroke-opacity=".35" stroke-width="4"/>');
+      b.write('<circle cx="${px(xd(d))}" cy="${px(y(v(d, 'avg')))}" r="3" fill="#3b4a5a"/>');
+      continue;
+    }
+    final band = [
+      for (final d in run) '${px(xd(d))},${px(y(v(d, 'max')))}',
+      for (final d in run.reversed) '${px(xd(d))},${px(y(v(d, 'min')))}',
+    ];
+    b.write('<path d="M${band.join('L')}Z" fill="#52606d" opacity=".12"/>');
+    b.write('<path d="M${[for (final d in run) '${px(xd(d))},${px(y(v(d, 'avg')))}'].join('L')}" fill="none" stroke="#3b4a5a" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>');
+  }
+  b.write(_axis(f, t, x, plotBottom + 16));
+  for (var n = 0; n < lanes.length; n++) {
+    final k = lanes[n];
+    final ly = plotBottom + 34 + n * laneH;
+    b.write('<line x1="40" x2="${w - 10}" y1="$ly" y2="$ly" stroke="#e3e9ef"/>');
+    b.write('<text x="34" y="${ly + 4}" font-size="11" text-anchor="end" fill="#5d6b7a">${_e(k)}</text>');
+    for (final date in {for (final e in events.where((e) => e['kind'] == k)) e['date'] as String}) {
+      b.write('<circle cx="${px(x(_day(date)))}" cy="$ly" r="5" fill="${_kind(k)}" stroke="#fff" stroke-width="2"/>');
+    }
+  }
+  b.write('</svg>');
+  b.write(_legend([
+    ('일 평균 수온', '#3b4a5a', false),
+    ('일 최저~최고', '#c5cbd1', false),
+    for (final k in lanes) ('$k 기록일', _kind(k), true),
+  ]));
+  return b.toString();
+}
+
 String _farmExtras(String title, AiReport r, Map<String, dynamic> m) {
   final an = (m['analysis'] as Map<String, dynamic>?) ?? const {};
   final deaths = (an['deaths'] as Map<String, dynamic>?) ?? const {};
@@ -299,6 +360,8 @@ String _farmExtras(String title, AiReport r, Map<String, dynamic> m) {
       final pub = m['publicData'] as Map<String, dynamic>?;
       final station = pub?['station'] as Map<String, dynamic>?;
       final obs = pub?['observation'] as Map<String, dynamic>?;
+      final temp = pub?['temp'] as Map<String, dynamic>?;
+      final daily = ((pub?['daily'] as List<dynamic>?) ?? []).cast<Map<String, dynamic>>();
       final red = pub?['redTide'] as Map<String, dynamic>?;
       final redText = switch (red?['status']) {
         'found' => '${red!['reportDate']} 발표 · ${((red['occurrences'] as List<dynamic>?) ?? []).join(', ')} (전국 해역 대상 속보)',
@@ -312,27 +375,36 @@ String _farmExtras(String title, AiReport r, Map<String, dynamic> m) {
             return '<li>${_e('${_md(x['date'] as String)} ${tanks.isEmpty ? '' : '${tanks.join('·')}번 수조 '}${x['name']} ${_numStr(x['value'])}${x['unit']}')}</li>';
           }).join()}</ul>',
         '<h4>외부 관측(공공데이터)</h4>',
-        if (obs != null)
-          '${_tiles([('${station?['name'] ?? '관측소'} ${obs['layer']} 수온', '${_numStr(obs['waterTempC'])}℃', null)])}<p class="muted">관측 ${_e('${obs['observedDate']} ${obs['observedTime']}')} · 리포트 작성 시점의 실시간 값이며 기간 평균이 아닙니다.</p>'
+        if (temp != null)
+          '${_tiles([for (final (l, v) in tempStatItems(temp)) (l, v, null)])}'
+              '${daily.length > 1 ? _tempChart(daily, temp, events, r.periodStart, r.periodEnd) : ''}'
+              '<p class="muted">${_e(tempCoverageNote(station?['name'] as String?, temp))}</p>'
+              '${obs != null ? '<p class="muted">${_e('작성 시점 실시간 값: ${obs['layer']} ${_numStr(obs['waterTempC'])}℃ (관측 ${obs['observedDate']} ${obs['observedTime']})')}</p>' : ''}'
+        else if (obs != null)
+          '${_tiles([('${station?['name'] ?? '관측소'} ${obs['layer']} 수온', '${_numStr(obs['waterTempC'])}℃', null)])}<p class="muted">관측 ${_e('${obs['observedDate']} ${obs['observedTime']}')} · 리포트 작성 시점의 실시간 값이며 기간 평균이 아닙니다(이 기간의 수온 이력이 없음).</p>'
         else
           '<p class="muted">외부 관측 수온 자료를 가져오지 못했습니다.</p>',
         if (pub != null)
           '<div class="box"><b>외부 관측 자료(공공데이터) — 양식장 수조 실측값이 아닙니다</b>${_meta([
-            ('상태', obs != null ? '사용' : '수온 조회 실패 — 사용하지 않음'),
+            ('상태', temp != null || obs != null ? '사용' : '수온 조회 실패 — 사용하지 않음'),
             ('제공 기관', '해양수산부 국립수산과학원'),
-            ('데이터', '실시간 해양관측 수온 · 적조 속보'),
+            ('데이터', '해양관측 수온(1시간 간격 수집) · 적조 속보'),
             if (station != null) ('관측소', '${station['name']}${station['code'] != null ? ' (${station['code']})' : ''}'),
-            if (obs != null) ('관측 시각', '${obs['observedDate']} ${obs['observedTime']}'),
+            if (temp != null) ('수온 자료', '${temp['firstDate']} ~ ${temp['lastDate']} · ${temp['days']}일분 (${temp['layer']})'),
+            if (obs != null) ('실시간 관측 시각', '${obs['observedDate']} ${obs['observedTime']}'),
             ('적조 속보', redText),
             if (((pub['notConnected'] as List<dynamic>?) ?? []).isNotEmpty) ('미연동', ((pub['notConnected'] as List<dynamic>?) ?? []).join(', ')),
           ])}</div>',
       ].join();
     case 4:
       final prev = m['prev'] as Map<String, dynamic>?;
-      if (prev == null) return '';
+      final temp = (m['publicData'] as Map<String, dynamic>?)?['temp'] as Map<String, dynamic>?;
+      final hasTemp = temp?['prevAvg'] != null;
+      if (prev == null && !hasTemp) return '';
       return _tiles([
-        ('현장 기록 (이전 → 이번 기간)', '${prev['total']} → $total건', null),
-        ('폐사 기록 (이전 → 이번 기간)', '${prev['deathEvents']} → $deathEvents건', _kind('폐사')),
+        if (prev != null) ('현장 기록 (이전 → 이번 기간)', '${prev['total']} → $total건', null),
+        if (prev != null) ('폐사 기록 (이전 → 이번 기간)', '${prev['deathEvents']} → $deathEvents건', _kind('폐사')),
+        if (hasTemp) ('외부 관측 평균 수온 (이전 → 이번 기간)', '${fmtTemp(temp!['prevAvg'])} → ${fmtTemp(temp['avg'])}℃', null),
       ]);
     case 5:
       return _openItems(open);
@@ -392,13 +464,10 @@ String _agencyExtras(String title, Map<String, dynamic> m) {
       ]);
     case 4:
       if (stations.isEmpty) return '<p class="muted">연결된 관측소가 없습니다.</p>';
-      return '${_rows([
-        for (final st in stations)
-          (
-            '${st['name']} (양식장 ${st['farms']}곳)',
-            st['observation'] == null ? '자료 없음' : '${(st['observation'] as Map)['layer']} ${_numStr((st['observation'] as Map)['waterTempC'])}℃',
-          ),
-      ])}<p class="muted">관측소 값은 리포트 작성 시점의 실시간 값이며 기간 평균이 아닙니다.</p>';
+      final note = stations.any((st) => st['temp'] != null)
+          ? '관측소 일 평균 수온의 기간 요약입니다(서버가 1시간마다 모은 관측값). 이력이 없는 관측소는 작성 시점 실시간 값입니다.'
+          : '관측소 값은 리포트 작성 시점의 실시간 값이며 기간 평균이 아닙니다.';
+      return '${_rows([for (final st in stations) ('${st['name']} (양식장 ${st['farms']}곳)', stationTempLabel(st))])}<p class="muted">${_e(note)}</p>';
     case 5:
       return _openItems(open);
     default:
@@ -410,7 +479,7 @@ String _agencyTable(Map<String, dynamic> m) {
   final rows = ((m['rows'] as List<dynamic>?) ?? []).cast<Map<String, dynamic>>();
   if (rows.isEmpty) return '';
   final b = StringBuffer('<section><h2>양식장별 현황 표</h2><div style="overflow-x:auto"><table class="grid"><tr>'
-      '<th>양식장</th><th>지역</th><th class="n">메모</th><th class="n">방문</th><th class="n">폐사</th><th class="n">접종</th><th>관측소</th><th class="n">수온</th></tr>');
+      '<th>양식장</th><th>지역</th><th class="n">메모</th><th class="n">방문</th><th class="n">폐사</th><th class="n">접종</th><th>관측소</th><th class="n">기간 평균 수온</th></tr>');
   for (final x in rows) {
     final deaths = (x['deathsMax'] as int? ?? 0) > 0
         ? _range(x['deathsMin'] as int? ?? 0, x['deathsMax'] as int)
@@ -419,7 +488,7 @@ String _agencyTable(Map<String, dynamic> m) {
             : '0';
     b.write('<tr><td>${_e('${x['name']}')}</td><td>${_e((x['region'] as String?)?.isNotEmpty == true ? x['region'] as String : '-')}</td>'
         '<td class="n">${x['memos']}</td><td class="n">${x['visits']}</td><td class="n">${_e(deaths)}</td><td class="n">${x['vaccinations']}</td>'
-        '<td>${_e('${x['station'] ?? '-'}')}</td><td class="n">${x['waterTempC'] == null ? '-' : '${_numStr(x['waterTempC'])}℃'}</td></tr>');
+        '<td>${_e('${x['station'] ?? '-'}')}</td><td class="n">${_e(farmRowTempLabel(x))}</td></tr>');
   }
   b.write('</table></div></section>');
   return b.toString();

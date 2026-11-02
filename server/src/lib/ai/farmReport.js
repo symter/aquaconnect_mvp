@@ -3,6 +3,7 @@
 // 메모 uuid 는 AI 에게 보이지 않고 [#1], [#2] 같은 순번으로 바꿔 보낸다(근거 번호 검증도 이 순번으로 한다).
 
 import { fetchRealtimeObservations, pickPreferredObservation } from '../nifs.js';
+import { periodTemps, tempSummaryLine } from '../oceanHistory.js';
 import { fetchRedTide } from '../redtide.js';
 import { parseDraft, renderDraft, verifyDraft } from './draft.js';
 import { approvedExamples } from './examples.js';
@@ -54,20 +55,43 @@ function tally(an) {
   return lines;
 }
 
+/** 'YYYY-MM-DD' 에 n일을 더한다. */
+const addDays = (date, n) => new Date(Date.parse(`${date}T00:00:00Z`) + n * 86400_000).toISOString().slice(0, 10);
+
 /** 공공데이터: AI 입력 줄(lines)과 리포트 양식에 남길 값(data). */
 async function publicData(farm, from, to) {
   const lines = [];
+  // 기간 일 평균 수온 — 서버가 1시간마다 모은 관측소 이력(oceanHistory.js)으로 계산한다.
+  let period = null;
+  let prevAvg = null;
+  try {
+    period = await periodTemps(farm.nearest_station_code, from, to);
+    const len = Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400_000) + 1;
+    const prev = await periodTemps(farm.nearest_station_code, addDays(from, -len), addDays(from, -1));
+    prevAvg = prev && prev.layer === period?.layer ? prev.summary.avg : null;
+  } catch (err) {
+    console.error('period temps failed', err);
+  }
   let temp = null;
   try {
     temp = pickPreferredObservation(await fetchRealtimeObservations({ station: farm.nearest_station_code }));
   } catch {
     temp = null;
   }
-  lines.push(
-    temp
-      ? `- 관측소 수온: ${farm.nearest_station_name} 관측소 ${temp.layer} ${temp.waterTempC}℃ (관측 ${temp.observedDate} ${temp.observedTime}, 리포트 작성 시점의 실시간 값이며 기간 평균이 아님)`
-      : `- 관측소 수온: 수온 자료 없음(${farm.nearest_station_name} 관측소 조회 실패)`,
-  );
+  if (period) {
+    lines.push(`- 관측소 수온(기간): ${tempSummaryLine(farm.nearest_station_name, period)}`);
+    lines.push(`- 일별 평균 수온: ${period.daily.map((d) => `${d.date.slice(5)} ${d.avg}℃`).join(', ')}`);
+    lines.push(prevAvg !== null ? `- 직전 같은 길이 기간의 평균 수온: ${prevAvg}℃` : '- 직전 같은 길이 기간의 평균 수온: 자료 없음 — 비교 불가');
+  } else {
+    lines.push(`- 관측소 수온(기간): 기간 수온 이력 없음(${farm.nearest_station_name || '관측소 미지정'})`);
+  }
+  if (temp) {
+    lines.push(
+      `- 관측소 수온(작성 시점): ${farm.nearest_station_name} 관측소 ${temp.layer} ${temp.waterTempC}℃ (관측 ${temp.observedDate} ${temp.observedTime}, 실시간 값이며 기간 평균이 아님)`,
+    );
+  } else if (!period) {
+    lines.push(`- 관측소 수온(작성 시점): 수온 자료 없음(${farm.nearest_station_name} 관측소 조회 실패)`);
+  }
   let redTide = null;
   try {
     const data = await fetchRedTide();
@@ -89,6 +113,9 @@ async function publicData(farm, from, to) {
     observation: temp
       ? { layer: temp.layer, waterTempC: temp.waterTempC, observedDate: temp.observedDate, observedTime: temp.observedTime }
       : null,
+    // 기간 일 평균 수온(관측소 이력). 이력이 없으면 null.
+    temp: period ? { layer: period.layer, ...period.summary, prevAvg } : null,
+    daily: period ? period.daily.map(({ date, avg, min, max }) => ({ date, avg, min, max })) : [],
     redTide:
       redTide === undefined
         ? { status: 'error' }
@@ -100,7 +127,7 @@ async function publicData(farm, from, to) {
             }
           : { status: 'none' },
     fetchedAt: new Date().toISOString(),
-    notConnected: ['기간별 일 평균 수온(관측소 이력)', '고수온·저수온 특보', '용존산소·염분(외부 관측)'],
+    notConnected: ['고수온·저수온 특보', '용존산소·염분(외부 관측)'],
   };
   return { lines, data };
 }
