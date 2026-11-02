@@ -78,17 +78,17 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
 
           {saved && <div style={{ marginBottom: 16 }}><Notice tone="success">{saved}</Notice></div>}
 
-          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 3fr) minmax(0, 2fr)", gap: 20, alignItems: "start" }}>
+          <div className="report-grid">
             <div style={cardStyle}>
               <SectionLabel>리포트 본문 (&quot;## 제목&quot;이 섹션, &quot;- &quot;가 항목)</SectionLabel>
               <textarea
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
                 readOnly={!editable}
-                style={{ ...inputStyle, minHeight: 640, lineHeight: 1.65, fontSize: 13.5, resize: "vertical" }}
+                style={{ ...inputStyle, minHeight: "min(640px, 70vh)", lineHeight: 1.65, fontSize: 13.5, resize: "vertical" }}
               />
               {editable && (
-                <div style={{ display: "flex", gap: 8, marginTop: 12, justifyContent: "flex-end" }}>
+                <div style={{ display: "flex", gap: 8, marginTop: 12, justifyContent: "flex-end", flexWrap: "wrap" }}>
                   <Button variant="outline" disabled={busy || dirty} onClick={() => save(false)}>
                     <CheckCircle2 size={14} /> 수정 없이 검토 완료
                   </Button>
@@ -106,7 +106,7 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
                   {report.checks.map((c, i) => (
                     <div key={i} style={{ fontSize: 13, padding: "8px 0", borderTop: i ? "1px solid #F0F2F5" : "none" }}>
                       <p style={{ fontWeight: 700, color: "#333" }}>{c.section}</p>
-                      <p style={{ color: "#555", marginTop: 2 }}>{c.text}</p>
+                      <p className="wrap-anywhere" style={{ color: "#555", marginTop: 2 }}>{c.text}</p>
                       <p style={{ color: COLORS.dangerText, marginTop: 2 }}>{c.problem}</p>
                     </div>
                   ))}
@@ -118,7 +118,7 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
                   {report.memos.map((m, i) => (
                     <div key={m.n} style={{ fontSize: 13, padding: "8px 0", borderTop: i ? "1px solid #F0F2F5" : "none" }}>
                       <p style={{ color: "#888" }}>#{m.n} · {m.date} · {m.kind} · {m.author}</p>
-                      <p style={{ color: "#222", marginTop: 2, whiteSpace: "pre-wrap" }}>{m.body}</p>
+                      <p className="wrap-anywhere" style={{ color: "#222", marginTop: 2, whiteSpace: "pre-wrap" }}>{m.body}</p>
                     </div>
                   ))}
                 </div>

@@ -155,7 +155,7 @@ export default function CommunityList({ authorId, authorName }: { authorId: stri
                   <span style={{ fontSize: 12, color: "#aaa" }}>· {formatDateTime(m.createdAt)}</span>
                 </div>
                 <p style={{
-                  fontSize: 14, color: "#333", lineHeight: 1.6, whiteSpace: "pre-wrap",
+                  fontSize: 14, color: "#333", lineHeight: 1.6, whiteSpace: "pre-wrap", overflowWrap: "anywhere",
                   display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden",
                 }}>
                   {m.content}

@@ -55,7 +55,7 @@ export default function ReportsPage() {
           <FilterChip key={f.label} active={status === f.value} onClick={() => setStatus(f.value)}>{f.label}</FilterChip>
         ))}
         <FilterChip active={autoOnly} onClick={() => setAutoOnly(!autoOnly)}>자동 생성만</FilterChip>
-        <select value={orgId} onChange={(e) => setOrgId(e.target.value)} style={{ ...inputStyle, width: 220, padding: "8px 12px" }}>
+        <select value={orgId} onChange={(e) => setOrgId(e.target.value)} style={{ ...inputStyle, width: 220, maxWidth: "100%", padding: "8px 12px" }}>
           <option value="">모든 기관</option>
           {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
         </select>
