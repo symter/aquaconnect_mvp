@@ -654,8 +654,13 @@ class _CountRows extends StatelessWidget {
                 children: [
                   Container(width: 3, height: 14, color: _topicColor),
                   const SizedBox(width: 8),
-                  Expanded(child: Text(name, style: const TextStyle(fontSize: 12.5, color: AppColors.textPrimary))),
-                  Text(value, style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
+                  Expanded(flex: 3, child: Text(name, style: const TextStyle(fontSize: 12.5, color: AppColors.textPrimary))),
+                  const SizedBox(width: 8),
+                  // Long values (관측소 수온 요약) wrap instead of pushing past the edge.
+                  Flexible(
+                    flex: 2,
+                    child: Text(value, textAlign: TextAlign.right, style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
+                  ),
                 ],
               ),
             ),

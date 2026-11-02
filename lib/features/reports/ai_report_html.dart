@@ -83,7 +83,7 @@ const _css = '''
 *{box-sizing:border-box}
 html,body{margin:0}
 body{background:var(--bg);color:var(--ink);font-family:"Noto Sans KR",system-ui,sans-serif;font-size:13px;line-height:1.6;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.doc{max-width:760px;margin:12px auto;background:#fff;padding:28px 30px 22px;border:1px solid var(--line);border-radius:12px}
+.doc{max-width:760px;margin:12px auto;overflow-wrap:anywhere;background:#fff;padding:28px 30px 22px;border:1px solid var(--line);border-radius:12px}
 h1{text-align:center;font-size:22px;font-weight:900;margin:4px 0 18px}
 h2{color:var(--brand);font-size:16px;font-weight:900;border-bottom:2px solid var(--brand);padding-bottom:5px;margin:26px 0 10px}
 h2.plain{color:var(--ink);border:0}
@@ -113,6 +113,7 @@ table.grid th,table.grid td{border-bottom:1px solid var(--line);padding:5px 6px;
 table.grid td.n,table.grid th.n{text-align:right}
 .matrix td{text-align:center;min-width:34px;border-radius:4px}
 .foot{font-size:11px;color:#8a96a3;border-top:1px solid var(--line);padding-top:10px;margin-top:22px}
+@media (max-width:520px){.doc{margin:0;border:0;border-radius:0;padding:18px 14px 16px}h1{font-size:19px}dl.meta{grid-template-columns:92px 1fr}.tiles{grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px}.tile b{font-size:17px}}
 @page{size:A4;margin:14mm}
 @media print{body{background:#fff}.doc{border:0;margin:0;max-width:none;padding:0}section{break-inside:auto}h2{break-after:avoid}svg.chart,.tiles,.box,.open{break-inside:avoid}}
 ''';

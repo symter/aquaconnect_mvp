@@ -49,7 +49,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: ResponsiveMobileFrame(
+      body: FormWidth(
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(

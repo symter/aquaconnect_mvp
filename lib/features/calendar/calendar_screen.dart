@@ -161,6 +161,16 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     return '${_anchor.year}년 ${_anchor.month}월';
   }
 
+  /// Narrow phones: "2026.11" (or "2026.11–12") so the month isn't cut off.
+  String get _shortTitle {
+    if (_view == _CalView.week) {
+      final start = _weekStart(_anchor);
+      final end = start.add(const Duration(days: 6));
+      return start.month == end.month ? '${start.year}.${start.month}' : '${start.year}.${start.month}–${end.month}';
+    }
+    return '${_anchor.year}.${_anchor.month}';
+  }
+
   Future<void> _pickMonth() async {
     final picked = await showDialog<DateTime>(
       context: context,
@@ -274,7 +284,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                         children: [
                           Flexible(
                             child: Text(
-                              _title,
+                              MediaQuery.sizeOf(context).width < 380 ? _shortTitle : _title,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
                                 fontSize: 17,
