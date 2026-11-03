@@ -39,7 +39,7 @@ const _allFarms = '';
 const _noFarm = '미지정';
 
 class _MemoScreenState extends ConsumerState<MemoScreen> {
-  _MemoView _view = _MemoView.all;
+  _MemoView _view = _MemoView.today;
   String _farm = _allFarms;
   bool _searching = false;
   String _query = '';
@@ -71,7 +71,7 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
       _focusId = id;
       _commentsPending = widget.openComments;
     }
-    _view = widget.view == 'today' ? _MemoView.today : _MemoView.all;
+    _view = _MemoView.today;
     _farm = _allFarms;
     _searching = false;
     _query = '';
@@ -175,9 +175,9 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
                             scrollDirection: Axis.horizontal,
                             children: [
                               for (final (view, label) in [
-                                (_MemoView.all, '전체'),
                                 (_MemoView.today, _withCount('오늘의 업무', today?.open.length)),
                                 (_MemoView.todo, _withCount('할일', memosAsync.valueOrNull?.where(_isOpenTask).length)),
+                                (_MemoView.all, '전체'),
                                 (_MemoView.done, '완료'),
                               ]) ...[
                                 FilterPillChip(label: label, selected: _view == view, onTap: () => setState(() => _view = view)),
@@ -199,6 +199,13 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
                       ],
                     ],
                   ),
+                  if (_view == _MemoView.today || _view == _MemoView.todo) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      _view == _MemoView.today ? '내가 담당자로 배정된 업무' : '완료되지 않은 우리 수산질병관리원 업무',
+                      style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                    ),
+                  ],
                 ],
               ),
             ),
