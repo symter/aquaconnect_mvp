@@ -380,8 +380,9 @@ class _BottomActions extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+          // Wraps onto two lines on very narrow phones instead of overflowing.
+          Wrap(
+            alignment: WrapAlignment.center,
             children: [
               TextButton.icon(
                 onPressed: () => context.push('/reports/${farm.id}/farm-report'),

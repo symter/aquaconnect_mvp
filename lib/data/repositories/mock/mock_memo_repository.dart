@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import '../../mock/mock_seed.dart';
 import '../../models/memo.dart';
 import '../../models/memo_comment.dart';
+import '../../models/memo_import.dart';
 import '../memo_repository.dart';
 
 class MockMemoRepository implements MemoRepository {
@@ -171,4 +172,13 @@ class MockMemoRepository implements MemoRepository {
     list.removeWhere((c) => c.id == commentId);
     _replace(memoId, (m) => m.copyWith(commentCount: list.length));
   }
+
+  @override
+  Future<MemoImportResult> importMemos({
+    required String farmId,
+    required String fileName,
+    required Uint8List bytes,
+    bool dryRun = false,
+  }) =>
+      throw Exception('메모 일괄 업로드는 서버에 연결된 상태에서만 쓸 수 있어요.');
 }

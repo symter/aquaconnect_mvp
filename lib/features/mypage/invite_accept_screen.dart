@@ -89,7 +89,7 @@ class _InviteAcceptScreenState extends ConsumerState<InviteAcceptScreen> {
     final session = ref.watch(authStateProvider).valueOrNull;
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: ResponsiveMobileFrame(
+      body: FormWidth(
         child: SafeArea(
           child: FutureBuilder<InvitationInfo>(
             future: _info,

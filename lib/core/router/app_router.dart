@@ -8,6 +8,7 @@ import '../../features/auth/login_screen.dart';
 import '../../features/auth/signup_screen.dart';
 import '../../features/calendar/calendar_screen.dart';
 import '../../features/home/home_screen.dart';
+import '../../features/memo/memo_import_screen.dart';
 import '../../features/memo/memo_screen.dart';
 import '../../features/mypage/change_history_screen.dart';
 import '../../features/mypage/daily_summary_settings_screen.dart';
@@ -21,6 +22,7 @@ import '../../features/mypage/share_link_management_screen.dart';
 import '../../features/notifications/notification_settings_screen.dart';
 import '../../features/notifications/notifications_screen.dart';
 import '../../features/reports/ai_report_list_screen.dart';
+import '../../features/reports/ai_report_print_screen.dart';
 import '../../features/reports/ai_report_screen.dart';
 import '../../features/reports/all_report_screen.dart';
 import '../../features/reports/report_detail_screen.dart';
@@ -95,6 +97,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/r/:token',
         builder: (context, state) => SharedReportWebScreen(token: state.pathParameters['token']!),
       ),
+      // An AI 관리 리포트 the farm received (public, like /r/:token).
+      GoRoute(
+        path: '/r/:token/ai/:reportId',
+        builder: (context, state) => SharedAiReportScreen(
+          token: state.pathParameters['token']!,
+          reportId: state.pathParameters['reportId']!,
+        ),
+      ),
       GoRoute(
         path: '/reports',
         builder: (context, state) => const AllReportScreen(),
@@ -112,8 +122,24 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => AiReportCreateScreen(farmId: state.pathParameters['farmId']!),
       ),
       GoRoute(
+        path: '/reports/:farmId/ai/review',
+        builder: (context, state) => AiMemoReviewScreen(farmId: state.pathParameters['farmId']!),
+      ),
+      // Fixed paths before /ai-reports/:id so they aren't read as an id.
+      GoRoute(path: '/ai-reports/agency', builder: (context, state) => const AiAgencyReportListScreen()),
+      GoRoute(path: '/ai-reports/agency/new', builder: (context, state) => const AiAgencyReportCreateScreen()),
+      GoRoute(path: '/ai-reports/review', builder: (context, state) => const AiMemoReviewScreen()),
+      GoRoute(
         path: '/ai-reports/:id',
         builder: (context, state) => AiReportScreen(reportId: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/ai-reports/:id/print',
+        builder: (context, state) => AiReportPrintScreen(reportId: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/memo-import',
+        builder: (context, state) => MemoImportScreen(farmId: state.uri.queryParameters['farmId']),
       ),
       GoRoute(
         path: '/reports/:farmId',

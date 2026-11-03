@@ -16,8 +16,8 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 99px; }
 
-/* 휴대폰 폭: 사이드바를 상단 바로 바꾼다 (데스크톱 레이아웃은 그대로). */
-@media (max-width: 767px) {
+/* 휴대폰·태블릿 세로 폭: 사이드바를 상단 바로 바꾼다 (데스크톱 레이아웃은 그대로). */
+@media (max-width: 1023px) {
   .admin-body { flex-direction: column; }
   .admin-sidebar {
     width: 100% !important;
@@ -34,4 +34,18 @@ body {
   .admin-nav { flex-direction: row !important; flex: 0 0 100% !important; order: 3; overflow-x: auto; padding: 4px 4px 0 !important; }
   .admin-nav a { white-space: nowrap; }
   .admin-main { padding: 24px 16px !important; }
+}
+
+/* 휴대폰 폭: 본문 여백을 줄인다. */
+@media (max-width: 599px) {
+  .admin-main { padding: 20px 12px !important; }
+}
+
+/* 띄어쓰기 없는 긴 글(URL 등)도 카드 밖으로 넘치지 않게 */
+.wrap-anywhere { overflow-wrap: anywhere; word-break: break-word; }
+
+/* AI 리포트 검토 상세: 넓은 화면은 본문 | 근거 두 칸, 좁으면 한 칸 */
+.report-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 20px; align-items: start; }
+@media (max-width: 1199px) {
+  .report-grid { grid-template-columns: minmax(0, 1fr); }
 }

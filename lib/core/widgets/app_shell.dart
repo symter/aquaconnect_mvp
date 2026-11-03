@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import '../providers/data_providers.dart';
 import '../providers/onboarding_provider.dart';
 import '../theme/app_colors.dart';
-import 'responsive_mobile_frame.dart';
 import 'tutorial_overlay.dart';
 
 class AppShell extends ConsumerWidget {
@@ -14,7 +13,6 @@ class AppShell extends ConsumerWidget {
   final StatefulNavigationShell navigationShell;
 
   static const _memoTab = 1;
-  static const _calendarTab = 2;
 
   static const _tabs = [
     (icon: Icons.home_outlined, activeIcon: Icons.home, label: '홈'),
@@ -26,8 +24,12 @@ class AppShell extends ConsumerWidget {
   /// One-time intro shown the first time each tab is opened (after the
   /// welcome card). Same order as [_tabs].
   static const _intros = [
-    (id: 'home', title: '홈', body: '맨 위 오늘의 업무에서 오늘 할 일을 먼저 확인하고, 담당 양식장과 바다 수온·적조 정보도 여기서 바로 봐요. 아래 입력창에서 메모를 남기고, 오른쪽 위 종 모양에서 알림을 확인해요.'),
-    (id: 'memo', title: '메모', body: '맨 위 오늘의 업무에서 내가 할 일을 확인하고, 끝난 일은 메모 왼쪽 동그라미(✓)를 눌러 완료해요. 양식장은 오른쪽 위 선택 버튼으로 골라 봐요.'),
+    (
+      id: 'home',
+      title: '홈',
+      body: '맨 위 오늘의 업무에서 오늘 할 일을 먼저 확인하고, 관리 양식장과 바다 수온·적조 정보도 여기서 바로 봐요. 아래 입력창에서 메모를 남기고, 오른쪽 위 종 모양에서 알림을 확인해요.',
+    ),
+    (id: 'memo', title: '메모', body: '위쪽 오늘의 업무 탭에서 내가 할 일만 모아 보고, 끝난 일은 메모 왼쪽 동그라미(✓)를 눌러 완료해요. 양식장은 오른쪽 위 선택 버튼으로 골라 봐요.'),
     (id: 'calendar', title: '캘린더', body: '메모가 날짜별로 모여 있어요. 완료한 일은 완료한 날, 아직인 일은 등록한 날에 보여요. 두 손가락으로 벌리거나 −/+ 버튼으로 확대·축소해요.'),
     (id: 'mypage', title: '마이페이지', body: '양식장·구성원 관리, 바다 위치, 알림·오늘의 업무 알림 설정은 여기에서 해요.'),
   ];
@@ -45,7 +47,7 @@ class AppShell extends ConsumerWidget {
       overlay = TutorialOverlay(
         icon: Icons.waves,
         title: 'AquaConnect에 오신 걸 환영해요',
-        body: '담당 양식장의 수온·질병 위험을 한눈에 확인하고, 리포트를 어가에 바로 공유해 보세요.',
+        body: '관리 양식장의 수온·질병 위험을 한눈에 확인하고, 리포트를 어가에 바로 공유해 보세요.',
         primaryLabel: '시작하기',
         onPrimary: notifier.markWelcomeSeen,
         onSkip: () async {
@@ -69,52 +71,41 @@ class AppShell extends ConsumerWidget {
       );
     }
 
-    // The calendar tab may use a wide window; the other tabs keep the
-    // mobile-width column.
-    return ResponsiveMobileFrame(
-      maxWidth: navigationShell.currentIndex == _calendarTab ? 1280 : 480,
-      child: Scaffold(
-        body: Stack(children: [navigationShell, ?overlay]),
-        bottomNavigationBar: DecoratedBox(
-          decoration: const BoxDecoration(
-            color: AppColors.surface,
-            border: Border(top: BorderSide(color: AppColors.border)),
-          ),
-          child: SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.only(top: 9, bottom: 4),
-              child: Row(
-                children: List.generate(_tabs.length, (i) {
-                  final tab = _tabs[i];
-                  final selected = i == navigationShell.currentIndex;
-                  final color = selected ? AppColors.brand : AppColors.textMuted;
-                  return Expanded(
-                    child: InkWell(
-                      onTap: () => navigationShell.goBranch(i, initialLocation: i == navigationShell.currentIndex),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _TabIcon(
-                            icon: selected ? tab.activeIcon : tab.icon,
-                            color: color,
-                            badge: i == _memoTab ? openTasks : 0,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            tab.label,
-                            style: TextStyle(
-                              fontSize: 10.5,
-                              fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
-                              color: color,
-                            ),
-                          ),
-                        ],
-                      ),
+    // Width (full on phones/tablets, a centered column on wide windows,
+    // wider for the calendar) is set once for every screen in app.dart.
+    return Scaffold(
+      body: Stack(children: [navigationShell, ?overlay]),
+      bottomNavigationBar: DecoratedBox(
+        decoration: const BoxDecoration(
+          color: AppColors.surface,
+          border: Border(top: BorderSide(color: AppColors.border)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 9, bottom: 4),
+            child: Row(
+              children: List.generate(_tabs.length, (i) {
+                final tab = _tabs[i];
+                final selected = i == navigationShell.currentIndex;
+                final color = selected ? AppColors.brand : AppColors.textMuted;
+                return Expanded(
+                  child: InkWell(
+                    onTap: () => navigationShell.goBranch(i, initialLocation: i == navigationShell.currentIndex),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _TabIcon(icon: selected ? tab.activeIcon : tab.icon, color: color, badge: i == _memoTab ? openTasks : 0),
+                        const SizedBox(height: 4),
+                        Text(
+                          tab.label,
+                          style: TextStyle(fontSize: 10.5, fontWeight: selected ? FontWeight.w700 : FontWeight.w400, color: color),
+                        ),
+                      ],
                     ),
-                  );
-                }),
-              ),
+                  ),
+                );
+              }),
             ),
           ),
         ),

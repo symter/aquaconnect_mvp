@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import '../models/memo.dart';
 import '../models/memo_comment.dart';
+import '../models/memo_import.dart';
 
 abstract class MemoRepository {
   /// Live-updating memo feed, newest first. [farmId] filters to one farm;
@@ -49,4 +50,14 @@ abstract class MemoRepository {
 
   /// Only the comment's author or an owner/director may.
   Future<void> deleteComment({required String memoId, required String commentId});
+
+  /// 메모 일괄 업로드: an Excel CSV or 메모장 .txt for [farmId]. With
+  /// [dryRun] the server only reads it (preview); otherwise it files the new
+  /// memos under their written dates and skips ones already in the app.
+  Future<MemoImportResult> importMemos({
+    required String farmId,
+    required String fileName,
+    required Uint8List bytes,
+    bool dryRun = false,
+  });
 }

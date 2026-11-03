@@ -28,10 +28,11 @@ export async function recordUsage({ orgId, memberId, model, outcome, usage }) {
 }
 
 /**
- * 모델 목록 + 오늘 사용량. 429 는 분당 한도일 수도 있어 하루 소진으로 단정하지 않고,
+ * 그 AI 의 모델 목록(좋은 것부터) + 오늘 사용량. 429 는 분당 한도일 수도 있어 하루 소진으로 단정하지 않고,
  * 그 모델의 마지막 호출이 429 였을 때만 limited 로 알린다(다음 성공 호출이 오면 풀린다).
+ * dailyLimit 이 null 이면 하루 한도가 없다(remaining 도 null).
  */
-export async function modelsWithUsage(now = new Date()) {
+export async function modelsWithUsage(provider, now = new Date()) {
   const { start, end } = quotaWindow(now);
   const { rows } = await query(
     `select model,
@@ -45,7 +46,7 @@ export async function modelsWithUsage(now = new Date()) {
   const byModel = new Map(rows.map((r) => [r.model, r]));
   return {
     resetsAt: end.toISOString(),
-    models: modelOptions().map((m) => {
+    models: modelOptions(provider).map((m) => {
       const u = byModel.get(m.id);
       const used = u?.used ?? 0;
       const limited = Boolean(u?.quota_at) && (!u.last_ok_at || new Date(u.quota_at) > new Date(u.last_ok_at));
@@ -57,8 +58,20 @@ export async function modelsWithUsage(now = new Date()) {
         usedToday: used,
         tokensToday: u?.tokens ?? 0,
         limited,
-        remaining: Math.max(0, m.dailyLimit - used),
+        remaining: m.dailyLimit == null ? null : Math.max(0, m.dailyLimit - used),
       };
     }),
   };
+}
+
+/**
+ * 이번 요청에서 시도할 모델 순서(자동 선택). 좋은 모델부터, 오늘 한도가 남은 모델 → 최근 429 를 받은 모델 →
+ * 집계상 소진된 모델 순. 집계는 이 서버가 보낸 요청만 세므로 소진된 모델도 맨 뒤에 남겨 둔다
+ * (실제로 소진됐으면 429 로 바로 넘어간다).
+ */
+export async function modelPlan(provider) {
+  const { models } = await modelsWithUsage(provider);
+  const rank = (m) => (m.remaining === 0 ? 2 : m.limited ? 1 : 0);
+  const ordered = models.map((m, i) => ({ m, i })).sort((a, b) => rank(a.m) - rank(b.m) || a.i - b.i);
+  return { provider, models: ordered.map((x) => x.m.id) };
 }

@@ -4,6 +4,7 @@ import { requireAuth } from '../auth.js';
 import { pool, query } from '../db.js';
 import { orgIdForMember } from '../lib/orgScope.js';
 import { notifyMembers } from '../lib/notify.js';
+import { parseMemoFile } from '../lib/memoImport.js';
 import { refreshReportQuietly } from './reports.js';
 
 export const memosRouter = Router();
@@ -213,6 +214,74 @@ memosRouter.post('/', async (req, res) => {
   });
 
   res.status(201).json(toMemoJson({ ...memoRow, farm_name: farmName, photo_ids: photoIds }));
+});
+
+const IMPORT_MAX_BYTES = 1_000_000;
+const IMPORT_MAX_MEMOS = 500;
+
+// 메모 일괄 업로드(symterAI memos/import 이식): 엑셀 CSV(.csv) 또는 메모장(.txt).
+// Body: { farmId, fileName, data: base64, dryRun?: boolean }. dryRun 이면 읽은 결과만 돌려준다.
+// 각 메모는 적힌 날짜(한국 시간 정오)로 저장하고, 같은 양식장·같은 날짜·같은 내용이 이미 있으면 건너뛴다.
+memosRouter.post('/import', async (req, res) => {
+  const orgId = await orgIdForMember(req.memberId);
+  const { farmId, fileName = '', data, dryRun = false } = req.body ?? {};
+  const { rows: farmRows } = await query('select id, name from farms where org_id = $1 and id = $2', [orgId, farmId]);
+  const farm = farmRows[0];
+  if (!farm) return res.status(404).json({ error: '양식장을 찾을 수 없습니다.' });
+  if (typeof data !== 'string' || !data) return res.status(400).json({ error: '파일을 선택해 주세요.' });
+  const bytes = Buffer.from(data, 'base64');
+  if (bytes.length > IMPORT_MAX_BYTES) return res.status(400).json({ error: '파일이 너무 큽니다(최대 1MB).' });
+
+  const parsed = parseMemoFile(bytes, String(fileName));
+  if (parsed.memos.length > IMPORT_MAX_MEMOS) {
+    return res.status(400).json({ error: `한 번에 ${IMPORT_MAX_MEMOS}건까지 올릴 수 있습니다(${parsed.memos.length}건). 파일을 나눠 주세요.` });
+  }
+
+  // 이미 같은 날짜·같은 내용으로 올라간 메모는 다시 넣지 않는다(같은 파일을 두 번 올린 경우).
+  const { rows: existing } = await query(
+    `select content, to_char(created_at at time zone 'Asia/Seoul', 'YYYY-MM-DD') as day from memos where farm_id = $1`,
+    [farm.id],
+  );
+  const seen = new Set(existing.map((r) => `${r.day}|${r.content.trim()}`));
+  const memos = parsed.memos.map((m) => {
+    const key = `${m.date}|${m.body.trim()}`;
+    const duplicate = seen.has(key);
+    seen.add(key);
+    return { ...m, duplicate };
+  });
+  const fresh = memos.filter((m) => !m.duplicate);
+  if (dryRun) return res.json({ format: parsed.format, memos, warnings: parsed.warnings, created: 0 });
+  if (!fresh.length) return res.status(400).json({ error: '새로 올릴 메모가 없습니다(모두 이미 있거나 읽지 못했습니다).' });
+
+  const { rows: memberRows } = await query('select name from members where id = $1', [req.memberId]);
+  const authorName = `수산질병관리원 · ${memberRows[0]?.name ?? ''}`;
+  const client = await pool.connect();
+  try {
+    await client.query('begin');
+    for (const m of fresh) {
+      await client.query(
+        `insert into memos (org_id, farm_id, author_type, author_name, author_member_id, content, tags, photo_count, created_at)
+         values ($1, $2, 'institute', $3, $4, $5, $6, 0, $7)`,
+        [orgId, farm.id, authorName, req.memberId, m.body, m.kind ? [m.kind] : [], `${m.date}T12:00:00+09:00`],
+      );
+    }
+    await client.query('commit');
+  } catch (err) {
+    await client.query('rollback');
+    throw err;
+  } finally {
+    client.release();
+  }
+  await refreshReportQuietly(farm.id);
+  await notifyMembers({
+    orgId,
+    excludeMemberId: req.memberId,
+    type: 'memo',
+    title: `메모 일괄 업로드 · ${farm.name}`,
+    body: `${memberRows[0]?.name ?? ''}: 메모 ${fresh.length}건을 올렸어요.`,
+    link: '/memo',
+  });
+  res.status(201).json({ format: parsed.format, memos, warnings: parsed.warnings, created: fresh.length });
 });
 
 // 메모 수정: institute memos only (a farm's 문의 stays as the farm sent it),

@@ -3,11 +3,15 @@
 // 메모 uuid 는 AI 에게 보이지 않고 [#1], [#2] 같은 순번으로 바꿔 보낸다(근거 번호 검증도 이 순번으로 한다).
 
 import { fetchRealtimeObservations, pickPreferredObservation } from '../nifs.js';
+import { periodTemps, tempSummaryLine } from '../oceanHistory.js';
 import { fetchRedTide } from '../redtide.js';
 import { parseDraft, renderDraft, verifyDraft } from './draft.js';
+import { approvedExamples } from './examples.js';
 import { analyzeMemos, formatCount, summarizeFarm } from './memoAnalysis.js';
+import { summarizeField } from './memoExtract.js';
 import { AiError, chat } from './model.js';
-import { FARM_REPORT_PROMPT, FARM_PROMPT_VERSION } from './prompts.js';
+import { FARM_REPORT_PROMPT, FARM_PROMPT_VERSION, SUMMARIZE_PROMPT_VERSION } from './prompts.js';
+import { condense } from './staged.js';
 
 const NL = '\n';
 const KST = 9 * 3600_000;
@@ -51,19 +55,43 @@ function tally(an) {
   return lines;
 }
 
+/** 'YYYY-MM-DD' 에 n일을 더한다. */
+const addDays = (date, n) => new Date(Date.parse(`${date}T00:00:00Z`) + n * 86400_000).toISOString().slice(0, 10);
+
+/** 공공데이터: AI 입력 줄(lines)과 리포트 양식에 남길 값(data). */
 async function publicData(farm, from, to) {
   const lines = [];
+  // 기간 일 평균 수온 — 서버가 1시간마다 모은 관측소 이력(oceanHistory.js)으로 계산한다.
+  let period = null;
+  let prevAvg = null;
+  try {
+    period = await periodTemps(farm.nearest_station_code, from, to);
+    const len = Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400_000) + 1;
+    const prev = await periodTemps(farm.nearest_station_code, addDays(from, -len), addDays(from, -1));
+    prevAvg = prev && prev.layer === period?.layer ? prev.summary.avg : null;
+  } catch (err) {
+    console.error('period temps failed', err);
+  }
   let temp = null;
   try {
     temp = pickPreferredObservation(await fetchRealtimeObservations({ station: farm.nearest_station_code }));
   } catch {
     temp = null;
   }
-  lines.push(
-    temp
-      ? `- 관측소 수온: ${farm.nearest_station_name} 관측소 ${temp.layer} ${temp.waterTempC}℃ (관측 ${temp.observedDate} ${temp.observedTime}, 리포트 작성 시점의 실시간 값이며 기간 평균이 아님)`
-      : `- 관측소 수온: 수온 자료 없음(${farm.nearest_station_name} 관측소 조회 실패)`,
-  );
+  if (period) {
+    lines.push(`- 관측소 수온(기간): ${tempSummaryLine(farm.nearest_station_name, period)}`);
+    lines.push(`- 일별 평균 수온: ${period.daily.map((d) => `${d.date.slice(5)} ${d.avg}℃`).join(', ')}`);
+    lines.push(prevAvg !== null ? `- 직전 같은 길이 기간의 평균 수온: ${prevAvg}℃` : '- 직전 같은 길이 기간의 평균 수온: 자료 없음 — 비교 불가');
+  } else {
+    lines.push(`- 관측소 수온(기간): 기간 수온 이력 없음(${farm.nearest_station_name || '관측소 미지정'})`);
+  }
+  if (temp) {
+    lines.push(
+      `- 관측소 수온(작성 시점): ${farm.nearest_station_name} 관측소 ${temp.layer} ${temp.waterTempC}℃ (관측 ${temp.observedDate} ${temp.observedTime}, 실시간 값이며 기간 평균이 아님)`,
+    );
+  } else if (!period) {
+    lines.push(`- 관측소 수온(작성 시점): 수온 자료 없음(${farm.nearest_station_name} 관측소 조회 실패)`);
+  }
   let redTide = null;
   try {
     const data = await fetchRedTide();
@@ -79,7 +107,57 @@ async function publicData(farm, from, to) {
     const occ = (redTide.occurrences ?? []).slice(0, 5).map((o) => [o.area, o.organism].filter(Boolean).join(' ')).filter(Boolean);
     lines.push(`- 적조 속보(국립수산과학원) ${redTide.reportDate} 발표: ${occ.join(', ') || '세부 해역 정보 없음'} (전국 해역 대상 속보이며 이 양식장 해역과 같다는 뜻이 아님)`);
   }
-  return lines;
+  const data = {
+    station: farm.nearest_station_name ? { code: farm.nearest_station_code, name: farm.nearest_station_name } : null,
+    // 리포트 작성 시점의 실시간 값(기간 평균이 아님). 조회 실패면 null.
+    observation: temp
+      ? { layer: temp.layer, waterTempC: temp.waterTempC, observedDate: temp.observedDate, observedTime: temp.observedTime }
+      : null,
+    // 기간 일 평균 수온(관측소 이력). 이력이 없으면 null.
+    temp: period ? { layer: period.layer, ...period.summary, prevAvg } : null,
+    daily: period ? period.daily.map(({ date, avg, min, max }) => ({ date, avg, min, max })) : [],
+    redTide:
+      redTide === undefined
+        ? { status: 'error' }
+        : redTide
+          ? {
+              status: 'found',
+              reportDate: redTide.reportDate,
+              occurrences: (redTide.occurrences ?? []).slice(0, 5).map((o) => [o.area, o.organism].filter(Boolean).join(' ')).filter(Boolean),
+            }
+          : { status: 'none' },
+    fetchedAt: new Date().toISOString(),
+    notConnected: ['고수온·저수온 특보', '용존산소·염분(외부 관측)'],
+  };
+  return { lines, data };
+}
+
+/** 리포트 양식(타일·타임라인·차트)에 쓰는 값. 모두 코드가 메모에서 계산한 것이고 AI 출력과 무관하다. */
+function formMeta({ numbered, an, prevAn, pub }) {
+  const field = summarizeField(numbered);
+  const byKind = {};
+  for (const m of numbered) byKind[m.kind] = (byKind[m.kind] ?? 0) + 1;
+  const clip = (s, n) => {
+    const one = s.replace(/\s+/g, ' ').trim();
+    return one.length > n ? `${one.slice(0, n)}…` : one;
+  };
+  return {
+    generatedAt: new Date().toISOString(),
+    recordPeriod: field.recordDates.length ? { first: field.recordDates[0], last: field.recordDates[field.recordDates.length - 1] } : null,
+    authors: [...new Set(numbered.map((m) => m.author).filter(Boolean))],
+    memoStats: { byKind },
+    events: numbered.map((m) => ({ date: m.date, kind: m.kind })),
+    tanks: field.tanks,
+    measurements: field.measurements,
+    analysis: {
+      total: an.total,
+      topics: an.topics,
+      deaths: { events: an.deaths.events, min: an.deaths.min, max: an.deaths.max, unknown: an.deaths.unknown, byDay: an.deaths.byDay },
+      open: an.open.map((m) => ({ date: m.date, topic: m.a.primary, status: m.a.status, text: clip(m.body, 90) })),
+    },
+    prev: prevAn && { total: prevAn.total, deathEvents: prevAn.deaths.events },
+    publicData: pub,
+  };
 }
 
 /**
@@ -87,7 +165,8 @@ async function publicData(farm, from, to) {
  * comments: [{ memo_id, author_name, content, created_at }]
  * prevMemos: 직전 같은 길이 기간의 메모(비교용, 없으면 [])
  */
-export async function draftFarmReport({ farm, from, to, memos, comments, prevMemos, candidates, model, onResult }) {
+export async function draftFarmReport({ farm, from, to, memos, comments, prevMemos, candidates, plan, onResult }) {
+  const examples = await approvedExamples(farm.org_id, 'farm', { excludeFarmId: farm.id });
   const sorted = [...memos].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
   const numbered = sorted.map((m, i) => ({
     id: i + 1,
@@ -144,7 +223,9 @@ export async function draftFarmReport({ farm, from, to, memos, comments, prevMem
     ? an.open.map((o) => `- [#${o.n}] ${o.date} ${o.a.primary}: 상태 ${o.a.status}`).join(NL)
     : '(없음)';
 
-  const input = [
+  const pub = await publicData(farm, from, to);
+  const memoHeader = '[이번 기간 현장 메모 — 1순위 근거]';
+  const parts = (memoPart, commentPart) => [
     `기간: ${from} ~ ${to} (한국 시간)${NL}양식장: ${farm.name} / 지역: ${farm.region || '미입력'} / 주소: ${farm.address || '미입력'}`,
     [
       '[선택 범위 — 사용자가 고른 기록만 입력되었다]',
@@ -154,15 +235,33 @@ export async function draftFarmReport({ farm, from, to, memos, comments, prevMem
     ].join(NL),
     `[집계 — 코드가 계산한 값. 그대로 쓰고 직접 계산하지 않는다]${NL}${tally(an).join(NL)}`,
     `[후속 확인 필요]${NL}${openLines}`,
-    `[이번 기간 현장 메모 — 1순위 근거]${NL}${memoLines.length ? memoLines.join(NL) : '(메모 없음)'}`,
-    commentBlock,
+    memoPart,
+    commentPart,
     prevBlock,
-    `[공공데이터 — 외부 관측(보조 자료). 양식장 수조 실측값이 아님]${NL}${(await publicData(farm, from, to)).join(NL)}`,
+    `[공공데이터 — 외부 관측(보조 자료). 양식장 수조 실측값이 아님]${NL}${pub.lines.join(NL)}`,
   ]
     .filter(Boolean)
     .join(NL + NL);
+  // 검증은 언제나 원문 전체(input)와 대조한다. 모델에는 길면 중간 정리본(sendInput)을 보낸다.
+  const input = parts(`${memoHeader}${NL}${memoLines.length ? memoLines.join(NL) : '(메모 없음)'}`, commentBlock);
 
-  const { text, model: usedModel } = await chat(FARM_REPORT_PROMPT, input, { model, maxTokens: 16000, json: true, onResult });
+  // 메모 한 건 + 그 메모에 달린 댓글이 한 단위(같은 묶음에 들어간다).
+  const lineOf = new Map(an.sorted.map((m, i) => [m.n, memoLines[i]]));
+  const units = an.sorted.map((m) => {
+    const cs = commentRows.filter((c) => c.memoN === m.n);
+    return {
+      ids: [m.n],
+      refs: cs.map((c) => c.key),
+      text: [lineOf.get(m.n), ...cs.map((c) => `  - ${c.key} ${c.date} ${c.author}: ${c.body.replace(/\s+/g, ' ')}${c.late ? ' 〔기간 이후 추가 기록〕' : ''}`)].join(NL),
+    };
+  });
+  const condensed = await condense(units, parts('', '').length, { plan, onResult });
+  const sendInput = condensed
+    ? parts(`[이번 기간 현장 메모 — 메모가 많아 묶음별로 먼저 정리한 항목. 각 항목의 [#번호]가 근거 메모이고 〔댓글 …〕은 근거 댓글]${NL}${condensed.block}`, '')
+    : input;
+
+  const system = FARM_REPORT_PROMPT + (examples?.text ?? '');
+  const { text, model: usedModel } = await chat(system, sendInput, { plan, maxTokens: 16000, json: true, onResult });
   const raw = parseDraft(text);
   if (!raw) throw new AiError('AI가 정해진 형식(JSON)으로 작성하지 못했습니다. 다시 만들어 주세요.');
   const source = {
@@ -171,6 +270,10 @@ export async function draftFarmReport({ farm, from, to, memos, comments, prevMem
     comments: commentRows,
   };
   const checked = verifyDraft(raw, source, input);
+  // 중간 정리에서 근거가 맞지 않아 버린 항목도 검증 목록에 남겨 전문가가 보게 한다.
+  for (const st of condensed?.stages ?? []) {
+    for (const r of st.rejected) checked.checks.push({ section: '중간 정리', text: r.text, problem: `${st.label}: ${r.reason} → 항목에서 제외함` });
+  }
   const body = renderDraft(checked.draft, source);
 
   return {
@@ -185,6 +288,16 @@ export async function draftFarmReport({ farm, from, to, memos, comments, prevMem
       memos: numbered.map((m) => ({ n: m.n, id: m.uuid, date: m.date, kind: m.kind, author: m.author, authorType: m.authorType, body: m.body })),
       prevMemos: prevNumbered.map((m) => ({ n: m.n, id: m.uuid, date: m.date, kind: m.kind, body: m.body })),
       comments: commentRows,
+      meta: formMeta({ numbered, an, prevAn, pub: pub.data }),
+      examples: examples?.used ?? [],
+      ...(condensed
+        ? {
+            staged: {
+              promptVersion: SUMMARIZE_PROMPT_VERSION,
+              stages: condensed.stages.map((st) => ({ label: st.label, entries: st.entries, rejected: st.rejected.length, fallbacks: st.fallbacks })),
+            },
+          }
+        : {}),
     },
   };
 }

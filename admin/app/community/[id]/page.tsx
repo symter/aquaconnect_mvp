@@ -92,7 +92,7 @@ export default function MemoDetailPage({ params }: { params: Promise<{ id: strin
               </Button>
             </div>
 
-            <p style={{ fontSize: 15, color: "#222", lineHeight: 1.7, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{memo.content}</p>
+            <p style={{ fontSize: 15, color: "#222", lineHeight: 1.7, whiteSpace: "pre-wrap", wordBreak: "break-word", overflowWrap: "anywhere" }}>{memo.content}</p>
 
             {memo.tags.length > 0 && (
               <div style={{ display: "flex", gap: 6, marginTop: 14, flexWrap: "wrap" }}>
@@ -130,7 +130,7 @@ export default function MemoDetailPage({ params }: { params: Promise<{ id: strin
                         <p style={{ fontSize: 12, color: "#999", marginBottom: 6 }}>
                           {e.editorName || "알 수 없음"} · {formatDateTime(e.editedAt)} 수정 전 내용
                         </p>
-                        <p style={{ fontSize: 13, color: "#555", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{e.previousContent}</p>
+                        <p style={{ fontSize: 13, color: "#555", lineHeight: 1.6, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{e.previousContent}</p>
                       </div>
                     ))}
                   </div>
@@ -161,7 +161,7 @@ export default function MemoDetailPage({ params }: { params: Promise<{ id: strin
                       ) : c.authorName || "알 수 없음"}
                       <span style={{ fontSize: 12, fontWeight: 400, color: "#aaa", marginLeft: 8 }}>{formatDateTime(c.createdAt)}</span>
                     </p>
-                    <p style={{ fontSize: 14, color: "#333", lineHeight: 1.6, marginTop: 4, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{c.content}</p>
+                    <p style={{ fontSize: 14, color: "#333", lineHeight: 1.6, marginTop: 4, whiteSpace: "pre-wrap", wordBreak: "break-word", overflowWrap: "anywhere" }}>{c.content}</p>
                   </div>
                   <Button variant="outline" disabled={busy === c.id} onClick={() => deleteComment(c.id)}>
                     <Trash2 size={14} />

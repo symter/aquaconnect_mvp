@@ -150,7 +150,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: ResponsiveMobileFrame(
+      body: FormWidth(
         child: SafeArea(
           child: Column(
             children: [

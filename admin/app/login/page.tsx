@@ -35,13 +35,13 @@ export default function LoginPage() {
   }
 
   return (
-    <div style={{ display: "flex", width: "100vw", minHeight: "100vh" }}>
+    <div style={{ display: "flex", width: "100%", minHeight: "100vh" }}>
 
       {/* ── 왼쪽 브랜드 패널 (데스크톱) ── */}
       <div style={{
         flex: "0 0 420px",
         background: "linear-gradient(160deg, #185FA5 0%, #0C447C 100%)",
-        display: "flex",
+        // display 는 className(hidden md:flex)이 정한다 — 여기서 정하면 휴대폰에서도 보인다.
         flexDirection: "column",
         justifyContent: "center",
         padding: "60px 48px",
