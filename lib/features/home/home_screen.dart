@@ -11,6 +11,7 @@ import '../../core/widgets/memo_composer_bar.dart';
 import '../../data/models/farm.dart';
 import '../../data/models/risk_level.dart';
 import '../notifications/notification_permission_sheet.dart';
+import '../reports/all_report_screen.dart' show FarmReportStatusList;
 import 'farm_region_section.dart';
 import 'ocean_environment_section.dart';
 import 'onboarding_checklist_card.dart';
@@ -270,6 +271,7 @@ class _ReportStatusCard extends ConsumerWidget {
               label: const Text('전체 리포트 보기', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800)),
             ),
           ),
+          const FarmReportStatusList(),
         ],
       ),
     );
