@@ -99,32 +99,7 @@ class _Body extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
       children: [
         if (pending > 0) ...[
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            decoration: BoxDecoration(
-              color: AppColors.warningTint,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(Icons.rate_review_outlined, size: 18, color: AppColors.warningTintInk),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('검토 대기 리포트 $pending건',
-                          style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: AppColors.warningTintInk)),
-                      const SizedBox(height: 3),
-                      const Text('지난달 리포트 초안이 자동으로 만들어졌어요. 양식장을 눌러 확인·수정한 뒤 어가에 보내 주세요. 보내기 전에는 어가에 보이지 않아요.',
-                          style: TextStyle(fontSize: 11.5, color: AppColors.warningTintInk, height: 1.45)),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
+          _PendingBanner(pending: pending),
           const SizedBox(height: 12),
         ],
         Material(
@@ -171,6 +146,73 @@ class _Body extends StatelessWidget {
           _FarmReportRow(farm: farm, summary: summaries[farm.id]),
           const SizedBox(height: 8),
         ],
+      ],
+    );
+  }
+}
+
+/// "검토 대기 리포트 N건" notice, shared by 전체 리포트 and Home's 리포트 현황.
+class _PendingBanner extends StatelessWidget {
+  const _PendingBanner({required this.pending});
+
+  final int pending;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: AppColors.warningTint,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.rate_review_outlined, size: 18, color: AppColors.warningTintInk),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('검토 대기 리포트 $pending건',
+                    style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: AppColors.warningTintInk)),
+                const SizedBox(height: 3),
+                const Text('지난달 리포트 초안이 자동으로 만들어졌어요. 양식장을 눌러 확인·수정한 뒤 어가에 보내 주세요. 보내기 전에는 어가에 보이지 않아요.',
+                    style: TextStyle(fontSize: 11.5, color: AppColors.warningTintInk, height: 1.45)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 전체 리포트's status (검토 대기 + each farm's latest report), shown on Home's
+/// 리포트 현황 so it can be seen without opening 전체 리포트.
+class FarmReportStatusList extends ConsumerWidget {
+  const FarmReportStatusList({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final farms = ref.watch(farmsProvider).valueOrNull ?? const <Farm>[];
+    final summaries = {
+      for (final s in ref.watch(aiFarmSummariesProvider).valueOrNull ?? const <AiFarmReportSummary>[]) s.farmId: s,
+    };
+    if (farms.isEmpty) return const SizedBox.shrink();
+    int pendingOf(Farm f) => summaries[f.id]?.pending ?? 0;
+    final pending = farms.fold<int>(0, (n, f) => n + pendingOf(f));
+    final withReports = farms.where((f) => (summaries[f.id]?.total ?? 0) > 0).length;
+    final total = summaries.values.fold<int>(0, (n, s) => n + s.total);
+    return Column(
+      children: [
+        const SizedBox(height: 12),
+        if (pending > 0) ...[
+          _PendingBanner(pending: pending),
+          const SizedBox(height: 10),
+        ],
+        Text('양식장 ${farms.length}곳 중 $withReports곳 리포트 $total건',
+            style: const TextStyle(fontSize: 12, color: AppColors.textTertiary)),
       ],
     );
   }
