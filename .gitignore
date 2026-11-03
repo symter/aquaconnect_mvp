@@ -49,3 +49,6 @@ server/node_modules/
 server/.env
 .vercel
 .env*
+
+# Claude Code local settings
+.claude/settings.local.json
