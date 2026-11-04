@@ -132,8 +132,15 @@ async function publicData(farm, from, to) {
   return { lines, data };
 }
 
+/** 원문 메모 옆 폐사 표시: "30마리" / "3~5마리" / "누적 기록" / "수량 미기재". */
+function deathLabel(d) {
+  if (!d) return null;
+  if (d.min !== null && d.max !== null) return formatCount(d.min, d.max);
+  return d.cumulative ? '누적 기록' : '수량 미기재';
+}
+
 /** 리포트 양식(타일·타임라인·차트)에 쓰는 값. 모두 코드가 메모에서 계산한 것이고 AI 출력과 무관하다. */
-function formMeta({ numbered, an, prevAn, pub }) {
+export function formMeta({ numbered, an, prevAn, pub }) {
   const field = summarizeField(numbered);
   const byKind = {};
   for (const m of numbered) byKind[m.kind] = (byKind[m.kind] ?? 0) + 1;
@@ -154,6 +161,13 @@ function formMeta({ numbered, an, prevAn, pub }) {
       topics: an.topics,
       deaths: { events: an.deaths.events, min: an.deaths.min, max: an.deaths.max, unknown: an.deaths.unknown, byDay: an.deaths.byDay },
       open: an.open.map((m) => ({ date: m.date, topic: m.a.primary, status: m.a.status, text: clip(m.body, 90) })),
+      // 주제별로 묶은 원문 메모(symterAI MemoGroups) — 리포트 본문의 근거로 펼쳐 볼 수 있다.
+      groups: an.topics.map(({ topic }) => ({
+        topic,
+        items: an.sorted
+          .filter((m) => m.a.primary === topic)
+          .map((m) => ({ date: m.date, kind: m.kind, text: clip(m.body, 300), status: m.a.status ?? null, death: deathLabel(m.a.deaths) })),
+      })),
     },
     prev: prevAn && { total: prevAn.total, deathEvents: prevAn.deaths.events },
     publicData: pub,

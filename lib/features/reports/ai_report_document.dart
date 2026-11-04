@@ -111,7 +111,7 @@ class AiReportDocument extends StatelessWidget {
             _SectionHeading(s.title),
             for (final line in s.lines)
               _ItemLine(line: line, onTap: onItemTap == null ? null : () => onItemTap!(s.title, line)),
-            if (structured) ...(r.isAgency ? _agencyExtras(s.title, m) : _extras(s.title, r, m)),
+            if (structured) ...(r.isAgency ? _agencyExtras(s.title, r, m) : _extras(s.title, r, m)),
           ],
           if (structured && r.isAgency) ..._agencyTable(m),
           const SizedBox(height: 22),
@@ -126,7 +126,7 @@ class AiReportDocument extends StatelessWidget {
     );
   }
 
-  List<Widget> _agencyExtras(String title, Map<String, dynamic> m) {
+  List<Widget> _agencyExtras(String title, AiReport r, Map<String, dynamic> m) {
     final rows = ((m['rows'] as List<dynamic>?) ?? []).cast<Map<String, dynamic>>();
     final deaths = (m['deathTotals'] as Map<String, dynamic>?) ?? const {};
     final open = ((m['open'] as List<dynamic>?) ?? []).cast<Map<String, dynamic>>();
@@ -147,31 +147,37 @@ class AiReportDocument extends StatelessWidget {
         ];
       case 1:
         return [
-          if (topics.isNotEmpty) _CountRows([for (final t in topics) (t['topic'] as String, '${t['count']}건')]),
+          if (topics.isNotEmpty) _HBars(countBars([for (final t in topics) (t['topic'] as String, t['count'] as int)], '건'), color: _topicColor),
           if (rows.any((x) => (x['memos'] as int? ?? 0) > 0)) ...[
             const _Sub('양식장 × 주제'),
             _TopicMatrix(rows: rows, topics: ((m['topicOrder'] as List<dynamic>?) ?? []).cast<String>()),
           ],
         ];
       case 3:
-        final withDeaths = rows.where((x) => (x['deaths'] as int? ?? 0) > 0).toList();
-        if (withDeaths.isEmpty) return const [_Muted('폐사가 적힌 기록이 없습니다.')];
+        final bars = deathBars(rows);
+        if (bars.isEmpty) return const [_Muted('폐사가 적힌 기록이 없습니다.')];
         return [
-          _CountRows([
-            for (final x in withDeaths)
-              (
-                x['name'] as String,
-                [
-                  if ((x['deathsMax'] as int? ?? 0) > 0) _range(x['deathsMin'] as int? ?? 0, x['deathsMax'] as int),
-                  if ((x['deathsUnknown'] as int? ?? 0) > 0) '수량 미기재 ${x['deathsUnknown']}건',
-                ].join(' · '),
-              ),
+          _HBars(bars, color: kindColor('폐사'), light: deathLightColor, emptyLabel: '수량 확인된 기록 없음'),
+          _Legend([
+            ('확정된 폐사 마리수', kindColor('폐사'), false),
+            if (bars.any((b) => b.total > b.solid)) ('범위로 적힌 폐사(최대)', deathLightColor, false),
           ]),
         ];
       case 4:
         if (stations.isEmpty) return const [_Muted('연결된 관측소가 없습니다.')];
         return [
           _CountRows([for (final st in stations) ('${st['name']} (양식장 ${st['farms']}곳)', stationTempLabel(st))]),
+          if (highDayBars(rows) case final bars?) ...[
+            const _Sub('양식장별 고수온 일수'),
+            if (bars.any((b) => b.total > 0))
+              _HBars(bars, color: tempHighColor)
+            else
+              const _Muted('고수온 기준 이상이었던 양식장이 없습니다.'),
+          ],
+          if (stationSeries(stations).isNotEmpty) ...[
+            const _Sub('관측소별 일 평균 수온'),
+            _StationLinesChart(stations: stationSeries(stations), from: r.periodStart, to: r.periodEnd),
+          ],
           _Muted(stations.any((st) => st['temp'] != null)
               ? '관측소 일 평균 수온의 기간 요약입니다(서버가 1시간마다 모은 관측값). 이력이 없는 관측소는 작성 시점 실시간 값입니다.'
               : '관측소 값은 리포트 작성 시점의 실시간 값이며 기간 평균이 아닙니다.'),
@@ -208,6 +214,7 @@ class AiReportDocument extends StatelessWidget {
             DataColumn(label: Text('접종'), numeric: true),
             DataColumn(label: Text('관측소')),
             DataColumn(label: Text('기간 평균 수온'), numeric: true),
+            DataColumn(label: Text('고수온 일수'), numeric: true),
           ],
           rows: [
             for (final x in rows)
@@ -224,6 +231,7 @@ class AiReportDocument extends StatelessWidget {
                 DataCell(Text('${x['vaccinations']}')),
                 DataCell(Text('${x['station'] ?? '-'}')),
                 DataCell(Text(farmRowTempLabel(x))),
+                DataCell(Text(x['highDays'] == null ? '-' : '${x['highDays']}일')),
               ]),
           ],
         ),
@@ -239,6 +247,7 @@ class AiReportDocument extends StatelessWidget {
     final events = ((m['events'] as List<dynamic>?) ?? []).cast<Map<String, dynamic>>();
     final byKind = ((m['memoStats'] as Map<String, dynamic>?)?['byKind'] as Map<String, dynamic>?) ?? const {};
     final topics = ((an['topics'] as List<dynamic>?) ?? []).cast<Map<String, dynamic>>();
+    final groups = ((an['groups'] as List<dynamic>?) ?? []).cast<Map<String, dynamic>>();
     final deathEvents = deaths['events'] as int? ?? 0;
     final total = an['total'] as int? ?? r.memoCount;
 
@@ -264,12 +273,13 @@ class AiReportDocument extends StatelessWidget {
           if (events.isNotEmpty) _RecordTimeline(events: events, from: r.periodStart, to: r.periodEnd),
           if (tanks.isNotEmpty) ...[
             const _Sub('수조별 관찰 건수'),
-            _CountRows([for (final t in tanks) ('${t['tank']}번 수조', '${t['count']}건')]),
+            _HBars(countBars([for (final t in tanks) ('${t['tank']}번 수조', t['count'] as int)], '건'), color: _topicColor),
           ],
+          if (groups.isNotEmpty) _MemoGroups(groups: groups),
         ];
       case 2:
         return [
-          if (topics.isNotEmpty) _CountRows([for (final t in topics) (t['topic'] as String, '${t['count']}건')]),
+          if (topics.isNotEmpty) _HBars(countBars([for (final t in topics) (t['topic'] as String, t['count'] as int)], '건'), color: _topicColor),
           if (deathEvents > 0)
             _DeathChart(
               byDay: ((deaths['byDay'] as List<dynamic>?) ?? []).cast<Map<String, dynamic>>(),
@@ -388,6 +398,65 @@ const tempBandColor = Color(0x1F52606D);
 const tempHighColor = Color(0xFFC98500);
 const tempLowColor = Color(0xFF185FA5);
 
+const deathLightColor = Color(0xFFF6C9B6);
+
+/// One horizontal bar (symterAI SimpleBars / DeathByFarm): [solid] is drawn in
+/// the main color and [total] − [solid] in the light color after it.
+typedef HBar = ({String name, num solid, num total, String label});
+
+/// Count bars, largest first.
+List<HBar> countBars(List<(String, int)> items, String unit) =>
+    ([for (final (name, n) in items) (name: name, solid: n, total: n, label: '$n$unit')]..sort((a, b) => b.total.compareTo(a.total)));
+
+/// 양식장별 폐사 마리수 — farms with any 폐사 record, most first.
+List<HBar> deathBars(List<Map<String, dynamic>> rows) {
+  final out = <HBar>[
+    for (final x in rows.where((x) => (x['deaths'] as int? ?? 0) > 0))
+      (
+        name: x['name'] as String,
+        solid: x['deathsMin'] as int? ?? 0,
+        total: x['deathsMax'] as int? ?? 0,
+        label: [
+          if ((x['deathsMax'] as int? ?? 0) > 0) _range(x['deathsMin'] as int? ?? 0, x['deathsMax'] as int),
+          if ((x['deathsUnknown'] as int? ?? 0) > 0) '수량 미기재 ${x['deathsUnknown']}건',
+        ].join(' · '),
+      ),
+  ];
+  return out..sort((a, b) => b.total.compareTo(a.total));
+}
+
+/// 양식장별 고수온 일수, or null when no farm has a period 수온 summary.
+List<HBar>? highDayBars(List<Map<String, dynamic>> rows) {
+  final known = rows.where((x) => x['highDays'] != null).toList();
+  if (known.isEmpty) return null;
+  return [for (final x in known) (name: x['name'] as String, solid: x['highDays'] as int, total: x['highDays'] as int, label: '${x['highDays']}일')]
+    ..sort((a, b) => b.total.compareTo(a.total));
+}
+
+/// Line colors for the 종합 리포트 관측소별 수온 chart (symterAI VIZ order).
+const stationLineColors = [
+  Color(0xFF2A6FDB),
+  Color(0xFFE07A1F),
+  Color(0xFF2E9E6B),
+  Color(0xFF9B4DCA),
+  Color(0xFFC23B5A),
+  Color(0xFF3B4A5A),
+];
+
+/// Stations with daily 수온 in the period, most farms first, at most one per
+/// line color.
+List<Map<String, dynamic>> stationSeries(List<Map<String, dynamic>> stations) {
+  final withDaily = stations.where((st) => ((st['daily'] as List<dynamic>?) ?? const []).isNotEmpty).toList()
+    ..sort((a, b) => (b['farms'] as int? ?? 0).compareTo(a['farms'] as int? ?? 0));
+  return withDaily.take(stationLineColors.length).toList();
+}
+
+/// 고수온·저수온 기준 from the first station that has a period summary.
+(double, double) stationThresholds(List<Map<String, dynamic>> stations) {
+  final t = stations.map((st) => st['temp'] as Map<String, dynamic>?).firstWhere((t) => t != null, orElse: () => null);
+  return ((t?['highThreshold'] as num?)?.toDouble() ?? 25, (t?['lowThreshold'] as num?)?.toDouble() ?? 10);
+}
+
 /// Nice y range for a 수온 chart: (lo, hi, step).
 (double, double, double) tempRange(Iterable<num> values) {
   final lo0 = values.reduce((a, b) => a < b ? a : b).toDouble();
@@ -444,6 +513,7 @@ const _topicColor = Color(0xFF4A6785);
 const _deathLight = Color(0xFFF6C9B6);
 const _grid = Color(0xFFE3E9EF);
 const _axis = Color(0xFF5D6B7A);
+const _faint = Color(0xFF8A96A3);
 
 final _fmtNum = NumberFormat.decimalPattern('ko_KR');
 String _range(int min, int max) => min == max ? '${_fmtNum.format(min)}마리' : '${_fmtNum.format(min)}~${_fmtNum.format(max)}마리';
@@ -1043,6 +1113,256 @@ class _TempPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_TempPainter old) => old.daily != daily || old.events != events;
+}
+
+/// Horizontal bars: name · bar · value.
+class _HBars extends StatelessWidget {
+  const _HBars(this.bars, {required this.color, this.light, this.emptyLabel});
+  final List<HBar> bars;
+  final Color color;
+  final Color? light;
+  final String? emptyLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final top = bars.fold<num>(1, (m, b) => math.max(m, b.total));
+    // A Table so every row's bar track has the same width (a long value label
+    // must not shorten its own bar).
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Table(
+        columnWidths: const {0: FixedColumnWidth(112), 1: FlexColumnWidth(), 2: IntrinsicColumnWidth()},
+        defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+        children: [
+          for (final b in bars)
+            TableRow(children: [
+              Padding(
+                padding: const EdgeInsets.only(right: 8, top: 3, bottom: 3),
+                child: Text(b.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: AppColors.textPrimary)),
+              ),
+              LayoutBuilder(
+                builder: (context, c) => b.total == 0 && emptyLabel != null
+                    ? Text(emptyLabel!, style: const TextStyle(fontSize: 11, color: _faint))
+                    : Container(
+                        height: 14,
+                        decoration: BoxDecoration(color: _grid.withValues(alpha: .5), borderRadius: BorderRadius.circular(4)),
+                        alignment: Alignment.centerLeft,
+                        child: Row(
+                          children: [
+                            Container(
+                              width: c.maxWidth * b.solid / top,
+                              decoration: BoxDecoration(
+                                color: color,
+                                borderRadius: b.total > b.solid ? null : const BorderRadius.horizontal(right: Radius.circular(4)),
+                              ),
+                            ),
+                            if (b.total > b.solid)
+                              Container(
+                                width: c.maxWidth * (b.total - b.solid) / top,
+                                decoration: BoxDecoration(color: light ?? color, borderRadius: const BorderRadius.horizontal(right: Radius.circular(4))),
+                              ),
+                          ],
+                        ),
+                      ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minWidth: 44, maxWidth: 170),
+                  child: Text(b.label, textAlign: TextAlign.right, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                ),
+              ),
+            ]),
+        ],
+      ),
+    );
+  }
+}
+
+/// 원문 메모 보기 (주제별) — folded; opens to each topic's original memos.
+class _MemoGroups extends StatelessWidget {
+  const _MemoGroups({required this.groups});
+  final List<Map<String, dynamic>> groups;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Material(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(8),
+        clipBehavior: Clip.antiAlias,
+        child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          dense: true,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+          expandedCrossAxisAlignment: CrossAxisAlignment.start,
+          title: const Text('원문 메모 보기 (주제별)', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+          children: [
+            for (final g in groups) ...[
+              Padding(
+                padding: const EdgeInsets.only(top: 8, bottom: 4),
+                child: Text.rich(TextSpan(children: [
+                  TextSpan(text: '${g['topic']} ', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+                  TextSpan(text: '${(g['items'] as List<dynamic>).length}건', style: const TextStyle(fontSize: 11.5, color: _faint)),
+                ])),
+              ),
+              for (final it in (g['items'] as List<dynamic>).cast<Map<String, dynamic>>())
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(width: 40, child: Text((it['date'] as String).substring(5), style: const TextStyle(fontSize: 11.5, color: _faint))),
+                      Expanded(
+                        child: Wrap(
+                          spacing: 6,
+                          runSpacing: 2,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text('${it['text']}', style: const TextStyle(fontSize: 12, color: AppColors.textPrimary, height: 1.45)),
+                            if (it['death'] != null) _Chip('폐사 ${it['death']}', color: kindColor('폐사')),
+                            if (it['status'] != null) _Chip('${it['status']}'),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ],
+        ),
+      ),
+      ),
+    );
+  }
+}
+
+class _Chip extends StatelessWidget {
+  const _Chip(this.text, {this.color});
+  final String text;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = color ?? const Color(0xFF7A5410);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(color: c.withValues(alpha: .12), borderRadius: BorderRadius.circular(5)),
+      child: Text(text, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: c)),
+    );
+  }
+}
+
+/// 관측소별 일 평균 수온 (symterAI StationLines): one line per station over the
+/// report period, with 고수온·저수온 기준선. A lone day is drawn as a dot.
+class _StationLinesChart extends StatelessWidget {
+  const _StationLinesChart({required this.stations, required this.from, required this.to});
+  final List<Map<String, dynamic>> stations;
+  final String from;
+  final String to;
+
+  @override
+  Widget build(BuildContext context) {
+    final (high, low) = stationThresholds(stations);
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            height: _StationLinesPainter.plotBottom + 22,
+            width: double.infinity,
+            child: CustomPaint(
+              painter: _StationLinesPainter(stations: stations, high: high, low: low, from: _day(from), to: _day(to)),
+            ),
+          ),
+          const SizedBox(height: 6),
+          _Legend([
+            for (var k = 0; k < stations.length; k++) ('${stations[k]['name']} (양식장 ${stations[k]['farms']}곳)', stationLineColors[k], false),
+          ]),
+        ],
+      ),
+    );
+  }
+}
+
+class _StationLinesPainter extends CustomPainter {
+  _StationLinesPainter({required this.stations, required this.high, required this.low, required this.from, required this.to});
+  final List<Map<String, dynamic>> stations;
+  final double high;
+  final double low;
+  final DateTime from;
+  final DateTime to;
+
+  static const top = 12.0;
+  static const plotBottom = 210.0;
+
+  List<Map<String, dynamic>> _daily(Map<String, dynamic> st) => ((st['daily'] as List<dynamic>?) ?? const []).cast<Map<String, dynamic>>();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final ax = _DayAxis(from, to, 40, 10, size.width);
+    final (lo, hi, step) = tempRange([for (final st in stations) for (final d in _daily(st)) d['avg'] as num, high, low]);
+    double y(double t) => top + (hi - t) * (plotBottom - top) / (hi - lo);
+    final right = size.width - ax.right;
+
+    final gridPaint = Paint()..color = _grid;
+    for (var t = lo; t <= hi + 1e-9; t += step) {
+      canvas.drawLine(Offset(ax.left, y(t)), Offset(right, y(t)), gridPaint);
+      _text(canvas, '${fmtTemp(t)}℃', Offset(ax.left - 6, y(t)), align: TextAlign.right);
+    }
+    void dashed(double at, Color c, String label) {
+      final p = Paint()
+        ..color = c
+        ..strokeWidth = 1.2;
+      for (var x = ax.left; x < right; x += 9) {
+        canvas.drawLine(Offset(x, y(at)), Offset(math.min(x + 5, right), y(at)), p);
+      }
+      _text(canvas, label, Offset(right, y(at) - 8), size: 10, color: c, align: TextAlign.right);
+    }
+
+    dashed(high, tempHighColor, '고수온 기준 ${fmtTemp(high)}℃');
+    dashed(low, tempLowColor, '저수온 기준 ${fmtTemp(low)}℃');
+
+    for (var k = 0; k < stations.length; k++) {
+      final color = stationLineColors[k];
+      final line = Paint()
+        ..color = color
+        ..strokeWidth = 2
+        ..style = PaintingStyle.stroke
+        ..strokeJoin = StrokeJoin.round
+        ..strokeCap = StrokeCap.round;
+      // Consecutive days form a run; a missing day breaks the line.
+      final runs = <List<Map<String, dynamic>>>[];
+      for (final d in _daily(stations[k])) {
+        final day = _day(d['date'] as String);
+        if (runs.isEmpty || day.difference(_day(runs.last.last['date'] as String)).inDays > 1) runs.add([]);
+        runs.last.add(d);
+      }
+      for (final run in runs) {
+        Offset at(Map<String, dynamic> d) => Offset(ax.x(_day(d['date'] as String)), y((d['avg'] as num).toDouble()));
+        if (run.length == 1) {
+          canvas.drawCircle(at(run.first), 3.5, Paint()..color = color);
+          continue;
+        }
+        final path = Path()..moveTo(at(run.first).dx, at(run.first).dy);
+        for (final d in run.skip(1)) {
+          path.lineTo(at(d).dx, at(d).dy);
+        }
+        canvas.drawPath(path, line);
+      }
+    }
+
+    for (final (d, align) in ax.ticks) {
+      _text(canvas, _DayAxis.label(d), Offset(ax.x(d), plotBottom + 12), align: align);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_StationLinesPainter old) => old.stations != stations;
 }
 
 /// 후속 확인이 필요한 기록 — status chip + "MM-DD 주제 — 원문".

@@ -56,7 +56,7 @@ String buildAiReportHtml(AiReport r, {required String farmName, required String 
       b.write('<li>${_item(line)}</li>');
     }
     b.write('</ul>');
-    if (structured) b.write(r.isAgency ? _agencyExtras(s.title, m) : _farmExtras(s.title, r, m));
+    if (structured) b.write(r.isAgency ? _agencyExtras(s.title, r, m) : _farmExtras(s.title, r, m));
     b.write('</section>');
   }
   if (structured && r.isAgency) b.write(_agencyTable(m));
@@ -106,6 +106,19 @@ svg.chart{width:100%;height:auto;display:block;margin-top:10px}
 .open{background:var(--tint);border-radius:8px;padding:10px 12px;margin:6px 0}
 .chip{display:inline-block;background:var(--warn);color:var(--warnInk);font-size:11px;font-weight:800;border-radius:6px;padding:1px 7px;margin-bottom:4px}
 .muted{color:#8a96a3}
+.hbars{list-style:none;margin:8px 0 4px;padding:0;display:grid;grid-template-columns:110px 1fr auto;gap:5px 8px;align-items:center;font-size:12px}
+.hbars li{display:contents}
+.hbars .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hbars .t{height:14px;background:#eef2f5;border-radius:4px;display:flex;overflow:hidden}
+.hbars .t i{display:block;height:100%}
+.hbars .t i:last-child{border-radius:0 4px 4px 0}
+.hbars .v{min-width:44px;text-align:right;color:var(--sub)}
+details.groups{background:var(--tint);border-radius:8px;padding:8px 12px;margin-top:12px}
+details.groups summary{font-weight:800;cursor:pointer}
+details.groups h5{margin:10px 0 4px;font-size:12.5px}
+details.groups ul{list-style:none;margin:0;padding:0}
+details.groups li{margin:3px 0;font-size:12px}
+details.groups .d{display:inline-block;width:40px;color:#8a96a3}
 .draft{background:var(--warn);color:var(--warnInk);font-weight:700;border-radius:8px;padding:8px 12px}
 .opinion{white-space:normal}
 table.grid{border-collapse:collapse;font-size:12px;width:100%}
@@ -163,6 +176,34 @@ String _rows(List<(String, String)> rows) =>
 
 String _legend(List<(String, String, bool)> items) =>
     '<div class="legend">${items.map((i) => '<span><i class="dot" style="background:${i.$2};${i.$3 ? '' : 'border-radius:2px;width:12px'}"></i>${_e(i.$1)}</span>').join()}</div>';
+
+String _hbars(List<HBar> bars, String color, {String? light, String? emptyLabel}) {
+  final top = bars.fold<num>(1, (m, b) => math.max(m, b.total));
+  String pct(num v) => (v / top * 100).toStringAsFixed(1);
+  return '<ul class="hbars">${bars.map((b) {
+    final track = b.total == 0 && emptyLabel != null
+        ? '<span class="muted">${_e(emptyLabel)}</span>'
+        : '<span class="t">${b.solid > 0 ? '<i style="width:${pct(b.solid)}%;background:$color"></i>' : ''}'
+            '${b.total > b.solid ? '<i style="width:${pct(b.total - b.solid)}%;background:${light ?? color}"></i>' : ''}</span>';
+    return '<li><span class="n">${_e(b.name)}</span>$track<span class="v">${_e(b.label)}</span></li>';
+  }).join()}</ul>';
+}
+
+String _memoGroups(List<Map<String, dynamic>> groups) {
+  final b = StringBuffer('<details class="groups"><summary>원문 메모 보기 (주제별)</summary>');
+  for (final g in groups) {
+    final items = (g['items'] as List<dynamic>).cast<Map<String, dynamic>>();
+    b.write('<h5>${_e('${g['topic']}')} <span class="muted">${items.length}건</span></h5><ul>');
+    for (final it in items) {
+      b.write('<li><span class="d">${_e((it['date'] as String).substring(5))}</span>${_e('${it['text']}')}'
+          '${it['death'] != null ? ' <span class="chip">${_e('폐사 ${it['death']}')}</span>' : ''}'
+          '${it['status'] != null ? ' <span class="chip">${_e('${it['status']}')}</span>' : ''}</li>');
+    }
+    b.write('</ul>');
+  }
+  b.write('</details>');
+  return b.toString();
+}
 
 String _openItems(List<Map<String, dynamic>> items) {
   if (items.isEmpty) return '<p class="muted">후속 확인이 필요하다고 적힌 기록이 없습니다.</p>';
@@ -325,6 +366,51 @@ String _tempChart(List<Map<String, dynamic>> daily, Map<String, dynamic> temp, L
   return b.toString();
 }
 
+/// 관측소별 일 평균 수온 SVG — same chart as the app's _StationLinesChart.
+String _stationLines(List<Map<String, dynamic>> stations, String from, String to) {
+  const w = 640.0, top = 12.0, plotBottom = 210.0, h = plotBottom + 24;
+  final f = _day(from), t = _day(to);
+  final x = _xOf(f, t, 40, 10, w);
+  final (high, low) = stationThresholds(stations);
+  List<Map<String, dynamic>> daily(Map<String, dynamic> st) => ((st['daily'] as List<dynamic>?) ?? const []).cast<Map<String, dynamic>>();
+  final (lo, hi, step) = tempRange([for (final st in stations) for (final d in daily(st)) d['avg'] as num, high, low]);
+  double y(double c) => top + (hi - c) * (plotBottom - top) / (hi - lo);
+  String px(double n) => n.toStringAsFixed(1);
+  final b = StringBuffer('<svg class="chart" viewBox="0 0 $w $h" role="img" aria-label="관측소별 일 평균 수온 그래프">');
+  for (var c = lo; c <= hi + 1e-9; c += step) {
+    b.write('<line x1="40" x2="${w - 10}" y1="${px(y(c))}" y2="${px(y(c))}" stroke="#e3e9ef"/>');
+    b.write('<text x="34" y="${px(y(c) + 4)}" font-size="11" text-anchor="end" fill="#5d6b7a">${fmtTemp(c)}℃</text>');
+  }
+  for (final (at, color, label) in [(high, '#c98500', '고수온 기준'), (low, '#185fa5', '저수온 기준')]) {
+    b.write('<line x1="40" x2="${w - 10}" y1="${px(y(at))}" y2="${px(y(at))}" stroke="$color" stroke-dasharray="5 4"/>');
+    b.write('<text x="${w - 10}" y="${px(y(at) - 4)}" font-size="11" text-anchor="end" fill="$color">$label ${fmtTemp(at)}℃</text>');
+  }
+  for (var k = 0; k < stations.length; k++) {
+    final color = _hex(stationLineColors[k].toARGB32());
+    final runs = <List<Map<String, dynamic>>>[];
+    for (final d in daily(stations[k])) {
+      final day = _day(d['date'] as String);
+      if (runs.isEmpty || day.difference(_day(runs.last.last['date'] as String)).inDays > 1) runs.add([]);
+      runs.last.add(d);
+    }
+    for (final run in runs) {
+      String at(Map<String, dynamic> d) => '${px(x(_day(d['date'] as String)))},${px(y((d['avg'] as num).toDouble()))}';
+      if (run.length == 1) {
+        final p = at(run.first).split(',');
+        b.write('<circle cx="${p[0]}" cy="${p[1]}" r="3.5" fill="$color"/>');
+        continue;
+      }
+      b.write('<path d="M${[for (final d in run) at(d)].join('L')}" fill="none" stroke="$color" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>');
+    }
+  }
+  b.write(_axis(f, t, x, plotBottom + 16));
+  b.write('</svg>');
+  b.write(_legend([
+    for (var k = 0; k < stations.length; k++) ('${stations[k]['name']} (양식장 ${stations[k]['farms']}곳)', _hex(stationLineColors[k].toARGB32()), false),
+  ]));
+  return b.toString();
+}
+
 String _farmExtras(String title, AiReport r, Map<String, dynamic> m) {
   final an = (m['analysis'] as Map<String, dynamic>?) ?? const {};
   final deaths = (an['deaths'] as Map<String, dynamic>?) ?? const {};
@@ -333,8 +419,10 @@ String _farmExtras(String title, AiReport r, Map<String, dynamic> m) {
   final events = ((m['events'] as List<dynamic>?) ?? []).cast<Map<String, dynamic>>();
   final byKind = ((m['memoStats'] as Map<String, dynamic>?)?['byKind'] as Map<String, dynamic>?) ?? const {};
   final topics = ((an['topics'] as List<dynamic>?) ?? []).cast<Map<String, dynamic>>();
+  final groups = ((an['groups'] as List<dynamic>?) ?? []).cast<Map<String, dynamic>>();
   final deathEvents = deaths['events'] as int? ?? 0;
   final total = an['total'] as int? ?? r.memoCount;
+  final topicColor = _hex(0xFF4A6785);
   switch (AiReportDocument.sectionTitles.indexOf(title)) {
     case 0:
       final max = deaths['max'] as int? ?? 0;
@@ -349,11 +437,12 @@ String _farmExtras(String title, AiReport r, Map<String, dynamic> m) {
       return [
         _tiles([for (final k in kinds) (k, '${byKind[k] ?? 0}건', _kind(k))]),
         if (events.isNotEmpty) _timeline(events, r.periodStart, r.periodEnd),
-        if (tanks.isNotEmpty) '<h4>수조별 관찰 건수</h4>${_rows([for (final t in tanks) ('${t['tank']}번 수조', '${t['count']}건')])}',
+        if (tanks.isNotEmpty) '<h4>수조별 관찰 건수</h4>${_hbars(countBars([for (final t in tanks) ('${t['tank']}번 수조', t['count'] as int)], '건'), topicColor)}',
+        if (groups.isNotEmpty) _memoGroups(groups),
       ].join();
     case 2:
       return [
-        if (topics.isNotEmpty) _rows([for (final t in topics) (t['topic'] as String, '${t['count']}건')]),
+        if (topics.isNotEmpty) _hbars(countBars([for (final t in topics) (t['topic'] as String, t['count'] as int)], '건'), topicColor),
         if (deathEvents > 0) _deathChart(((deaths['byDay'] as List<dynamic>?) ?? []).cast<Map<String, dynamic>>(), r.periodStart, r.periodEnd),
       ].join();
     case 3:
@@ -414,7 +503,7 @@ String _farmExtras(String title, AiReport r, Map<String, dynamic> m) {
   }
 }
 
-String _agencyExtras(String title, Map<String, dynamic> m) {
+String _agencyExtras(String title, AiReport r, Map<String, dynamic> m) {
   final rows = ((m['rows'] as List<dynamic>?) ?? []).cast<Map<String, dynamic>>();
   final deaths = (m['deathTotals'] as Map<String, dynamic>?) ?? const {};
   final open = ((m['open'] as List<dynamic>?) ?? []).cast<Map<String, dynamic>>();
@@ -449,26 +538,31 @@ String _agencyExtras(String title, Map<String, dynamic> m) {
         matrix.write('</tr>');
       }
       matrix.write('</table></div>');
-      return [if (topics.isNotEmpty) _rows([for (final t in topics) (t['topic'] as String, '${t['count']}건')]), if (active.isNotEmpty) matrix.toString()].join();
+      return [
+        if (topics.isNotEmpty) _hbars(countBars([for (final t in topics) (t['topic'] as String, t['count'] as int)], '건'), _hex(0xFF4A6785)),
+        if (active.isNotEmpty) matrix.toString(),
+      ].join();
     case 3:
-      final withDeaths = rows.where((x) => (x['deaths'] as int? ?? 0) > 0).toList();
-      if (withDeaths.isEmpty) return '<p class="muted">폐사가 적힌 기록이 없습니다.</p>';
-      return _rows([
-        for (final x in withDeaths)
-          (
-            x['name'] as String,
-            [
-              if ((x['deathsMax'] as int? ?? 0) > 0) _range(x['deathsMin'] as int? ?? 0, x['deathsMax'] as int),
-              if ((x['deathsUnknown'] as int? ?? 0) > 0) '수량 미기재 ${x['deathsUnknown']}건',
-            ].join(' · '),
-          ),
-      ]);
+      final bars = deathBars(rows);
+      if (bars.isEmpty) return '<p class="muted">폐사가 적힌 기록이 없습니다.</p>';
+      final light = _hex(deathLightColor.toARGB32());
+      return _hbars(bars, _kind('폐사'), light: light, emptyLabel: '수량 확인된 기록 없음') +
+          _legend([
+            ('확정된 폐사 마리수', _kind('폐사'), false),
+            if (bars.any((b) => b.total > b.solid)) ('범위로 적힌 폐사(최대)', light, false),
+          ]);
     case 4:
       if (stations.isEmpty) return '<p class="muted">연결된 관측소가 없습니다.</p>';
       final note = stations.any((st) => st['temp'] != null)
           ? '관측소 일 평균 수온의 기간 요약입니다(서버가 1시간마다 모은 관측값). 이력이 없는 관측소는 작성 시점 실시간 값입니다.'
           : '관측소 값은 리포트 작성 시점의 실시간 값이며 기간 평균이 아닙니다.';
-      return '${_rows([for (final st in stations) ('${st['name']} (양식장 ${st['farms']}곳)', stationTempLabel(st))])}<p class="muted">${_e(note)}</p>';
+      final highBars = highDayBars(rows);
+      final high = highBars == null
+          ? ''
+          : '<h4>양식장별 고수온 일수</h4>${highBars.any((b) => b.total > 0) ? _hbars(highBars, _hex(tempHighColor.toARGB32())) : '<p class="muted">고수온 기준 이상이었던 양식장이 없습니다.</p>'}';
+      final series = stationSeries(stations);
+      final chart = series.isEmpty ? '' : '<h4>관측소별 일 평균 수온</h4>${_stationLines(series, r.periodStart, r.periodEnd)}';
+      return '${_rows([for (final st in stations) ('${st['name']} (양식장 ${st['farms']}곳)', stationTempLabel(st))])}$high$chart<p class="muted">${_e(note)}</p>';
     case 5:
       return _openItems(open);
     default:
@@ -480,7 +574,7 @@ String _agencyTable(Map<String, dynamic> m) {
   final rows = ((m['rows'] as List<dynamic>?) ?? []).cast<Map<String, dynamic>>();
   if (rows.isEmpty) return '';
   final b = StringBuffer('<section><h2>양식장별 현황 표</h2><div style="overflow-x:auto"><table class="grid"><tr>'
-      '<th>양식장</th><th>지역</th><th class="n">메모</th><th class="n">방문</th><th class="n">폐사</th><th class="n">접종</th><th>관측소</th><th class="n">기간 평균 수온</th></tr>');
+      '<th>양식장</th><th>지역</th><th class="n">메모</th><th class="n">방문</th><th class="n">폐사</th><th class="n">접종</th><th>관측소</th><th class="n">기간 평균 수온</th><th class="n">고수온 일수</th></tr>');
   for (final x in rows) {
     final deaths = (x['deathsMax'] as int? ?? 0) > 0
         ? _range(x['deathsMin'] as int? ?? 0, x['deathsMax'] as int)
@@ -489,7 +583,7 @@ String _agencyTable(Map<String, dynamic> m) {
             : '0';
     b.write('<tr><td>${_e('${x['name']}')}</td><td>${_e((x['region'] as String?)?.isNotEmpty == true ? x['region'] as String : '-')}</td>'
         '<td class="n">${x['memos']}</td><td class="n">${x['visits']}</td><td class="n">${_e(deaths)}</td><td class="n">${x['vaccinations']}</td>'
-        '<td>${_e('${x['station'] ?? '-'}')}</td><td class="n">${_e(farmRowTempLabel(x))}</td></tr>');
+        '<td>${_e('${x['station'] ?? '-'}')}</td><td class="n">${_e(farmRowTempLabel(x))}</td><td class="n">${x['highDays'] == null ? '-' : '${x['highDays']}일'}</td></tr>');
   }
   b.write('</table></div></section>');
   return b.toString();
