@@ -192,6 +192,11 @@ class _ReportStatusCard extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 4),
+          const Text(
+            '현장 메모와 바다 수온·적조 자료로 양식장별 관리 리포트를 만들고, 확인한 뒤 어가에 보내요.',
+            style: TextStyle(fontSize: 12, color: AppColors.textMuted, height: 1.4),
+          ),
+          const SizedBox(height: 8),
           Wrap(
             spacing: 6,
             runSpacing: 6,

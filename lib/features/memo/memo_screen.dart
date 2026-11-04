@@ -30,16 +30,17 @@ class MemoScreen extends ConsumerStatefulWidget {
   ConsumerState<MemoScreen> createState() => _MemoScreenState();
 }
 
-/// Memo tab categories (the chips); the farm is picked separately. 호출받은
-/// 메모 are part of 오늘의 업무 (and marked '@나 호출됨'), so they get no chip.
-enum _MemoView { all, today, todo, done }
+/// Memo tab categories (the chips, in this order); the farm is picked
+/// separately. 호출받은 메모 are part of 오늘의 업무 (and marked '@나 호출됨'),
+/// so they get no chip. The tab opens on 오늘의 업무 — what I have to do first.
+enum _MemoView { today, todo, all, done }
 
 /// Farm filter: every farm, memos without a farm, or one farm id.
 const _allFarms = '';
 const _noFarm = '미지정';
 
 class _MemoScreenState extends ConsumerState<MemoScreen> {
-  _MemoView _view = _MemoView.all;
+  _MemoView _view = _MemoView.today;
   String _farm = _allFarms;
   bool _searching = false;
   String _query = '';
@@ -175,9 +176,9 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
                             scrollDirection: Axis.horizontal,
                             children: [
                               for (final (view, label) in [
-                                (_MemoView.all, '전체'),
                                 (_MemoView.today, _withCount('오늘의 업무', today?.open.length)),
                                 (_MemoView.todo, _withCount('할일', memosAsync.valueOrNull?.where(_isOpenTask).length)),
+                                (_MemoView.all, '전체'),
                                 (_MemoView.done, '완료'),
                               ]) ...[
                                 FilterPillChip(label: label, selected: _view == view, onTap: () => setState(() => _view = view)),
@@ -199,6 +200,11 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
                       ],
                     ],
                   ),
+                  // 오늘의 업무 vs 할일 are easy to mix up — say what each holds.
+                  if (_viewHint(_view) case final hint?) ...[
+                    const SizedBox(height: 8),
+                    Text(hint, style: const TextStyle(fontSize: 12, color: AppColors.textMuted, height: 1.4)),
+                  ],
                 ],
               ),
             ),
@@ -328,6 +334,12 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
   }
 
   static bool _isOpenTask(Memo m) => m.isTask && !m.isDone;
+
+  static String? _viewHint(_MemoView v) => switch (v) {
+        _MemoView.today => '나에게 맡겨졌거나 나를 호출(@)한 메모, 내가 쓴 할일 중 아직 끝나지 않은 것만 모았어요.',
+        _MemoView.todo => '담당자와 상관없이 구성원 모두의 할일·담당 지정 메모 중 아직 끝나지 않은 것이에요.',
+        _ => null,
+      };
 
   static String _withCount(String label, int? n) => n == null || n == 0 ? label : '$label $n';
 
