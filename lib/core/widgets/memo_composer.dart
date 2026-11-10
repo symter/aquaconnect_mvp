@@ -81,11 +81,72 @@ class _MemoComposerState extends State<MemoComposer> {
     return searchFarms(widget.farms, query);
   }
 
+  List<OrgMember> get _activeMembers => widget.members.where((m) => m.status == MemberStatus.active).toList();
+
   List<OrgMember> get _memberSuggestions {
     final query = _slashQuery;
     if (query == null) return const [];
-    final roster = widget.members.where((m) => m.status == MemberStatus.active);
-    return query.isEmpty ? roster.toList() : roster.where((m) => koreanMatches(m.name, query)).toList();
+    final roster = _activeMembers;
+    return query.isEmpty ? roster : roster.where((m) => koreanMatches(m.name, query)).toList();
+  }
+
+  /// The 담당자 button: every active member, the current pick marked.
+  Future<void> _openAssigneePicker() async {
+    final members = _activeMembers;
+    final picked = await showModalBottomSheet<({OrgMember? member})>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (sheetContext) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(sheetContext).size.height * 0.7),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 18, 20, 4),
+                child: Text('담당자 지정', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+              ),
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
+                child: Text('지정한 사람의 오늘의 업무에 이 메모가 올라가요.', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
+              ),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    for (final m in members)
+                      ListTile(
+                        leading: CircleAvatar(
+                          radius: 16,
+                          backgroundColor: AppColors.brandTint,
+                          child: Text(m.name.isEmpty ? '?' : m.name.substring(0, 1),
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.brand)),
+                        ),
+                        title: Text(m.isMe ? '${m.name} (나)' : m.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                        subtitle: Text(m.role.label, style: const TextStyle(fontSize: 11.5)),
+                        trailing: _selectedAssignee?.id == m.id ? const Icon(Icons.check, color: AppColors.brand) : null,
+                        onTap: () => Navigator.of(sheetContext).pop((member: m)),
+                      ),
+                  ],
+                ),
+              ),
+              if (_selectedAssignee != null)
+                TextButton(
+                  onPressed: () => Navigator.of(sheetContext).pop((member: null)),
+                  child: const Text('담당자 지정 해제', style: TextStyle(color: AppColors.textMuted)),
+                ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+    // null = dismissed (keep the pick); member null = 지정 해제.
+    if (!mounted || picked == null) return;
+    setState(() => _selectedAssignee = picked.member);
   }
 
   bool get _canSend =>
@@ -251,6 +312,14 @@ class _MemoComposerState extends State<MemoComposer> {
               ),
             ),
             const SizedBox(width: 8),
+            // 담당자 지정 without knowing the '/' trick.
+            _RoundIconButton(
+              icon: Icons.person_add_alt_1_outlined,
+              tooltip: '담당자 지정',
+              onTap: _sending || _activeMembers.isEmpty ? null : _openAssigneePicker,
+              highlighted: _selectedAssignee != null,
+            ),
+            const SizedBox(width: 8),
             _RoundIconButton(
               icon: Icons.photo_camera_outlined,
               tooltip: '사진 찍기',
@@ -313,13 +382,33 @@ class _SlashSuggestions extends StatelessWidget {
         shrinkWrap: true,
         padding: EdgeInsets.zero,
         children: [
+          // 담당자 first, as compact chips: below a long farm list they were
+          // scrolled out of sight and looked like they couldn't be picked.
+          if (members.isNotEmpty) ...[
+            _header('담당자'),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 0, 10, 6),
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final m in members)
+                    ActionChip(
+                      avatar: const Icon(Icons.person_outline, size: 14, color: AppColors.brand),
+                      label: Text('${m.name} · ${m.role.label}', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                      onPressed: () => onPickMember(m),
+                      backgroundColor: AppColors.brandTint,
+                      side: BorderSide.none,
+                      visualDensity: VisualDensity.compact,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                ],
+              ),
+            ),
+          ],
           if (farms.isNotEmpty) ...[
             _header('양식장'),
             for (final f in farms) _item(f.name, () => onPickFarm(f)),
-          ],
-          if (members.isNotEmpty) ...[
-            _header('담당자'),
-            for (final m in members) _item('${m.name} · ${m.role.label}', () => onPickMember(m)),
           ],
         ],
       ),
@@ -404,6 +493,7 @@ class _RoundIconButton extends StatelessWidget {
     this.filled = false,
     this.loading = false,
     this.badge,
+    this.highlighted = false,
   });
 
   final IconData icon;
@@ -413,13 +503,16 @@ class _RoundIconButton extends StatelessWidget {
   final bool loading;
   final String? badge;
 
+  /// Something is already set (e.g. a 담당자 is picked).
+  final bool highlighted;
+
   @override
   Widget build(BuildContext context) {
     final enabled = onTap != null;
     final Color bg = filled
         ? (enabled || loading ? AppColors.brand : AppColors.brand.withValues(alpha: 0.4))
-        : AppColors.background;
-    final Color fg = filled ? Colors.white : AppColors.neutralIcon;
+        : (highlighted ? AppColors.brandTint : AppColors.background);
+    final Color fg = filled ? Colors.white : (highlighted ? AppColors.brand : AppColors.neutralIcon);
 
     return Tooltip(
       message: tooltip,

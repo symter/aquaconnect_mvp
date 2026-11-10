@@ -314,7 +314,7 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
             ),
             const MemoComposerBar(
               caption: '자세히 기록하기 · 양식장 태그·표현·사진을 한 번에',
-              hintText: "/ 로 양식장 지정",
+              hintText: "/ 로 양식장·담당자 지정",
             ),
           ],
         ),
