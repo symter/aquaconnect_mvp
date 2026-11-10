@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import '../../../core/config/ai_settings.dart';
 import '../../models/memo.dart';
 import '../../models/memo_comment.dart';
 import '../../models/memo_import.dart';
@@ -168,5 +169,14 @@ class RemoteMemoRepository implements MemoRepository {
     }) as Map<String, dynamic>;
     if (!dryRun) _refresh.add(null);
     return MemoImportResult.fromJson(json);
+  }
+
+  @override
+  Future<String> polishShareDraft({required String memoId, required String draft}) async {
+    final json = await _api.post('/api/memos/$memoId/share-draft', body: {
+      'draft': draft,
+      'provider': AiSettings.provider.name,
+    }) as Map<String, dynamic>;
+    return json['text'] as String;
   }
 }

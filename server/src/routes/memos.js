@@ -3,6 +3,9 @@ import { Router } from 'express';
 import { requireAuth } from '../auth.js';
 import { pool, query } from '../db.js';
 import { isDirector } from '../lib/roles.js';
+import { AiError, DEFAULT_PROVIDER, isProvider, modelStatus, notConfiguredMessage } from '../lib/ai/model.js';
+import { polishFarmMessage } from '../lib/ai/shareMessage.js';
+import { modelPlan, recordUsage } from '../lib/ai/usage.js';
 import { orgIdForMember } from '../lib/orgScope.js';
 import { notifyMembers } from '../lib/notify.js';
 import { parseMemoFile } from '../lib/memoImport.js';
@@ -283,6 +286,40 @@ memosRouter.post('/import', async (req, res) => {
     link: '/memo',
   });
   res.status(201).json({ format: parsed.format, memos, warnings: parsed.warnings, created: fresh.length });
+});
+
+// 양식장 공유 안내문 AI 다듬기: the app's rule-based draft in, a polished
+// draft out. Nothing is saved or sent — the member edits it and shares it
+// from their own phone (카카오톡·문자).
+memosRouter.post('/:id/share-draft', async (req, res) => {
+  if (!UUID_RE.test(req.params.id)) return res.status(404).json({ error: '메모를 찾을 수 없습니다.' });
+  const draft = typeof req.body?.draft === 'string' ? req.body.draft.trim() : '';
+  if (!draft) return res.status(400).json({ error: '다듬을 안내문이 없습니다.' });
+  if (draft.length > 3000) return res.status(400).json({ error: '안내문이 너무 깁니다.' });
+  const raw = req.body?.provider;
+  const provider = raw == null || raw === '' ? DEFAULT_PROVIDER : isProvider(String(raw)) ? String(raw) : null;
+  if (!provider) return res.status(400).json({ error: '알 수 없는 AI 입니다.' });
+  if (!modelStatus(provider).configured) return res.status(503).json({ error: notConfiguredMessage(provider) });
+
+  const orgId = await orgIdForMember(req.memberId);
+  const { rows } = await query(
+    'select mm.content, f.name as farm_name from memos mm left join farms f on f.id = mm.farm_id where mm.id = $1 and mm.org_id = $2',
+    [req.params.id, orgId],
+  );
+  if (!rows[0]) return res.status(404).json({ error: '메모를 찾을 수 없습니다.' });
+  try {
+    const result = await polishFarmMessage({
+      memo: rows[0],
+      farmName: rows[0].farm_name,
+      draft,
+      plan: await modelPlan(provider),
+      onResult: (r) => recordUsage({ orgId, memberId: req.memberId, ...r }),
+    });
+    res.json({ text: result.text });
+  } catch (err) {
+    if (err instanceof AiError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
 });
 
 // 메모 수정: institute memos only (a farm's 문의 stays as the farm sent it),

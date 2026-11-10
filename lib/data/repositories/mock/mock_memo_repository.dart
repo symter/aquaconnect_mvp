@@ -181,4 +181,8 @@ class MockMemoRepository implements MemoRepository {
     bool dryRun = false,
   }) =>
       throw Exception('메모 일괄 업로드는 서버에 연결된 상태에서만 쓸 수 있어요.');
+
+  @override
+  Future<String> polishShareDraft({required String memoId, required String draft}) =>
+      throw Exception('AI 다듬기는 서버에 연결된 상태에서만 쓸 수 있어요.');
 }

@@ -60,4 +60,8 @@ abstract class MemoRepository {
     required Uint8List bytes,
     bool dryRun = false,
   });
+
+  /// 양식장 공유 안내문 AI 다듬기: [draft] (the rule-based farm message) comes
+  /// back polished. Nothing is saved; the member still edits before sending.
+  Future<String> polishShareDraft({required String memoId, required String draft});
 }
