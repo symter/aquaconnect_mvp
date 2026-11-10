@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { requireAuth } from '../auth.js';
 import { query } from '../db.js';
 import { AUDIT_RETENTION, diffFields, recordAudit } from '../lib/audit.js';
+import { DIRECTOR_ONLY, isDirector } from '../lib/roles.js';
 import { formatPhone, validatePhone } from '../lib/validators.js';
 
 // The signed-in member's institute (관리원 정보) and its 변경 이력.
@@ -40,8 +41,8 @@ const ORG_FIELDS = [
 
 organizationRouter.put('/', async (req, res) => {
   const current = await me(req.memberId);
-  if (!['owner', 'director'].includes(current.role)) {
-    return res.status(403).json({ error: '소유자·원장만 관리원 정보를 수정할 수 있습니다.' });
+  if (!isDirector(current)) {
+    return res.status(403).json({ error: '원장만 관리원 정보를 수정할 수 있습니다.' });
   }
   const name = String(req.body?.name ?? '').trim();
   const address = String(req.body?.address ?? '').trim();
@@ -73,6 +74,7 @@ organizationRouter.put('/', async (req, res) => {
 // 변경 이력, newest first. `before` (ISO time) pages backwards; `type`
 // filters to member / farm / organization.
 organizationRouter.get('/audit-logs', async (req, res) => {
+  if (!isDirector(await me(req.memberId))) return res.status(403).json({ error: DIRECTOR_ONLY });
   const type = ['member', 'farm', 'organization'].includes(req.query.type) ? req.query.type : null;
   const before = req.query.before && !Number.isNaN(Date.parse(req.query.before)) ? new Date(req.query.before) : null;
   const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 100);

@@ -24,8 +24,8 @@ async function main() {
   const { rows: orgRows } = await query('insert into organizations (name) values ($1) returning id', [ORG_NAME]);
   const passwordHash = await hashPassword(OWNER_PASSWORD);
   await query(
-    `insert into members (org_id, name, email, password_hash, is_owner, role, phone)
-     values ($1, $2, $3, $4, true, 'owner', $5)`,
+    `insert into members (org_id, name, email, password_hash, role, phone)
+     values ($1, $2, $3, $4, 'director', $5)`,
     [orgRows[0].id, OWNER_NAME, OWNER_EMAIL, passwordHash, OWNER_PHONE],
   );
 

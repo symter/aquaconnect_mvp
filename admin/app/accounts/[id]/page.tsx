@@ -2,8 +2,8 @@
 
 import { use, useCallback, useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { ArrowLeft, Eye, EyeOff, KeyRound, NotebookPen, Power, Save, Shuffle } from "lucide-react";
-import { adminFetch, formatDateTime, formatPhone, ROLE_LABELS, type Member } from "@/lib/api";
+import { ArrowLeft, Eye, EyeOff, KeyRound, NotebookPen, Power, Save, ShieldCheck, Shuffle } from "lucide-react";
+import { adminFetch, formatDateTime, formatPhone, ROLE_DESCRIPTIONS, ROLE_LABELS, type Member, type MemberRole } from "@/lib/api";
 import { Avatar, Badge, Button, cardStyle, COLORS, ErrorBox, Field, inputStyle, Loading, Notice, SectionLabel } from "@/components/ui";
 
 // 서버 lib/validators.js validatePassword 와 같은 규칙.
@@ -42,6 +42,9 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
   const [pwMsg, setPwMsg] = useState<Msg>(null);
 
   const [togglingStatus, setTogglingStatus] = useState(false);
+
+  const [savingRole, setSavingRole] = useState(false);
+  const [roleMsg, setRoleMsg] = useState<Msg>(null);
 
   const applyMember = useCallback((m: Member) => {
     setMember(m);
@@ -97,6 +100,28 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
     setPwMsg(null);
   }
 
+  async function changeRole(role: MemberRole) {
+    if (!member || member.role === role) return;
+    const prompt = role === "director"
+      ? `${member.name} 님에게 원장 권한을 줄까요?
+${member.orgName}의 직원 관리, 관리원 정보 수정, 변경 이력 열람 등을 할 수 있게 됩니다.`
+      : member.role === "director"
+        ? `${member.name} 님의 원장 권한을 해제하고 ${ROLE_LABELS[role]}(으)로 바꿀까요?
+직원 관리 등 원장 기능을 더 이상 쓸 수 없습니다.`
+        : `${member.name} 님의 역할을 ${ROLE_LABELS[role]}(으)로 바꿀까요?`;
+    if (!confirm(prompt)) return;
+    setRoleMsg(null);
+    setSavingRole(true);
+    try {
+      applyMember(await adminFetch<Member>(`members/${id}/role`, { method: "POST", body: JSON.stringify({ role }) }));
+      setRoleMsg({ tone: "success", text: `${ROLE_LABELS[role]}(으)로 변경했습니다. 다음에 앱을 열거나 새로고침하면 반영됩니다.` });
+    } catch (e) {
+      setRoleMsg({ tone: "danger", text: e instanceof Error ? e.message : "역할 변경에 실패했습니다." });
+    } finally {
+      setSavingRole(false);
+    }
+  }
+
   async function toggleStatus() {
     if (!member) return;
     const next = member.status === "active" ? "inactive" : "active";
@@ -137,7 +162,9 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
                   ? <Badge color={COLORS.successText} bg={COLORS.successSoft}>활성</Badge>
                   : <Badge color="#555" bg={COLORS.neutralSoft}>비활성</Badge>}
                 <Badge color={COLORS.primaryDark} bg={COLORS.primarySoft}>{member.orgName}</Badge>
-                <Badge color="#555" bg={COLORS.neutralSoft}>{ROLE_LABELS[member.role] ?? member.role}</Badge>
+                {member.role === "director"
+                  ? <Badge color="#fff" bg={COLORS.primary}>원장</Badge>
+                  : <Badge color="#555" bg={COLORS.neutralSoft}>{ROLE_LABELS[member.role] ?? member.role}</Badge>}
               </div>
               <p style={{ fontSize: 12, color: "#999", marginTop: 8 }}>
                 가입 {formatDateTime(member.createdAt)}
@@ -150,6 +177,48 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
             >
               <NotebookPen size={15} /> 작성한 메모 {member.memoCount}건
             </Link>
+          </div>
+
+          {/* 권한 */}
+          <SectionLabel>권한</SectionLabel>
+          <div style={{ ...cardStyle, padding: "24px 28px", marginBottom: 28, display: "flex", flexDirection: "column", gap: 12 }}>
+            <p style={{ fontSize: 13, color: "#888", lineHeight: 1.6 }}>
+              원장 권한은 이 대시보드에서만 주고 뺄 수 있습니다. 한 관리원에 원장을 여러 명 둘 수 있고, 변경 내역은 관리원의 변경 이력에 &lsquo;시스템 관리자&rsquo;로 기록됩니다.
+            </p>
+            {(["director", "staff", "employee"] as MemberRole[]).map((role) => {
+              const selected = member.role === role;
+              return (
+                <button
+                  key={role}
+                  type="button"
+                  disabled={savingRole}
+                  onClick={() => changeRole(role)}
+                  aria-pressed={selected}
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: 12,
+                    textAlign: "left",
+                    padding: "14px 16px",
+                    borderRadius: 12,
+                    border: selected ? `1.5px solid ${COLORS.primary}` : "1.5px solid #E0E0E0",
+                    background: selected ? COLORS.primarySoft : "#fff",
+                    cursor: savingRole || selected ? "default" : "pointer",
+                  }}
+                >
+                  <ShieldCheck size={18} color={selected ? COLORS.primary : "#bbb"} style={{ flexShrink: 0, marginTop: 1 }} />
+                  <span style={{ minWidth: 0 }}>
+                    <span style={{ display: "block", fontSize: 14, fontWeight: 700, color: selected ? COLORS.primaryDark : "#1a1a1a" }}>
+                      {ROLE_LABELS[role]}{selected && " · 현재"}
+                    </span>
+                    <span style={{ display: "block", fontSize: 12, color: "#888", marginTop: 3, lineHeight: 1.5, overflowWrap: "anywhere" }}>
+                      {ROLE_DESCRIPTIONS[role]}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+            {roleMsg && <Notice tone={roleMsg.tone}>{roleMsg.text}</Notice>}
           </div>
 
           {/* 기본 정보 */}

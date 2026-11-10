@@ -1,7 +1,7 @@
 // 클라이언트 컴포넌트도 쓰는 타입·라벨만 둔다.
 // 실제 백엔드 호출은 lib/api-admin.ts(서버 전용)와 app/api/admin/[...path] 프록시가 한다.
 
-export type MemberRole = "owner" | "director" | "staff" | "employee";
+export type MemberRole = "director" | "staff" | "employee";
 export type MemberStatus = "active" | "inactive";
 
 export interface AdminStats {
@@ -19,6 +19,8 @@ export interface Organization {
   id: string;
   name: string;
   memberCount: number;
+  /** 활성 원장 수 — 0이면 그 관리원에는 직원 관리를 할 사람이 없다. */
+  directorCount: number;
   createdAt: string;
 }
 
@@ -112,10 +114,16 @@ export interface AiReportDetail extends AiReportSummary {
 export const REPORT_STATUS_LABELS: Record<AiReportStatus, string> = { draft: "검토 대기", confirmed: "확정", sent: "어가 발송" };
 
 export const ROLE_LABELS: Record<MemberRole, string> = {
-  owner: "소유자",
   director: "원장",
   staff: "수산질병관리사",
   employee: "직원",
+};
+
+/** 원장 = 관리원 안에서 직원 관리 등 관리 기능을 쓰는 역할. 이 대시보드에서만 지정한다. */
+export const ROLE_DESCRIPTIONS: Record<MemberRole, string> = {
+  director: "직원 관리(초대·역할·비활성화), 관리원 정보 수정, 변경 이력, 다른 직원의 메모·댓글 수정·삭제",
+  staff: "현장 메모·양식장·리포트 업무",
+  employee: "현장 메모·양식장·리포트 업무 (보조 인력)",
 };
 
 /** 브라우저에서 /api/admin/* 프록시를 부른다. 실패하면 서버 메시지로 throw. */

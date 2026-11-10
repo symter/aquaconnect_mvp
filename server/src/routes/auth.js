@@ -27,12 +27,9 @@ export async function memberWithOrg(memberId) {
 
 export function toSessionJson(row) {
   return {
-    // `isOwner` is derived from `role`, not the separate `is_owner` column
-    // — the two are independently writable with no DB-level sync, and the
-    // client already ignores the wire `isOwner` in favor of deriving it
-    // from `role` too (see Member.isOwner in member.dart), so `role` is the
-    // single source of truth here.
-    member: { id: row.id, orgId: row.org_id, name: row.name, role: row.role, isOwner: row.role === 'owner', phone: row.phone },
+    // `role` is the only permission source (원장 = director); the legacy
+    // `is_owner` column is no longer used.
+    member: { id: row.id, orgId: row.org_id, name: row.name, role: row.role, phone: row.phone },
     organization: { id: row.org_id, name: row.org_name },
   };
 }
@@ -68,8 +65,9 @@ authRouter.get('/me', requireAuth, async (req, res) => {
 });
 
 // ── Signup (ported from aquaconnect_web, minus the business-certificate
-// upload and admin approval: a new institute and its owner account are
-// usable immediately) ──────────────────────────────────────────────────
+// upload and admin approval: a new institute and its first account are
+// usable immediately; that account starts as 수산질병관리사 — 원장 is
+// granted from the admin dashboard) ──────────────────────────────────────────────────
 
 export const TERMS_VERSION = '2026-10-01';
 
@@ -140,9 +138,9 @@ authRouter.post('/signup', async (req, res) => {
     );
     const { rows: memberRows } = await client.query(
       `insert into members
-         (org_id, name, email, password_hash, is_owner, role, phone,
+         (org_id, name, email, password_hash, role, phone,
           terms_version, terms_agreed_at, privacy_agreed_at, marketing_agreed)
-       values ($1, $2, $3, $4, true, 'owner', $5, $6, now(), now(), $7)
+       values ($1, $2, $3, $4, 'staff', $5, $6, now(), now(), $7)
        returning id`,
       [
         orgRows[0].id,

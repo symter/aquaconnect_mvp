@@ -17,8 +17,8 @@ for Flutter Web).
      비워두면 관리자 API 전체가 꺼집니다(503). `admin/`의 같은 이름 환경변수와 값을 맞추세요.
    - `NIFS_API_KEY` — (선택) 발급받은 키. 비워두면 `D:\202609`와 동일한 기본 데모 키로 동작.
    - `NIFS_REDTIDE_API_KEY` — (선택) 적조 정보(`redtideList`/`redtideDetail`) 키. 비워두면 코드에 저장된 기본 키로 동작.
-   - `SEED_DEMO_PASSWORD` — (선택) `npm run seed`가 만드는 소유자 계정 비밀번호. 기본값 `demo1234`.
-   - `SEED_ORG_NAME` / `SEED_OWNER_NAME` / `SEED_OWNER_EMAIL` / `SEED_OWNER_PHONE` — (선택) 시드할 관리원명·소유자
+   - `SEED_DEMO_PASSWORD` — (선택) `npm run seed`가 만드는 원장 계정 비밀번호. 기본값 `demo1234`.
+   - `SEED_ORG_NAME` / `SEED_OWNER_NAME` / `SEED_OWNER_EMAIL` / `SEED_OWNER_PHONE` — (선택) 시드할 관리원명·원장
      이름·로그인 이메일·전화번호. 기본값 해강수산질병관리원 / 이동길 / `leedonggil@haegang.kr` / 없음.
      전화번호는 공유 리포트의 "담당 관리사에게 연락하기" 버튼이 거는 번호입니다.
    - `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` — (선택) 휴대폰 알림(Web Push) 서명 키.
@@ -31,7 +31,7 @@ for Flutter Web).
    ```
    npm run seed
    ```
-   시드는 관리원(organization)과 소유자 로그인 계정만 만듭니다 — 양식장·메모·
+   시드는 관리원(organization)과 원장 로그인 계정만 만듭니다 — 양식장·메모·
    질병정보·공유링크 같은 데모 데이터는 넣지 않습니다. 이미 같은 이메일 계정이
    있으면 아무것도 하지 않으므로 다시 실행해도 안전합니다.
 
@@ -77,11 +77,11 @@ Postgres가 로컬에 없다면 `npm run smoke-test`로 (pg-mem 기반 인메모
 | PUT | `/api/farms/:id` | 양식장 정보 수정 (`assignedMemberId`로 담당자 변경, 생략하면 유지) |
 | DELETE | `/api/farms/:id` | 양식장 삭제 |
 | GET/POST | `/api/memos` | 메모 조회(`?farmId=`)/작성 |
-| PATCH | `/api/memos/:id` | 메모 수정 `{content}` — 기관 메모만, 작성자 또는 소유자·원장. 수정 전 내용은 `memo_edits`에 남고, 이력 내용은 소유자·원장에게만 응답 (다른 구성원은 `editCount`만) |
-| DELETE | `/api/memos/:id` | 메모 삭제 (작성자 또는 소유자·원장) |
+| PATCH | `/api/memos/:id` | 메모 수정 `{content}` — 기관 메모만, 작성자 또는 원장. 수정 전 내용은 `memo_edits`에 남고, 이력 내용은 원장에게만 응답 (다른 구성원은 `editCount`만) |
+| DELETE | `/api/memos/:id` | 메모 삭제 (작성자 또는 원장) |
 | POST | `/api/memos/read` | 읽음 표시 `{ids:[...]}` — 응답의 `readCount`는 작성자를 뺀 읽은 사람 수, `readByMe`는 내가 읽었는지 |
 | GET/POST | `/api/memos/:id/comments` | 댓글 목록/작성 `{content}` (1000자 이내). 메모 작성자와 이미 댓글을 단 사람에게 `comment` 알림 |
-| DELETE | `/api/memos/:id/comments/:commentId` | 댓글 삭제 (댓글 작성자 또는 소유자·원장) |
+| DELETE | `/api/memos/:id/comments/:commentId` | 댓글 삭제 (댓글 작성자 또는 원장) |
 | GET | `/api/disease-info` | 수산질병 정보 |
 | GET | `/api/reports/:farmId` | 최신 리포트(없으면 즉시 생성) |
 | GET | `/api/reports?farmIds=a,b` | 여러 양식장 최신 리포트 일괄 조회 |
@@ -138,26 +138,31 @@ Postgres가 로컬에 없다면 `npm run smoke-test`로 (pg-mem 기반 인메모
     "terms": { "termsVersion": "2026-10-01", "termsAgreed": true, "privacyAgreed": true, "marketingAgreed": false }
   }
   ```
-  관리원(organizations)과 소유자 계정(members, role=owner)을 한 트랜잭션으로 만들고 약관 동의 시각을 기록합니다.
+  관리원(organizations)과 첫 계정(members, role=staff)을 한 트랜잭션으로 만들고 약관 동의 시각을 기록합니다.
   이메일·사업자등록번호 중복은 409, 같은 IP에서 1시간 10건 초과는 429.
   입력 규칙은 `src/lib/validators.js` ↔ `lib/core/utils/validators.dart`가 같은 규칙을 씁니다(한쪽을 바꾸면 둘 다).
 
-## 구성원 · 관리원 정보 · 변경 이력
+## 원장 권한 · 직원 관리 · 관리원 정보 · 변경 이력
 
-- `GET /api/members` — 관리원 구성원 목록(활성·비활성). `PATCH /api/members/:id/role` `{role: director|staff|employee}`,
-  `POST /api/members/:id/deactivate|reactivate`, `POST /api/members/:id/transfer-ownership`.
-  소유자·원장만 변경 가능, 본인·소유자는 대상이 될 수 없고, 양도는 소유자만. 비활성 구성원은 로그인이 막히고
+- 역할은 원장(director)·수산질병관리사(staff)·직원(employee). **관리 기능은 원장만** 쓸 수 있습니다(`src/lib/roles.js`):
+  직원 관리·초대, 관리원 정보 수정, 변경 이력 열람, 다른 사람 메모·댓글 수정/삭제와 메모 수정 이력 열람.
+  **원장 지정·해제는 관리자 대시보드에서만** (`POST /api/admin/members/:id/role` `{role}`) — 앱 API로는 원장을
+  만들거나 원장 계정을 바꿀 수 없습니다. 새로 가입한 관리원의 첫 계정은 staff로 시작합니다.
+  (migration 021이 예전 '소유자(owner)'를 원장으로 통합하고 쓰지 않은 원장 초대를 취소했습니다.)
+- `GET /api/members` — 관리원 구성원 목록(활성·비활성, 누구나 — @호출 등에 씀). `PATCH /api/members/:id/role` `{role: staff|employee}`,
+  `POST /api/members/:id/deactivate|reactivate`.
+  원장만 변경 가능, 본인·원장 계정은 대상이 될 수 없습니다. 비활성 구성원은 로그인이 막히고
   이미 받은 토큰도 즉시 401이 됩니다(`requireAuth`가 매 요청 상태 확인).
-- `GET|PUT /api/organization` — 관리원명·주소·대표 연락처 (수정은 소유자·원장).
-- `GET /api/organization/audit-logs?type=member|farm|organization&before=<ISO>&limit=` — 변경 이력, 최신순.
-  구성원(역할·비활성·재활성·소유자 양도), 양식장(등록·수정·삭제, 바뀐 항목만), 관리원(가입·정보 수정)이 기록되고,
+- `GET|PUT /api/organization` — 관리원명·주소·대표 연락처 (수정은 원장).
+- `GET /api/organization/audit-logs?type=member|farm|organization&before=<ISO>&limit=` — 변경 이력, 최신순 (원장만).
+  구성원(역할·비활성·재활성), 양식장(등록·수정·삭제, 바뀐 항목만), 관리원(가입·정보 수정)이 기록되고,
   위험도·수온처럼 시스템이 자동으로 갱신하는 값은 기록하지 않습니다.
   **3개월이 지난 이력은 서버가 기동 시와 6시간마다 자동 삭제**합니다(`src/lib/audit.js`의 `AUDIT_RETENTION`).
 - `POST /api/share-links/:id/revoke` — 공유 링크 회수(어가 링크 즉시 404). 목록 응답에 `farmName` 포함.
 
 ## 구성원 초대
 
-- 소유자·원장: `POST /api/invitations` `{role: director|staff|employee, expireDays: 7|30, note?}` → 1회용 코드(10자) ·
+- 원장만: `POST /api/invitations` `{role: staff|employee, expireDays: 7|30, note?}` → 1회용 코드(10자) ·
   `GET /api/invitations`(대기 중 + 만료됨) · `POST /api/invitations/:id/extend`(지금부터 7일로 연장) ·
   `POST /api/invitations/:id/cancel`.
 - 공개: `GET /api/public/invitations/:code` → 관리원명·역할·초대한 사람·만료 (없으면 404, 사용·취소·만료면 410과 사유) ·

@@ -16,6 +16,7 @@ export default function AccountsPage() {
   const [orgs, setOrgs] = useState<Organization[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [status, setStatus] = useState("");
+  const [directorsOnly, setDirectorsOnly] = useState(false);
   const [orgId, setOrgId] = useState("");
   const [queryInput, setQueryInput] = useState("");
   const [q, setQ] = useState("");
@@ -31,6 +32,7 @@ export default function AccountsPage() {
     setError("");
     const params = new URLSearchParams();
     if (status) params.set("status", status);
+    if (directorsOnly) params.set("role", "director");
     if (orgId) params.set("orgId", orgId);
     if (q) params.set("q", q);
     try {
@@ -40,7 +42,7 @@ export default function AccountsPage() {
     } finally {
       setLoading(false);
     }
-  }, [status, orgId, q]);
+  }, [status, orgId, q, directorsOnly]);
 
   useEffect(() => { fetchMembers(); }, [fetchMembers]);
 
@@ -53,7 +55,7 @@ export default function AccountsPage() {
     <div>
       <PageHeader
         title="계정 관리"
-        subtitle="관리원 구성원 계정의 정보 수정, 비밀번호 재설정, 활성화·비활성화를 처리합니다."
+        subtitle="관리원 구성원 계정의 정보 수정, 원장 권한 지정, 비밀번호 재설정, 활성화·비활성화를 처리합니다."
       />
 
       {/* 필터 탭 + 새로고침 */}
@@ -61,6 +63,8 @@ export default function AccountsPage() {
         {FILTERS.map(({ key, label }) => (
           <FilterChip key={key} active={status === key} onClick={() => setStatus(key)}>{label}</FilterChip>
         ))}
+        <span style={{ width: 1, height: 20, background: "#e0e0e0", margin: "0 4px" }} />
+        <FilterChip active={directorsOnly} onClick={() => setDirectorsOnly(!directorsOnly)}>원장만</FilterChip>
         <div style={{ marginLeft: "auto" }}>
           <RefreshButton onClick={fetchMembers} />
         </div>
@@ -86,7 +90,11 @@ export default function AccountsPage() {
           style={{ ...inputStyle, width: "auto", minWidth: 180, background: "#fff", cursor: "pointer" }}
         >
           <option value="">전체 관리원</option>
-          {orgs.map((o) => <option key={o.id} value={o.id}>{o.name} ({o.memberCount})</option>)}
+          {orgs.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.name} ({o.memberCount}){o.directorCount === 0 ? " · 원장 없음" : ""}
+            </option>
+          ))}
         </select>
       </div>
 
@@ -128,7 +136,9 @@ export default function AccountsPage() {
                         ? <Badge color={COLORS.successText} bg={COLORS.successSoft}>활성</Badge>
                         : <Badge color="#555" bg={COLORS.neutralSoft}>비활성</Badge>}
                       <Badge color={COLORS.primaryDark} bg={COLORS.primarySoft}>{m.orgName}</Badge>
-                      <Badge color="#555" bg={COLORS.neutralSoft}>{ROLE_LABELS[m.role] ?? m.role}</Badge>
+                      {m.role === "director"
+                        ? <Badge color="#fff" bg={COLORS.primary}>원장</Badge>
+                        : <Badge color="#555" bg={COLORS.neutralSoft}>{ROLE_LABELS[m.role] ?? m.role}</Badge>}
                       <span style={{ fontSize: 11, color: "#aaa" }}>
                         메모 {m.memoCount} · 댓글 {m.commentCount} · 가입 {formatDateTime(m.createdAt).split(" ")[0]}
                       </span>

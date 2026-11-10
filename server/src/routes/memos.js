@@ -2,6 +2,7 @@ import { Router } from 'express';
 
 import { requireAuth } from '../auth.js';
 import { pool, query } from '../db.js';
+import { isDirector } from '../lib/roles.js';
 import { orgIdForMember } from '../lib/orgScope.js';
 import { notifyMembers } from '../lib/notify.js';
 import { parseMemoFile } from '../lib/memoImport.js';
@@ -14,7 +15,7 @@ const MAX_PHOTOS = 5;
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 const ALLOWED_PHOTO_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
-// [withEdits] — only owners/directors see the 수정 이력 contents; everyone
+// [withEdits] — only 원장 (director) see the 수정 이력 contents; everyone
 // else just gets the count (for the "수정됨" label).
 function toMemoJson(row, { withEdits = false } = {}) {
   return {
@@ -75,7 +76,7 @@ async function currentMember(memberId) {
   return rows[0] ?? null;
 }
 
-const isManager = (me) => ['owner', 'director'].includes(me?.role);
+const isManager = isDirector;
 
 // Memos record their author's member id; older ones (and any whose author
 // name was ambiguous) fall back to the "수산질병관리원 · <name>" signature.
@@ -285,7 +286,7 @@ memosRouter.post('/import', async (req, res) => {
 });
 
 // 메모 수정: institute memos only (a farm's 문의 stays as the farm sent it),
-// by the author or an owner/director. The old content goes to memo_edits.
+// by the author or 원장 (director). The old content goes to memo_edits.
 memosRouter.patch('/:id', async (req, res) => {
   if (!UUID_RE.test(req.params.id)) return res.status(404).json({ error: '메모를 찾을 수 없습니다.' });
   const content = typeof req.body?.content === 'string' ? req.body.content.trim() : '';
@@ -302,7 +303,7 @@ memosRouter.patch('/:id', async (req, res) => {
   const me = await currentMember(req.memberId);
   if (memo.author_type !== 'institute') return res.status(403).json({ error: '어가가 보낸 메모는 수정할 수 없습니다.' });
   if (!isManager(me) && !isAuthor(memo, me)) {
-    return res.status(403).json({ error: '작성자 또는 소유자·원장만 수정할 수 있습니다.' });
+    return res.status(403).json({ error: '작성자 또는 원장만 수정할 수 있습니다.' });
   }
 
   if (content !== memo.content) {
@@ -363,7 +364,7 @@ memosRouter.put('/:id/done', async (req, res) => {
   res.json(await loadMemoJson(memo.id, me));
 });
 
-// 메모 삭제: the author or an owner/director. Photos, edits, comments and
+// 메모 삭제: the author or 원장 (director). Photos, edits, comments and
 // reads go with it (FK cascade).
 memosRouter.delete('/:id', async (req, res) => {
   if (!UUID_RE.test(req.params.id)) return res.status(404).json({ error: '메모를 찾을 수 없습니다.' });
@@ -377,7 +378,7 @@ memosRouter.delete('/:id', async (req, res) => {
 
   const me = await currentMember(req.memberId);
   if (!isManager(me) && !isAuthor(memo, me)) {
-    return res.status(403).json({ error: '작성자 또는 소유자·원장만 삭제할 수 있습니다.' });
+    return res.status(403).json({ error: '작성자 또는 원장만 삭제할 수 있습니다.' });
   }
 
   await query('delete from memos where id = $1', [memo.id]);
@@ -596,7 +597,7 @@ memosRouter.post('/:id/comments', async (req, res) => {
   res.status(201).json(await loadCommentJson(commentId));
 });
 
-// 댓글 삭제: its author or an owner/director.
+// 댓글 삭제: its author or 원장 (director).
 memosRouter.delete('/:id/comments/:commentId', async (req, res) => {
   const memo = await loadOrgMemo(req.params.id, req.memberId);
   if (!memo || !UUID_RE.test(req.params.commentId)) return res.status(404).json({ error: '댓글을 찾을 수 없습니다.' });
@@ -608,7 +609,7 @@ memosRouter.delete('/:id/comments/:commentId', async (req, res) => {
   if (!comment) return res.status(404).json({ error: '댓글을 찾을 수 없습니다.' });
   const me = await currentMember(req.memberId);
   if (!isManager(me) && comment.author_member_id !== req.memberId) {
-    return res.status(403).json({ error: '작성자 또는 소유자·원장만 삭제할 수 있습니다.' });
+    return res.status(403).json({ error: '작성자 또는 원장만 삭제할 수 있습니다.' });
   }
   await query('delete from memo_comments where id = $1', [comment.id]);
   res.status(204).end();

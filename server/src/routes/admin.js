@@ -4,6 +4,7 @@ import { Router } from 'express';
 import { hashPassword } from '../auth.js';
 import { query } from '../db.js';
 import { diffFields, recordAudit } from '../lib/audit.js';
+import { ADMIN_ROLES, ROLE_LABEL, ROLE_ORDER_SQL } from '../lib/roles.js';
 import { digitsOnly, normalizeEmail, validateEmail, validatePassword, validatePhone } from '../lib/validators.js';
 import { refreshReportQuietly } from './reports.js';
 
@@ -56,10 +57,11 @@ adminRouter.get('/stats', async (req, res) => {
 
 adminRouter.get('/organizations', async (req, res) => {
   const { rows } = await query(
-    `select o.id, o.name, o.created_at, (select count(*)::int from members m where m.org_id = o.id) as member_count
+    `select o.id, o.name, o.created_at, (select count(*)::int from members m where m.org_id = o.id) as member_count,
+       (select count(*)::int from members m where m.org_id = o.id and m.role = 'director' and m.status = 'active') as director_count
      from organizations o order by o.name`,
   );
-  res.json(rows.map((r) => ({ id: r.id, name: r.name, memberCount: r.member_count, createdAt: r.created_at })));
+  res.json(rows.map((r) => ({ id: r.id, name: r.name, memberCount: r.member_count, directorCount: r.director_count, createdAt: r.created_at })));
 });
 
 // ── 계정 관리 ───────────────────────────────────────────────────────
@@ -96,14 +98,16 @@ async function loadMember(id) {
 adminRouter.get('/members', async (req, res) => {
   const q = String(req.query.q ?? '').trim();
   const status = ['active', 'inactive'].includes(req.query.status) ? req.query.status : null;
+  const role = ADMIN_ROLES.includes(req.query.role) ? req.query.role : null;
   const { rows } = await query(
     `${MEMBER_SELECT}
      where ($1::uuid is null or m.org_id = $1)
        and ($2::text is null or m.status = $2)
        and ($3 = '' or m.name ilike '%' || $3 || '%' or m.email ilike '%' || $3 || '%'
             or coalesce(m.phone, '') like '%' || $3 || '%' or o.name ilike '%' || $3 || '%')
-     order by o.name, case m.role when 'owner' then 0 when 'director' then 1 when 'staff' then 2 else 3 end, m.created_at`,
-    [optionalUuid(req.query.orgId), status, q],
+       and ($4::text is null or m.role = $4)
+     order by o.name, ${ROLE_ORDER_SQL('m.role')}, m.created_at`,
+    [optionalUuid(req.query.orgId), status, q, role],
   );
   res.json(rows.map(toMemberJson));
 });
@@ -165,7 +169,29 @@ adminRouter.post('/members/:id/password', async (req, res) => {
   res.status(204).end();
 });
 
-// Unlike the institute-side 구성원 관리, owners can be deactivated here too
+// 역할 지정 — 원장 권한은 여기서만 주고 뺀다 (앱의 직원 관리에서는 원장을
+// 만들거나 바꿀 수 없다). 한 관리원에 원장이 여럿이어도 된다.
+adminRouter.post('/members/:id/role', async (req, res) => {
+  const member = await loadMember(req.params.id);
+  if (!member) return notFound(res, '계정');
+  const role = req.body?.role;
+  if (!ADMIN_ROLES.includes(role)) return res.status(400).json({ error: '역할 값이 올바르지 않습니다.' });
+  if (member.role === role) return res.json(toMemberJson(member));
+
+  await query('update members set role = $2 where id = $1', [member.id, role]);
+  await recordAudit({
+    orgId: member.org_id,
+    actorName: ADMIN_ACTOR,
+    entityType: 'member',
+    entityId: member.id,
+    entityName: member.name,
+    action: 'role_change',
+    changes: [{ field: 'role', label: '역할', from: ROLE_LABEL[member.role] ?? member.role, to: ROLE_LABEL[role] }],
+  });
+  res.json(toMemberJson(await loadMember(member.id)));
+});
+
+// Unlike the institute-side 직원 관리, 원장 accounts can be deactivated here too
 // (e.g. a lost or abused account); requireAuth rejects them right away.
 adminRouter.post('/members/:id/status', async (req, res) => {
   const member = await loadMember(req.params.id);

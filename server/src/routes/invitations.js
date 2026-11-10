@@ -4,11 +4,11 @@ import { Router } from 'express';
 
 import { hashPassword, requireAuth, signToken } from '../auth.js';
 import { pool, query } from '../db.js';
+import { IN_APP_ROLES, ROLE_LABEL, isDirector } from '../lib/roles.js';
 import { recordAudit } from '../lib/audit.js';
 import { formatPhone, normalizeEmail, validateEmail, validatePassword, validatePhone } from '../lib/validators.js';
 import { TERMS_VERSION, memberWithOrg, toSessionJson, tooManySignups } from './auth.js';
 
-const ROLE_LABEL = { director: '원장', staff: '수산질병관리사', employee: '직원' };
 const EXPIRE_DAYS = [7, 30];
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -46,8 +46,8 @@ invitationsRouter.use(requireAuth);
 async function manager(req, res) {
   const { rows } = await query('select id, org_id, role from members where id = $1', [req.memberId]);
   const me = rows[0];
-  if (!['owner', 'director'].includes(me?.role)) {
-    res.status(403).json({ error: '소유자·원장만 구성원을 초대할 수 있습니다.' });
+  if (!isDirector(me)) {
+    res.status(403).json({ error: '원장만 직원을 초대할 수 있습니다.' });
     return null;
   }
   return me;
@@ -66,6 +66,7 @@ async function ownInvitation(req, res, me) {
 // Invitations still waiting to be used (expired ones too, so they can be
 // extended); used and cancelled ones drop off the list.
 invitationsRouter.get('/', async (req, res) => {
+  if (!(await manager(req, res))) return;
   const { rows } = await query(
     `select * from invitations
      where org_id = (select org_id from members where id = $1) and accepted_at is null and revoked_at is null
@@ -81,7 +82,7 @@ invitationsRouter.post('/', async (req, res) => {
   const role = req.body?.role;
   const expireDays = Number(req.body?.expireDays ?? 7);
   const note = String(req.body?.note ?? '').trim().slice(0, 60);
-  if (!ROLE_LABEL[role]) return res.status(400).json({ error: '초대할 수 없는 역할입니다.' });
+  if (!IN_APP_ROLES.includes(role)) return res.status(400).json({ error: '초대할 수 없는 역할입니다. 원장 권한은 관리자에게 요청해 주세요.' });
   if (!EXPIRE_DAYS.includes(expireDays)) return res.status(400).json({ error: '만료 기한은 7일 또는 30일입니다.' });
 
   const { rows } = await query(
@@ -207,7 +208,7 @@ publicInvitationsRouter.post('/:code/accept', async (req, res) => {
          (org_id, name, email, password_hash, role, phone, terms_version, terms_agreed_at, privacy_agreed_at, marketing_agreed)
        values ($1, $2, $3, $4, $5, $6, $7, now(), now(), $8)
        returning id`,
-      [inv.org_id, account.name.trim(), email, passwordHash, inv.role, formatPhone(account.phone), String(terms.termsVersion || TERMS_VERSION), terms.marketingAgreed === true],
+      [inv.org_id, account.name.trim(), email, passwordHash, IN_APP_ROLES.includes(inv.role) ? inv.role : 'staff', formatPhone(account.phone), String(terms.termsVersion || TERMS_VERSION), terms.marketingAgreed === true],
     );
     memberId = memberRows[0].id;
     await client.query('update invitations set accepted_member_id = $2 where id = $1', [inv.id, memberId]);
