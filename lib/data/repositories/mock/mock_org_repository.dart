@@ -49,6 +49,7 @@ class MockOrgRepository implements OrgRepository {
 
   @override
   Future<void> setMemberRole(String memberId, MemberRole role) async {
+    if (!inAppAssignableRoles.contains(role)) throw Exception('원장 권한은 관리자에게 요청해 주세요.');
     final i = _index(memberId);
     final before = _members[i];
     _members[i] = before.copyWith(role: role);
@@ -62,15 +63,6 @@ class MockOrgRepository implements OrgRepository {
     _members[i] = before.copyWith(status: active ? MemberStatus.active : MemberStatus.inactive);
     _record(AuditEntityType.member, before.name, active ? 'reactivate' : 'deactivate',
         [AuditChange(label: '상태', from: active ? '비활성' : '활성', to: active ? '활성' : '비활성')]);
-  }
-
-  @override
-  Future<void> transferOwnership(String memberId) async {
-    final target = _index(memberId);
-    final me = _members.indexWhere((m) => m.isMe);
-    _members[me] = _members[me].copyWith(role: MemberRole.director);
-    _members[target] = _members[target].copyWith(role: MemberRole.owner);
-    _record(AuditEntityType.member, _members[target].name, 'owner_transfer', const []);
   }
 
   @override

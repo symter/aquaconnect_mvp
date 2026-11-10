@@ -75,7 +75,7 @@ class Memo {
   final int editCount;
 
   /// Edit log, oldest first. The server only fills this in for
-  /// owners/directors; others just see [editCount].
+  /// 원장 (director); others just see [editCount].
   final List<MemoEdit> edits;
 
   bool get isEdited => editCount > 0;

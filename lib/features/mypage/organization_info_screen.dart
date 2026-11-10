@@ -5,10 +5,9 @@ import '../../core/providers/repository_providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/validators.dart';
 import '../../core/widgets/buttons.dart';
-import '../../data/models/member.dart';
 import '../../data/services/address_search_service.dart';
 
-/// 마이페이지 > 관리원 정보 (tap the profile card). 소유자·원장 can edit the
+/// 마이페이지 > 관리원 정보 (tap the profile card). 원장 can edit the
 /// name / address / 대표 연락처 — each change lands in 변경 이력 — everyone
 /// else sees it read-only.
 class OrganizationInfoScreen extends ConsumerStatefulWidget {
@@ -28,10 +27,7 @@ class _OrganizationInfoScreenState extends ConsumerState<OrganizationInfoScreen>
   bool _saving = false;
   String? _error;
 
-  bool get _canEdit {
-    final role = ref.read(authRepositoryProvider).currentSession?.member.role;
-    return role == MemberRole.owner || role == MemberRole.director;
-  }
+  bool get _canEdit => ref.read(authRepositoryProvider).currentSession?.member.isDirector == true;
 
   @override
   void initState() {
@@ -119,7 +115,7 @@ class _OrganizationInfoScreenState extends ConsumerState<OrganizationInfoScreen>
                           margin: const EdgeInsets.only(bottom: 16),
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(color: AppColors.brandTint, borderRadius: BorderRadius.circular(10)),
-                          child: const Text('관리원 정보는 소유자·원장만 수정할 수 있어요.',
+                          child: const Text('관리원 정보는 원장만 수정할 수 있어요.',
                               style: TextStyle(fontSize: 12, color: AppColors.brandInk)),
                         ),
                       _field(_name, '관리원명', Icons.local_hospital_outlined, editable,

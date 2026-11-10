@@ -18,7 +18,7 @@ abstract class MemoRepository {
   });
 
   /// Replaces an institute memo's content and logs the previous content as an
-  /// edit by the signed-in member. Only its author or an owner/director may.
+  /// edit by the signed-in member. Only its author or 원장 may.
   Future<Memo> updateMemo({required String id, required String content});
 
   /// 완료 / 완료 취소 — any member may.
@@ -48,7 +48,7 @@ abstract class MemoRepository {
   /// Bytes of one of a comment's [MemoComment.attachments].
   Future<Uint8List> loadCommentAttachment(String attachmentId);
 
-  /// Only the comment's author or an owner/director may.
+  /// Only the comment's author or 원장 may.
   Future<void> deleteComment({required String memoId, required String commentId});
 
   /// 메모 일괄 업로드: an Excel CSV or 메모장 .txt for [farmId]. With

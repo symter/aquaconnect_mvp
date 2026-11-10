@@ -25,7 +25,7 @@ class MemoCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final member = ref.watch(authStateProvider).valueOrNull?.member;
-    final isPrivileged = member?.role == MemberRole.owner || member?.role == MemberRole.director;
+    final isPrivileged = member?.isDirector == true;
     // Memos record their author's member id; older ones are matched by the
     // "기관명 · 이름" signature — the same rule the server enforces.
     final isMine = memo.authorType == MemoAuthorType.institute &&
@@ -33,7 +33,7 @@ class MemoCard extends ConsumerWidget {
         (memo.authorMemberId != null
             ? memo.authorMemberId == member.id
             : memo.authorName.endsWith(' · ${member.name}'));
-    // Editable/deletable by the author or an owner/director. A farm's 문의
+    // Editable/deletable by the author or 원장. A farm's 문의
     // memo is never editable.
     final canModify = memo.authorType == MemoAuthorType.institute && member != null && (isPrivileged || isMine);
     // Being shown on screen counts as read (읽음 표시) — except your own memo.
@@ -389,7 +389,7 @@ class _MemoEditSheetState extends ConsumerState<_MemoEditSheet> {
         children: [
           const Text('메모 수정', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
           const SizedBox(height: 4),
-          const Text('수정 전 내용은 원장·소유자가 이력으로 확인할 수 있어요.',
+          const Text('수정 전 내용은 원장이 이력으로 확인할 수 있어요.',
               style: TextStyle(fontSize: 11.5, color: AppColors.textMuted)),
           const SizedBox(height: 12),
           TextField(
@@ -642,7 +642,7 @@ class _MemoCommentsSheetState extends ConsumerState<_MemoCommentsSheet> {
   @override
   Widget build(BuildContext context) {
     final member = ref.watch(authStateProvider).valueOrNull?.member;
-    final isPrivileged = member?.role == MemberRole.owner || member?.role == MemberRole.director;
+    final isPrivileged = member?.isDirector == true;
     final fmt = DateFormat('M/d HH:mm');
     final comments = _comments;
 
@@ -1301,7 +1301,7 @@ class _MemoDetailSheetState extends ConsumerState<_MemoDetailSheet> {
     }
     final card = MemoCard(memo: memo);
     final member = ref.watch(authStateProvider).valueOrNull?.member;
-    final isPrivileged = member?.role == MemberRole.owner || member?.role == MemberRole.director;
+    final isPrivileged = member?.isDirector == true;
     final isMine = memo.authorType == MemoAuthorType.institute &&
         member != null &&
         (memo.authorMemberId != null ? memo.authorMemberId == member.id : memo.authorName.endsWith(' · ${member.name}'));
@@ -1416,7 +1416,7 @@ class _MemoDetailSheetState extends ConsumerState<_MemoDetailSheet> {
             if (hiddenEdits > 0)
               Padding(
                 padding: const EdgeInsets.only(top: 6),
-                child: Text('수정 $hiddenEdits회 · 수정 전 내용은 원장·소유자만 볼 수 있어요.',
+                child: Text('수정 $hiddenEdits회 · 수정 전 내용은 원장만 볼 수 있어요.',
                     style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted)),
               ),
             if (_commentsError != null)

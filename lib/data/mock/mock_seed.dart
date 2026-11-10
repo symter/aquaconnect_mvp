@@ -16,7 +16,7 @@ class MockSeed {
     id: 'member-leedonggil',
     orgId: orgId,
     name: '이동길',
-    role: MemberRole.owner,
+    role: MemberRole.director,
   );
 
   // Starts empty — farms, memos and disease info are only ever what the

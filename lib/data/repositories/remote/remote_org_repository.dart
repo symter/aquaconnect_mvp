@@ -23,8 +23,6 @@ class RemoteOrgRepository implements OrgRepository {
   Future<void> setMemberActive(String memberId, {required bool active}) =>
       _api.post('/api/members/$memberId/${active ? 'reactivate' : 'deactivate'}');
 
-  @override
-  Future<void> transferOwnership(String memberId) => _api.post('/api/members/$memberId/transfer-ownership');
 
   @override
   Future<OrganizationInfo> getOrganization() async =>

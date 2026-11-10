@@ -11,10 +11,10 @@ import '../../data/models/invitation.dart';
 import '../../data/models/org_member.dart';
 import 'invite_member_sheet.dart';
 
-/// "마이페이지 > 구성원 관리" — the org's roster and pending invite links,
-/// both from the server. Role changes, deactivation, ownership transfer
-/// and invites are saved and show up in 변경 이력. Only 소유자·원장 see the
-/// management actions; the server enforces the same rule.
+/// "마이페이지 > 원장 관리 > 직원 관리" — the org's roster and pending invite
+/// links, both from the server. Role changes, deactivation and invites are
+/// saved and show up in 변경 이력. 원장-only (router + server); 원장 accounts
+/// themselves are changed only from the admin dashboard.
 class MemberManagementScreen extends ConsumerStatefulWidget {
   const MemberManagementScreen({super.key});
 
@@ -33,7 +33,7 @@ class _MemberManagementScreenState extends ConsumerState<MemberManagementScreen>
   List<OrgMember> get _inactive => _members.where((m) => m.status == MemberStatus.inactive).toList();
 
   MemberRole? get _myRole => ref.read(authRepositoryProvider).currentSession?.member.role;
-  bool get _canManage => _myRole == MemberRole.owner || _myRole == MemberRole.director;
+  bool get _canManage => _myRole == MemberRole.director;
 
   @override
   void initState() {
@@ -115,31 +115,6 @@ class _MemberManagementScreenState extends ConsumerState<MemberManagementScreen>
     await _run(() => ref.read(orgRepositoryProvider).setMemberActive(member.id, active: false), '비활성화했어요');
   }
 
-  Future<void> _confirmTransferOwner(OrgMember member) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('소유자를 양도할까요?'),
-        content: Text(
-          '${member.name}님이 소유자가 되고, 회원님은 원장으로 전환됩니다. 이 작업은 되돌리려면 새로운 소유자가 다시 양도해야 합니다.',
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('취소')),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('양도하기', style: TextStyle(color: AppColors.danger)),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    await _run(() async {
-      await ref.read(orgRepositoryProvider).transferOwnership(member.id);
-      // I'm 원장 now — refresh the session so MyPage etc. stop saying 소유자.
-      await ref.read(authRepositoryProvider).refreshSession();
-    }, '소유자를 양도했어요');
-  }
-
   void _showMemberActions(OrgMember member) {
     showModalBottomSheet<void>(
       context: context,
@@ -156,20 +131,16 @@ class _MemberManagementScreenState extends ConsumerState<MemberManagementScreen>
                 margin: const EdgeInsets.symmetric(vertical: 14),
                 decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(4)),
               ),
-              if (member.role == MemberRole.owner)
-                // Ownership is transferred *to* someone — there's nothing to
-                // offer on the owner's own row (see the other branch below,
-                // which now correctly puts "소유자로 지정" on every other
-                // member's row instead).
+              if (member.role == MemberRole.director)
                 const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  padding: EdgeInsets.fromLTRB(20, 4, 20, 12),
                   child: Text(
-                    '소유자는 다른 구성원 목록에서 "소유자로 지정"을 선택해 양도할 수 있어요.',
-                    style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                    '원장 계정의 역할·상태는 관리자에게 요청해 변경할 수 있어요.',
+                    style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
                   ),
                 )
               else ...[
-                for (final role in [MemberRole.director, MemberRole.staff, MemberRole.employee])
+                for (final role in inAppAssignableRoles)
                   if (role != member.role)
                     ListTile(
                       leading: const Icon(Icons.badge_outlined, color: AppColors.textSecondary),
@@ -179,15 +150,6 @@ class _MemberManagementScreenState extends ConsumerState<MemberManagementScreen>
                         _setRole(member, role);
                       },
                     ),
-                if (_myRole == MemberRole.owner)
-                ListTile(
-                  leading: const Icon(Icons.swap_horiz, color: AppColors.textSecondary),
-                  title: const Text('소유자로 지정'),
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    _confirmTransferOwner(member);
-                  },
-                ),
                 ListTile(
                   leading: const Icon(Icons.person_off_outlined, color: AppColors.danger),
                   title: const Text('비활성화', style: TextStyle(color: AppColors.danger)),
@@ -250,7 +212,7 @@ class _MemberManagementScreenState extends ConsumerState<MemberManagementScreen>
         backgroundColor: AppColors.surface,
         elevation: 0,
         foregroundColor: AppColors.brandDark,
-        title: const Text('구성원 관리', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: AppColors.brandDark)),
+        title: const Text('직원 관리', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: AppColors.brandDark)),
         actions: [
           if (_canManage)
           TextButton(
@@ -282,7 +244,7 @@ class _MemberManagementScreenState extends ConsumerState<MemberManagementScreen>
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
       children: [
-        Text('구성원 ${active.length}명', style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+        Text('구성원 ${active.length}명 · 원장 권한은 관리자 대시보드에서 지정돼요', style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
         const SizedBox(height: 12),
         for (final member in active) ...[
           _ActiveMemberTile(
@@ -319,7 +281,7 @@ class _MemberManagementScreenState extends ConsumerState<MemberManagementScreen>
                   style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
               children: [
                 for (final member in inactive)
-                  _InactiveMemberTile(member: member, onReactivate: _canManage ? () => _reactivate(member) : null),
+                  _InactiveMemberTile(member: member, onReactivate: _canManage && member.role != MemberRole.director ? () => _reactivate(member) : null),
                 const SizedBox(height: 4),
               ],
             ),
@@ -344,7 +306,7 @@ class _EmptyState extends StatelessWidget {
           children: [
             const Icon(Icons.groups_outlined, size: 40, color: AppColors.textFaint),
             const SizedBox(height: 12),
-            const Text('아직 함께하는 구성원이 없어요',
+            const Text('아직 함께하는 직원이 없어요',
                 style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: AppColors.textMuted)),
             const SizedBox(height: 20),
             PrimaryButton(label: '+ 초대하기', onPressed: onInvite),
@@ -362,7 +324,7 @@ class _RoleBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final filled = role == MemberRole.owner && !muted;
+    final filled = role == MemberRole.director && !muted;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
@@ -432,7 +394,7 @@ class _ActiveMemberTile extends StatelessWidget {
           ),
           if (onMore != null)
             IconButton(
-              tooltip: '구성원 관리',
+              tooltip: '직원 관리',
               icon: const Icon(Icons.more_vert, size: 18, color: AppColors.textTertiary),
               onPressed: onMore,
               visualDensity: VisualDensity.compact,

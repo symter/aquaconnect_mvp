@@ -69,13 +69,14 @@ class MockAuthRepository implements AuthRepository {
     _controller.add(_session);
   }
 
-  /// Mock mode: signs in as the new owner of a new in-memory institute.
+  /// Mock mode: signs in as the first member of a new in-memory institute
+  /// (수산질병관리사, like the server — 원장 comes from the admin dashboard).
   @override
   Future<void> signUp(SignupRequest request) async {
     await Future<void>.delayed(const Duration(milliseconds: 300));
     final orgId = 'org-${DateTime.now().microsecondsSinceEpoch}';
     _session = AuthSession(
-      member: Member(id: 'member-$orgId', orgId: orgId, name: request.name, role: MemberRole.owner, phone: request.phone),
+      member: Member(id: 'member-$orgId', orgId: orgId, name: request.name, role: MemberRole.staff, phone: request.phone),
       organization: Organization(id: orgId, name: request.organizationName),
     );
     _controller.add(_session);

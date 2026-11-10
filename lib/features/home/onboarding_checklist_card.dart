@@ -9,20 +9,23 @@ import '../../data/models/member.dart';
 import '../mypage/ocean_station_picker_sheet.dart';
 
 class _Step {
-  const _Step(this.id, this.label, this.icon, {this.ownerOnly = false});
+  const _Step(this.id, this.label, this.icon, {this.notForEmployee = false, this.directorOnly = false});
   final String id;
   final String label;
   final IconData icon;
 
-  /// Hidden from 직원 accounts, who can't register farms or invite members.
-  final bool ownerOnly;
+  /// Hidden from 직원 accounts, who don't register farms.
+  final bool notForEmployee;
+
+  /// Only 원장 can invite staff.
+  final bool directorOnly;
 }
 
 const _steps = [
-  _Step('farm', '양식장 등록하기', Icons.home_work_outlined, ownerOnly: true),
+  _Step('farm', '양식장 등록하기', Icons.home_work_outlined, notForEmployee: true),
   _Step('station', '바다 위치(수온 관측소) 선택하기', Icons.water_outlined),
   _Step('notify', '휴대폰 알림 켜기', Icons.notifications_active_outlined),
-  _Step('members', '구성원 초대하기', Icons.groups_outlined, ownerOnly: true),
+  _Step('members', '직원 초대하기', Icons.groups_outlined, directorOnly: true),
   _Step('memo', '첫 메모 남기기', Icons.edit_note),
   _Step('share', '리포트 공유하기', Icons.link),
 ];
@@ -60,8 +63,10 @@ class OnboardingChecklistCard extends ConsumerWidget {
 
     bool isDone(_Step s) => onboarding.checklistDone.contains(s.id);
 
-    final isEmployee = ref.watch(authStateProvider).valueOrNull?.member.role == MemberRole.employee;
-    final steps = _steps.where((s) => !(isEmployee && s.ownerOnly)).toList();
+    final role = ref.watch(authStateProvider).valueOrNull?.member.role;
+    final steps = _steps
+        .where((s) => !(s.notForEmployee && role == MemberRole.employee) && !(s.directorOnly && role != MemberRole.director))
+        .toList();
     final doneCount = steps.where(isDone).length;
     if (doneCount == steps.length) return const SizedBox.shrink();
 

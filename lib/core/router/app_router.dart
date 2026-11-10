@@ -60,6 +60,8 @@ void openAppLink(GoRouter router, String link) {
   }
 }
 
+const _directorOnlyPaths = {'/mypage/members', '/mypage/history'};
+
 final routerProvider = Provider<GoRouter>((ref) {
   final authRepository = ref.watch(authRepositoryProvider);
   final refreshStream = GoRouterRefreshStream(authRepository.authStateChanges());
@@ -81,6 +83,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (!loggedIn && !isPublic) {
         final target = state.uri.toString();
         return target == '/' ? '/login' : '/login?from=${Uri.encodeComponent(target)}';
+      }
+      // 원장 전용 화면 (직원 관리 · 변경 이력) — the server refuses them too.
+      if (loggedIn && _directorOnlyPaths.contains(path) && authRepository.currentSession?.member.isDirector != true) {
+        return '/mypage';
       }
       // Covers finishing signup too: the new account is signed in, so Home.
       if (loggedIn && isAuthPage) {

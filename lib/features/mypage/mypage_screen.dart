@@ -24,6 +24,7 @@ class MyPageScreen extends ConsumerWidget {
     final digestSettings = ref.watch(digestSettingsProvider).valueOrNull;
     final shareLinksAsync = ref.watch(shareLinksProvider);
     final pushStatus = ref.watch(pushStatusProvider).valueOrNull;
+    final isDirector = session?.member.isDirector == true;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -64,11 +65,11 @@ class MyPageScreen extends ConsumerWidget {
                                   Text(session?.member.name ?? '-',
                                       style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
                                   const SizedBox(width: 6),
-                                  if (session?.member.isOwner == true)
+                                  if (isDirector)
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                       decoration: BoxDecoration(color: AppColors.brand, borderRadius: BorderRadius.circular(20)),
-                                      child: const Text('소유자', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: Colors.white)),
+                                      child: const Text('원장', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: Colors.white)),
                                     ),
                                 ],
                               ),
@@ -83,15 +84,34 @@ class MyPageScreen extends ConsumerWidget {
                     ),
                   ),
                   ),
+                  if (isDirector) ...[
+                    const SizedBox(height: 16),
+                    _SectionLabel('원장 관리'),
+                    const SizedBox(height: 8),
+                    _MenuGroup(items: [
+                      _MenuItem(
+                        icon: Icons.groups_outlined,
+                        label: '직원 관리',
+                        subtitle: '초대 · 역할 변경 · 비활성화',
+                        onTap: () => context.push('/mypage/members'),
+                      ),
+                      _MenuItem(
+                        icon: Icons.local_hospital_outlined,
+                        label: '관리원 정보 수정',
+                        onTap: () => context.push('/mypage/organization'),
+                      ),
+                      _MenuItem(
+                        icon: Icons.history,
+                        label: '변경 이력',
+                        trailing: '최근 3개월',
+                        onTap: () => context.push('/mypage/history'),
+                      ),
+                    ]),
+                  ],
                   const SizedBox(height: 16),
                   _SectionLabel('관리원 관리'),
                   const SizedBox(height: 8),
                   _MenuGroup(items: [
-                    _MenuItem(
-                      icon: Icons.groups_outlined,
-                      label: '구성원 관리',
-                      onTap: () => context.push('/mypage/members'),
-                    ),
                     _MenuItem(
                       icon: Icons.home_work_outlined,
                       label: '등록 양식장 관리',
@@ -106,12 +126,6 @@ class MyPageScreen extends ConsumerWidget {
                             orElse: () => '',
                           ),
                       onTap: () => context.push('/mypage/farm-groups'),
-                    ),
-                    _MenuItem(
-                      icon: Icons.history,
-                      label: '변경 이력',
-                      trailing: '최근 3개월',
-                      onTap: () => context.push('/mypage/history'),
                     ),
                     _MenuItem(
                       icon: Icons.link,

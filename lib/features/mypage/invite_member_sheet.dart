@@ -104,13 +104,13 @@ class _InviteMemberSheetState extends ConsumerState<InviteMemberSheet> {
           spacing: 8,
           runSpacing: 8,
           children: [
-            for (final role in [MemberRole.director, MemberRole.staff, MemberRole.employee])
+            for (final role in inAppAssignableRoles)
               FilterPillChip(label: role.label, selected: _role == role, onTap: () => setState(() => _role = role)),
           ],
         ),
         const SizedBox(height: 6),
         const Text(
-          '소유자 권한은 초대로 줄 수 없어요. 소유자 변경은 구성원 목록에서 진행하세요',
+          '원장 권한은 초대로 줄 수 없어요. 필요하면 관리자에게 요청해 주세요',
           style: TextStyle(fontSize: 11, color: AppColors.textMuted),
         ),
         const SizedBox(height: 18),

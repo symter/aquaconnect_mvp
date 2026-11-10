@@ -59,7 +59,8 @@ abstract class AuthRepository {
   /// change) so the app shows the current values.
   Future<void> refreshSession();
 
-  /// Creates the institute + owner account and signs in as that owner.
+  /// Creates the institute + its first account (수산질병관리사 — 원장 is
+  /// granted from the admin dashboard) and signs in.
   Future<void> signUp(SignupRequest request);
 
   /// False when the email already belongs to an account.
