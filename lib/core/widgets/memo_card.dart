@@ -3,7 +3,6 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:share_plus/share_plus.dart' show Share;
 
 import '../../data/models/memo.dart';
 import '../../data/models/memo_comment.dart';
@@ -15,6 +14,7 @@ import '../providers/repository_providers.dart';
 import '../providers/data_providers.dart';
 import '../theme/app_colors.dart';
 import 'camera_capture_screen.dart';
+import 'memo_share_sheet.dart';
 
 class MemoCard extends ConsumerWidget {
   const MemoCard({super.key, required this.memo, this.showFarmTag = true});
@@ -190,21 +190,10 @@ class MemoCard extends ConsumerWidget {
     );
   }
 
-  /// Opens the system share sheet with the memo as text — the user picks
-  /// 카카오톡 and then the farm's chat. (A direct send to the farm would need a
-  /// Kakao business channel; the share sheet needs no key.) Photos aren't
-  /// included.
-  void _share(BuildContext context) {
-    final when = DateFormat('M월 d일 HH:mm').format(memo.createdAt.toLocal());
-    final text = [
-      '[${memo.farmLabel}] 현장 메모',
-      '',
-      memo.content,
-      '',
-      '${memo.authorName} · $when',
-    ].join('\n');
-    Share.share(text, subject: '${memo.farmLabel} 현장 메모');
-  }
+  /// 공유: asks whether it's for the farm (tidy 안내문 by 카카오톡·문자) or for
+  /// colleagues (summary + link to this memo), then lets them edit it.
+  /// Photos aren't included.
+  void _share(BuildContext context) => showMemoShareSheet(context, memo);
 
   /// 완료 / 완료 취소, with a 되돌리기 snackbar after completing.
   Future<void> toggleDone(BuildContext context, WidgetRef ref) async {

@@ -202,6 +202,8 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => MemoScreen(
               focusMemoId: state.uri.queryParameters['memo'],
               openComments: state.uri.queryParameters['comments'] == '1',
+              // &detail=1: a shared "메모 바로 보기" link → 메모 상세.
+              openDetail: state.uri.queryParameters['detail'] == '1',
               view: state.uri.queryParameters['view'],
             ),
           )]),

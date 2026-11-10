@@ -15,13 +15,16 @@ import '../../data/models/farm.dart';
 import '../../data/models/memo.dart';
 
 class MemoScreen extends ConsumerStatefulWidget {
-  const MemoScreen({super.key, this.focusMemoId, this.openComments = false, this.view});
+  const MemoScreen({super.key, this.focusMemoId, this.openComments = false, this.openDetail = false, this.view});
 
   /// Memo to pin at the top, from a tapped memo/comment notification.
   final String? focusMemoId;
 
   /// Also open [focusMemoId]'s 댓글 sheet (a comment notification).
   final bool openComments;
+
+  /// Open [focusMemoId]'s 메모 상세 (a shared "메모 바로 보기" link).
+  final bool openDetail;
 
   /// `?view=today`: open on 오늘의 업무 (from the daily notification).
   final String? view;
@@ -49,6 +52,7 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
 
   String? _focusId;
   bool _commentsPending = false;
+  bool _detailPending = false;
 
   @override
   void initState() {
@@ -71,6 +75,7 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
     if (id != null) {
       _focusId = id;
       _commentsPending = widget.openComments;
+      _detailPending = widget.openDetail && !widget.openComments;
     }
     _view = widget.view == 'today' ? _MemoView.today : _MemoView.all;
     _farm = _allFarms;
@@ -87,6 +92,14 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
     _commentsPending = false;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) MemoCard(memo: memo).showComments(context);
+    });
+  }
+
+  /// Opens the pending 메모 상세 once the focused memo is in the list.
+  void _openPendingDetail(Memo memo) {
+    _detailPending = false;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) MemoCard(memo: memo).showDetail(context);
     });
   }
 
@@ -214,6 +227,7 @@ class _MemoScreenState extends ConsumerState<MemoScreen> {
                   // Not found (yet, or deleted): just the normal list.
                   final focused = memos.where((m) => m.id == _focusId).firstOrNull;
                   if (focused != null && _commentsPending) _openPendingComments(focused);
+                  if (focused != null && _detailPending) _openPendingDetail(focused);
                   bool isMine(Memo m) => me != null && m.isOpenTaskFor(memberId: me.id, memberName: me.name);
                   final filtered = _applyFilter(memos, isMine).where((m) => m.id != focused?.id).toList();
                   final groups = _groupByDay(filtered);
