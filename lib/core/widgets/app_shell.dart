@@ -71,8 +71,8 @@ class AppShell extends ConsumerWidget {
       );
     }
 
-    // Width (full on phones/tablets, a centered column on wide windows,
-    // wider for the calendar) is set once for every screen in app.dart.
+    // Width (full on phones/tablets, the same centered column on wide
+    // windows for every tab) is set once for every screen in app.dart.
     return Scaffold(
       body: Stack(children: [navigationShell, ?overlay]),
       bottomNavigationBar: DecoratedBox(

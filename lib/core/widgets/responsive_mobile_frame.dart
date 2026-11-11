@@ -15,11 +15,8 @@ class ResponsiveMobileFrame extends StatelessWidget {
   final Widget child;
   final double maxWidth;
 
-  /// Every screen except the wide calendar.
+  /// Every screen, the calendar included.
   static const double contentWidth = 800;
-
-  /// The calendar tab, which benefits from a wide window.
-  static const double wideWidth = 1280;
 
   @override
   Widget build(BuildContext context) {
