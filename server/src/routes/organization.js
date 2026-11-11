@@ -72,10 +72,16 @@ organizationRouter.put('/', async (req, res) => {
 });
 
 // 변경 이력, newest first. `before` (ISO time) pages backwards; `type`
-// filters to member / farm / organization.
+// filters to member / farm / organization / memo; `deleted=1` keeps only
+// 삭제 기록 (memo, comment and farm deletes); `q` searches the title, who did
+// it and the recorded contents.
+const DELETE_ACTIONS = ['delete', 'comment_delete'];
+
 organizationRouter.get('/audit-logs', async (req, res) => {
   if (!isDirector(await me(req.memberId))) return res.status(403).json({ error: DIRECTOR_ONLY });
-  const type = ['member', 'farm', 'organization'].includes(req.query.type) ? req.query.type : null;
+  const type = ['member', 'farm', 'organization', 'memo'].includes(req.query.type) ? req.query.type : null;
+  const deletedOnly = req.query.deleted === '1';
+  const q = typeof req.query.q === 'string' && req.query.q.trim() ? `%${req.query.q.trim().replace(/[\\%_]/g, '\\$&')}%` : null;
   const before = req.query.before && !Number.isNaN(Date.parse(req.query.before)) ? new Date(req.query.before) : null;
   const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 100);
   const { rows } = await query(
@@ -84,9 +90,11 @@ organizationRouter.get('/audit-logs', async (req, res) => {
        and created_at > now() - interval '${AUDIT_RETENTION}'
        and ($2::text is null or entity_type = $2)
        and ($3::timestamptz is null or created_at < $3)
+       and (not $5 or action = any($6::text[]))
+       and ($7::text is null or entity_name ilike $7 or actor_name ilike $7 or changes::text ilike $7)
      order by created_at desc
      limit $4`,
-    [req.memberId, type, before, limit + 1],
+    [req.memberId, type, before, limit + 1, deletedOnly, DELETE_ACTIONS, q],
   );
   const page = rows.slice(0, limit);
   res.json({
@@ -94,6 +102,7 @@ organizationRouter.get('/audit-logs', async (req, res) => {
       id: r.id,
       actorName: r.actor_name,
       entityType: r.entity_type,
+      entityId: r.entity_id,
       entityName: r.entity_name,
       action: r.action,
       changes: r.changes ?? [],

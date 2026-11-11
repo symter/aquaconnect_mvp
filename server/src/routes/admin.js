@@ -3,7 +3,7 @@ import { Router } from 'express';
 
 import { hashPassword } from '../auth.js';
 import { query } from '../db.js';
-import { diffFields, recordAudit } from '../lib/audit.js';
+import { deletedCommentLines, diffFields, memoDeleteSnapshot, recordAudit, recordMemoAudit } from '../lib/audit.js';
 import { ADMIN_ROLES, ROLE_LABEL, ROLE_ORDER_SQL } from '../lib/roles.js';
 import { digitsOnly, normalizeEmail, validateEmail, validatePassword, validatePhone } from '../lib/validators.js';
 import { refreshReportQuietly } from './reports.js';
@@ -288,8 +288,12 @@ adminRouter.get('/memos/:id', async (req, res) => {
 
 adminRouter.delete('/memos/:id', async (req, res) => {
   if (!UUID_RE.test(req.params.id)) return notFound(res, '메모');
+  const snapshot = await memoDeleteSnapshot(req.params.id);
   const { rows } = await query('delete from memos where id = $1 returning farm_id', [req.params.id]);
   if (!rows[0]) return notFound(res, '메모');
+  if (snapshot) {
+    await recordMemoAudit({ memo: snapshot.memo, actorName: ADMIN_ACTOR, action: 'delete', changes: snapshot.changes });
+  }
   // Same as the app's own delete: a removed 폐사 memo changes the farm's risk.
   if (rows[0].farm_id) await refreshReportQuietly(rows[0].farm_id);
   res.status(204).end();
@@ -297,8 +301,20 @@ adminRouter.delete('/memos/:id', async (req, res) => {
 
 adminRouter.delete('/comments/:id', async (req, res) => {
   if (!UUID_RE.test(req.params.id)) return notFound(res, '댓글');
-  const { rowCount } = await query('delete from memo_comments where id = $1', [req.params.id]);
-  if (!rowCount) return notFound(res, '댓글');
+  const { rows } = await query(
+    `delete from memo_comments c where c.id = $1
+     returning c.memo_id, c.author_name, c.content, c.created_at,
+       (select count(*)::int from memo_comment_attachments a where a.comment_id = c.id) as attachment_count`,
+    [req.params.id],
+  );
+  if (!rows[0]) return notFound(res, '댓글');
+  const { rows: memoRows } = await query(
+    'select mm.id, mm.org_id, f.name as farm_name from memos mm left join farms f on f.id = mm.farm_id where mm.id = $1',
+    [rows[0].memo_id],
+  );
+  if (memoRows[0]) {
+    await recordMemoAudit({ memo: memoRows[0], actorName: ADMIN_ACTOR, action: 'comment_delete', changes: deletedCommentLines(rows[0]) });
+  }
   res.status(204).end();
 });
 

@@ -102,7 +102,7 @@ class MyPageScreen extends ConsumerWidget {
                       ),
                       _MenuItem(
                         icon: Icons.history,
-                        label: '변경 이력',
+                        label: '메모·변경 이력',
                         trailing: '최근 3개월',
                         onTap: () => context.push('/mypage/history'),
                       ),

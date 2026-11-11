@@ -25,6 +25,8 @@ abstract class OrgRepository {
 
   Future<void> cancelInvitation(String id);
 
-  /// [type] null = every kind; [before] = [AuditLogPage.nextBefore].
-  Future<AuditLogPage> listAuditLogs({AuditEntityType? type, String? before});
+  /// [type] null = every kind; [deletedOnly] = 삭제 기록 only; [search]
+  /// matches the title, who did it and the recorded contents;
+  /// [before] = [AuditLogPage.nextBefore].
+  Future<AuditLogPage> listAuditLogs({AuditEntityType? type, bool deletedOnly = false, String? search, String? before});
 }

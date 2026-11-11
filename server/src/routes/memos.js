@@ -6,6 +6,7 @@ import { isDirector } from '../lib/roles.js';
 import { AiError, DEFAULT_PROVIDER, isProvider, modelStatus, notConfiguredMessage } from '../lib/ai/model.js';
 import { polishFarmMessage } from '../lib/ai/shareMessage.js';
 import { modelPlan, recordUsage } from '../lib/ai/usage.js';
+import { deletedCommentLines, memoDeleteSnapshot, memoLine, recordMemoAudit } from '../lib/audit.js';
 import { orgIdForMember } from '../lib/orgScope.js';
 import { notifyMembers } from '../lib/notify.js';
 import { parseMemoFile } from '../lib/memoImport.js';
@@ -206,6 +207,15 @@ memosRouter.post('/', async (req, res) => {
     // A new 폐사 count / visit changes the farm's risk and 최근 방문.
     await refreshReportQuietly(memoRow.farm_id);
   }
+  await recordMemoAudit({
+    memo: { ...memoRow, farm_name: farmName },
+    actorId: req.memberId,
+    action: 'create',
+    changes: [
+      memoLine('내용', { to: memoRow.content }),
+      ...(decoded.length ? [memoLine('사진', { to: `${decoded.length}장` })] : []),
+    ],
+  });
 
   const preview = content.trim().replace(/\s+/g, ' ');
   await notifyMembers({
@@ -277,6 +287,15 @@ memosRouter.post('/import', async (req, res) => {
     client.release();
   }
   await refreshReportQuietly(farm.id);
+  await recordMemoAudit({
+    memo: { org_id: orgId, id: null, farm_name: farm.name },
+    actorId: req.memberId,
+    action: 'import',
+    changes: [
+      memoLine('파일', { to: String(fileName) }),
+      memoLine('올린 메모', { to: `${fresh.length}건` }),
+    ],
+  });
   await notifyMembers({
     orgId,
     excludeMemberId: req.memberId,
@@ -331,7 +350,8 @@ memosRouter.patch('/:id', async (req, res) => {
 
   const orgId = await orgIdForMember(req.memberId);
   const { rows: memoRows } = await query(
-    'select id, farm_id, author_type, author_name, author_member_id, content from memos where id = $1 and org_id = $2',
+    `select mm.id, mm.org_id, mm.farm_id, mm.author_type, mm.author_name, mm.author_member_id, mm.content, f.name as farm_name
+     from memos mm left join farms f on f.id = mm.farm_id where mm.id = $1 and mm.org_id = $2`,
     [req.params.id, orgId],
   );
   const memo = memoRows[0];
@@ -361,6 +381,12 @@ memosRouter.patch('/:id', async (req, res) => {
     }
     // An edited 폐사 count changes the farm's risk.
     if (memo.farm_id) await refreshReportQuietly(memo.farm_id);
+    await recordMemoAudit({
+      memo,
+      actorId: req.memberId,
+      action: 'update',
+      changes: [memoLine('내용', { from: memo.content, to: content })],
+    });
   }
 
   res.json(await loadMemoJson(memo.id, me));
@@ -381,12 +407,21 @@ memosRouter.put('/:id/done', async (req, res) => {
        done_by_name = case when $3 then coalesce(mm.done_by_name, $5) end
      from memos old
      where mm.id = $1 and mm.org_id = $2 and old.id = mm.id
-     returning mm.id, mm.content, mm.author_member_id, old.done_at as was_done_at,
+     returning mm.id, mm.org_id, mm.content, mm.author_member_id, old.done_at as was_done_at,
        (select name from farms f where f.id = mm.farm_id) as farm_name`,
     [req.params.id, orgId, done, req.memberId, me?.name ?? ''],
   );
   const memo = rows[0];
   if (!memo) return res.status(404).json({ error: '메모를 찾을 수 없습니다.' });
+
+  if (done !== Boolean(memo.was_done_at)) {
+    await recordMemoAudit({
+      memo,
+      actorId: req.memberId,
+      action: done ? 'done' : 'reopen',
+      changes: [memoLine('내용', { to: memo.content })],
+    });
+  }
 
   if (done && !memo.was_done_at && memo.author_member_id && memo.author_member_id !== req.memberId) {
     const flat = memo.content.trim().replace(/\s+/g, ' ');
@@ -418,7 +453,9 @@ memosRouter.delete('/:id', async (req, res) => {
     return res.status(403).json({ error: '작성자 또는 원장만 삭제할 수 있습니다.' });
   }
 
+  const snapshot = await memoDeleteSnapshot(memo.id);
   await query('delete from memos where id = $1', [memo.id]);
+  if (snapshot) await recordMemoAudit({ memo: snapshot.memo, actorId: req.memberId, action: 'delete', changes: snapshot.changes });
   // A removed 폐사 memo changes the farm's risk and 최근 방문.
   if (memo.farm_id) await refreshReportQuietly(memo.farm_id);
   res.status(204).end();
@@ -594,6 +631,12 @@ memosRouter.post('/:id/comments', async (req, res) => {
   }
   // Commenting on a memo means you've read it.
   await markRead([memo.id], req.memberId);
+  await recordMemoAudit({
+    memo,
+    actorId: req.memberId,
+    action: 'comment',
+    changes: commentLines({ content, attachments, mentionCount: mentionIds.length }, 'to'),
+  });
 
   const farmLabel = memo.farm_name ?? '미지정';
   const link = `/memo?memo=${memo.id}&comments=1`;
@@ -638,10 +681,12 @@ memosRouter.post('/:id/comments', async (req, res) => {
 memosRouter.delete('/:id/comments/:commentId', async (req, res) => {
   const memo = await loadOrgMemo(req.params.id, req.memberId);
   if (!memo || !UUID_RE.test(req.params.commentId)) return res.status(404).json({ error: '댓글을 찾을 수 없습니다.' });
-  const { rows } = await query('select id, author_member_id from memo_comments where id = $1 and memo_id = $2', [
-    req.params.commentId,
-    memo.id,
-  ]);
+  const { rows } = await query(
+    `select c.id, c.author_member_id, c.author_name, c.content, c.created_at,
+            (select count(*)::int from memo_comment_attachments a where a.comment_id = c.id) as attachment_count
+     from memo_comments c where c.id = $1 and c.memo_id = $2`,
+    [req.params.commentId, memo.id],
+  );
   const comment = rows[0];
   if (!comment) return res.status(404).json({ error: '댓글을 찾을 수 없습니다.' });
   const me = await currentMember(req.memberId);
@@ -649,5 +694,17 @@ memosRouter.delete('/:id/comments/:commentId', async (req, res) => {
     return res.status(403).json({ error: '작성자 또는 원장만 삭제할 수 있습니다.' });
   }
   await query('delete from memo_comments where id = $1', [comment.id]);
+  await recordMemoAudit({ memo, actorId: req.memberId, action: 'comment_delete', changes: deletedCommentLines(comment) });
   res.status(204).end();
 });
+
+// 변경 이력 lines for a 댓글. [side] 'to' = added, 'from' = removed.
+function commentLines({ content, attachments = [], mentionCount = 0 }, side) {
+  const files = attachments.filter((a) => a.kind === 'file').length;
+  const photos = attachments.length - files;
+  const extras = [photos ? `사진 ${photos}장` : '', files ? `파일 ${files}개` : '', mentionCount ? `호출 ${mentionCount}명` : ''].filter(Boolean);
+  return [
+    ...(content ? [memoLine('댓글', { [side]: content })] : []),
+    ...(extras.length ? [memoLine('첨부', { [side]: extras.join(', ') })] : []),
+  ];
+}

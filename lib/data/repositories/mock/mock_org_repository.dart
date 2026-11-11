@@ -130,6 +130,15 @@ class MockOrgRepository implements OrgRepository {
   }
 
   @override
-  Future<AuditLogPage> listAuditLogs({AuditEntityType? type, String? before}) async =>
-      AuditLogPage(items: _log.where((e) => type == null || e.entityType == type).toList());
+  Future<AuditLogPage> listAuditLogs({AuditEntityType? type, bool deletedOnly = false, String? search, String? before}) async {
+    final q = search?.trim() ?? '';
+    bool matches(AuditLogEntry e) =>
+        q.isEmpty ||
+        e.entityName.contains(q) ||
+        e.actorName.contains(q) ||
+        e.changes.any((c) => c.from.contains(q) || c.to.contains(q));
+    return AuditLogPage(
+      items: _log.where((e) => (type == null || e.entityType == type) && (!deletedOnly || e.isDeletion) && matches(e)).toList(),
+    );
+  }
 }

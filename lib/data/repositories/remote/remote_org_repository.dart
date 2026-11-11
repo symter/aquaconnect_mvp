@@ -53,9 +53,12 @@ class RemoteOrgRepository implements OrgRepository {
   Future<void> cancelInvitation(String id) => _api.post('/api/invitations/$id/cancel');
 
   @override
-  Future<AuditLogPage> listAuditLogs({AuditEntityType? type, String? before}) async {
+  Future<AuditLogPage> listAuditLogs({AuditEntityType? type, bool deletedOnly = false, String? search, String? before}) async {
+    final q = search?.trim();
     final json = await _api.get('/api/organization/audit-logs', query: {
       'type': ?type?.name,
+      if (deletedOnly) 'deleted': '1',
+      if (q != null && q.isNotEmpty) 'q': q,
       'before': ?before,
     }) as Map<String, dynamic>;
     return AuditLogPage(

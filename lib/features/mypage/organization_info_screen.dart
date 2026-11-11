@@ -145,7 +145,7 @@ class _OrganizationInfoScreenState extends ConsumerState<OrganizationInfoScreen>
                         const SizedBox(height: 20),
                         PrimaryButton(label: _saving ? '저장 중...' : '저장', onPressed: _saving ? null : _save),
                         const SizedBox(height: 8),
-                        const Text('수정한 내용은 마이페이지 > 변경 이력에 기록됩니다.',
+                        const Text('수정한 내용은 마이페이지 > 메모·변경 이력에 기록됩니다.',
                             textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
                       ],
                     ],
